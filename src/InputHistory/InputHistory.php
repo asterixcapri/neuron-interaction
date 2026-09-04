@@ -8,13 +8,17 @@ use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
 /** Submitted inputs shared across Sessions and interaction Adapters. */
-final readonly class InputHistory
+final class InputHistory
 {
     private const string NAMESPACE = 'input-history';
 
     private const string KEY = 'entries';
 
-    public function __construct(private StorageInterface $storage) {}
+    private ?int $position = null;
+
+    private string $draft = '';
+
+    public function __construct(private readonly StorageInterface $storage) {}
 
     /**
      * Records the person's original submission, including Command syntax.
@@ -36,6 +40,58 @@ final readonly class InputHistory
 
         $entries[] = $input;
         $this->storage->write(self::NAMESPACE, self::KEY, $entries);
+    }
+
+    /** Moves toward older inputs, entering navigation at the newest one. */
+    public function older(string $draft = ''): ?string
+    {
+        $entries = $this->entries();
+
+        if ($entries === []) {
+            return null;
+        }
+
+        if ($this->position === null) {
+            $this->draft = $draft;
+            $this->position = array_key_last($entries);
+        } else {
+            $this->position = max(0, $this->position - 1);
+        }
+
+        return $entries[$this->position];
+    }
+
+    /** Moves toward newer inputs, restoring the draft past the end. */
+    public function newer(): ?string
+    {
+        if ($this->position === null) {
+            return null;
+        }
+
+        $entries = $this->entries();
+
+        if ($this->position === array_key_last($entries)) {
+            $draft = $this->draft;
+            $this->leave();
+
+            return $draft;
+        }
+
+        ++$this->position;
+
+        return $entries[$this->position];
+    }
+
+    public function isNavigating(): bool
+    {
+        return $this->position !== null;
+    }
+
+    /** The composer draft has become independent from its stored source. */
+    public function leave(): void
+    {
+        $this->position = null;
+        $this->draft = '';
     }
 
     /** @return list<string> Current submitted inputs, oldest first. */
