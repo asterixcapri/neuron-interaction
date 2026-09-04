@@ -56,11 +56,7 @@ final readonly class Commands
     {
         foreach ($this->commands as $command) {
             if ($command->name() === $identifier) {
-                if (!str_starts_with($command->name(), '/')) {
-            throw new InvalidArgumentException('A mounted Command identifier must start with a slash.');
-        }
-
-        return $command;
+                return $command;
             }
         }
 
