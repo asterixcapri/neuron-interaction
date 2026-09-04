@@ -18,6 +18,49 @@ use stdClass;
 
 final class CommandKitsTest extends TestCase
 {
+    public function testIncrementalMountingMutatesTheOriginalCollectionInOrder(): void
+    {
+        $first = new ClearCommand('/resume');
+        $last = new ClearCommand('/last');
+        $kit = new SessionCommandKit();
+        $commands = new Commands();
+
+        self::assertSame($commands, $commands->addCommand($first));
+        self::assertSame($commands, $commands->addCommand([$kit, $last]));
+        self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(
+            static fn (CommandInterface $command): string => $command->name(),
+            $commands->all(),
+        ));
+        self::assertSame($last, $commands->all()[3]);
+        self::assertSame($first, $commands->named('/resume'));
+        $controls = new FakeCommandControls($commands);
+        $previous = $controls->agent()->getChatHistory();
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $controls)->status);
+        self::assertNotSame($previous, $controls->agent()->getChatHistory());
+    }
+
+    public function testConstructorAndIncrementalMountingApplyTheSameValidation(): void
+    {
+        foreach ([
+            [new stdClass()],
+            [new ObjectKit([new stdClass()])],
+            new ClearCommand('missing-slash'),
+        ] as $invalid) {
+            foreach ([false, true] as $incremental) {
+                try {
+                    if ($incremental) {
+                        (new Commands())->addCommand($invalid);
+                    } else {
+                        new Commands($invalid);
+                    }
+                    self::fail('Invalid Commands must fail when mounted.');
+                } catch (InvalidArgumentException $exception) {
+                    self::assertStringContainsString('mounted Command', $exception->getMessage());
+                }
+            }
+        }
+    }
+
     public function testSessionCommandKitMountsInOneOperationAndClearPreservesThePreviousSession(): void
     {
         $commands = new Commands(new SessionCommandKit());
