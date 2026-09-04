@@ -6,6 +6,8 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\HelpCommand;
+use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\SessionCommandKit;
 use NeuronInteraction\Examples\BackendControls;
 use NeuronInteraction\InputHistory\InputHistory;
@@ -17,7 +19,7 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 $storage = new InMemoryStorage(); // A real backend may share FileStorage across requests.
 $sessions = new Sessions($storage);
 $sessions->start()->addMessage(new UserMessage('A conversation to reopen'));
-$commands = new Commands(new SessionCommandKit());
+$commands = new Commands([new SessionCommandKit(), new HelpCommand(), new LeaveCommand()]);
 $inputs = new InputHistory($storage);
 
 // This callback belongs to the Host Application. Replace it with its normal
@@ -59,3 +61,11 @@ if ($execution->status !== 'completed') {
 }
 
 echo $second->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;
+
+// These ordinary Commands use this backend's own output and lifecycle effects.
+$commands->run('help', new CommandArguments(), $second);
+$commands->run('exit', new CommandArguments(), $second);
+
+if ($second->notices === [] || !$second->stopped) {
+    throw new RuntimeException('Shared Help and Leave did not reach the backend controls.');
+}
