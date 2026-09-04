@@ -18,7 +18,7 @@ use DateTimeImmutable;
 final readonly class ResumeCommand implements CommandInterface
 {
     /** @param string $name the presentation-neutral identifier */
-    public function __construct(private string $name = 'resume')
+    public function __construct(private string $name = '/resume')
     {
     }
 

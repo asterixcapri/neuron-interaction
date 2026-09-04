@@ -39,6 +39,10 @@ final readonly class Commands
             throw new InvalidArgumentException('A mounted Command must implement CommandInterface.');
         }
 
+        if (!str_starts_with($command->name(), '/')) {
+            throw new InvalidArgumentException('A mounted Command identifier must start with a slash.');
+        }
+
         return $command;
     }
 
@@ -52,7 +56,11 @@ final readonly class Commands
     {
         foreach ($this->commands as $command) {
             if ($command->name() === $identifier) {
-                return $command;
+                if (!str_starts_with($command->name(), '/')) {
+            throw new InvalidArgumentException('A mounted Command identifier must start with a slash.');
+        }
+
+        return $command;
             }
         }
 

@@ -28,8 +28,8 @@ $submitPrompt = static function (Agent $agent, string $prompt): void {
 
 // First request: the route supplies a neutral identifier and raw arguments.
 $first = new BackendControls(new Agent(), $commands, $sessions, $submitPrompt);
-$inputs->record('resume'); // The original submission in this Adapter's syntax.
-$execution = $commands->run('resume', new CommandArguments(), $first);
+$inputs->record('/resume'); // The original submission in this Adapter's syntax.
+$execution = $commands->run('/resume', new CommandArguments(), $first);
 
 if ($execution->status !== 'completed' || $first->selection === null) {
     throw new RuntimeException('The first invocation did not request selection.');
