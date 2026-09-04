@@ -27,9 +27,9 @@ final class CommandKitsTest extends TestCase
         $controls->agent()->setChatHistory($previous);
         $key = $controls->sessions()->list()[0]->key;
 
-        $execution = $commands->run('clear', new CommandArguments(), $controls);
+        $execution = $commands->run('/clear', new CommandArguments(), $controls);
 
-        self::assertSame(['clear', 'resume'], array_map(
+        self::assertSame(['/clear', '/resume'], array_map(
             static fn (CommandInterface $command): string => $command->name(),
             $commands->all(),
         ));
@@ -41,20 +41,20 @@ final class CommandKitsTest extends TestCase
 
     public function testMixedMountingPreservesOrderAndTheFirstDuplicateExecutes(): void
     {
-        $first = new ClearCommand('resume');
-        $last = new ClearCommand('last');
+        $first = new ClearCommand('/resume');
+        $last = new ClearCommand('/last');
         $commands = new Commands([$first, new SessionCommandKit(), $last]);
         $controls = new FakeCommandControls($commands);
         $previous = $controls->sessions()->start();
         $controls->agent()->setChatHistory($previous);
 
-        self::assertSame(['resume', 'clear', 'resume', 'last'], array_map(
+        self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(
             static fn (CommandInterface $command): string => $command->name(),
             $commands->all(),
         ));
-        self::assertSame($first, $commands->named('resume'));
-        self::assertSame($last, $commands->named('last'));
-        self::assertSame('completed', $commands->run('resume', new CommandArguments(), $controls)->status);
+        self::assertSame($first, $commands->named('/resume'));
+        self::assertSame($last, $commands->named('/last'));
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $controls)->status);
         self::assertNotSame($previous, $controls->agent()->getChatHistory());
         self::assertSame([], $controls->warnings);
     }
@@ -94,7 +94,7 @@ final class CommandKitsTest extends TestCase
         $commands = new Commands(new SessionCommandKit());
         $controls = new FakeCommandControls($commands);
 
-        self::assertSame('completed', $commands->run('resume', new CommandArguments(), $controls)->status);
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $controls)->status);
         self::assertSame(['There is no earlier Session to return to yet.'], $controls->warnings);
         self::assertSame([], $controls->selections);
     }

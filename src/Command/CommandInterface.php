@@ -8,7 +8,7 @@ namespace NeuronInteraction\Command;
 interface CommandInterface
 {
     /**
-     * The presentation-neutral identifier it answers to: `review`.
+     * The slash-prefixed identifier it answers to: `/review`.
      */
     public function name(): string;
 

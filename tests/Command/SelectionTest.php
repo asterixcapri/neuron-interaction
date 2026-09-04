@@ -18,7 +18,7 @@ final class SelectionTest extends TestCase
 {
     public function testSelectionRequestSerializesOrderedOptionsAndReceivesTheValueInANewInvocation(): void
     {
-        $request = new SelectionRequest('choose', 'Pick a value', [
+        $request = new SelectionRequest('/choose', 'Pick a value', [
             new SelectionOption('007', 'Visible label', 'Detailed description'),
             new SelectionOption(' raw value ', 'Another label'),
         ]);
@@ -29,7 +29,7 @@ final class SelectionTest extends TestCase
 
             public function name(): string
             {
-                return 'choose';
+                return '/choose';
             }
 
             public function describe(): string
@@ -52,11 +52,11 @@ final class SelectionTest extends TestCase
         $commands = new Commands([$command]);
         $first = new FakeCommandControls($commands);
 
-        self::assertSame('completed', $commands->run('choose', new CommandArguments(), $first)->status);
+        self::assertSame('completed', $commands->run('/choose', new CommandArguments(), $first)->status);
         self::assertSame(['First invocation finished.'], $first->notices);
         self::assertSame([$request], $first->selections);
         self::assertEquals([
-            'command' => 'choose',
+            'command' => '/choose',
             'prompt' => 'Pick a value',
             'options' => [
                 ['value' => '007', 'label' => 'Visible label', 'description' => 'Detailed description'],
@@ -76,7 +76,7 @@ final class SelectionTest extends TestCase
 
     public function testResumeRequestsSelectionThenInstallsTheChosenHistoryOnlyOnTheSecondInvocation(): void
     {
-        $commands = new Commands([new ResumeCommand('return')]);
+        $commands = new Commands([new ResumeCommand('/return')]);
         $controls = new FakeCommandControls($commands);
         $stored = $controls->sessions()->start();
         $stored->addMessage(new UserMessage('Stored subject'));
@@ -84,18 +84,18 @@ final class SelectionTest extends TestCase
         $controls->agent()->setChatHistory($active);
         $session = $controls->sessions()->list()[0];
 
-        $first = $commands->run('return', new CommandArguments(), $controls);
+        $first = $commands->run('/return', new CommandArguments(), $controls);
 
         self::assertSame('completed', $first->status);
         self::assertSame($active, $controls->agent()->getChatHistory());
         self::assertCount(1, $controls->selections);
         $request = $controls->selections[0];
-        self::assertSame('return', $request->command);
+        self::assertSame('/return', $request->command);
         self::assertSame($session->key, $request->options[0]->value);
         self::assertSame('Stored subject', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
-        $second = $commands->run('return', new CommandArguments($request->options[0]->value), $controls);
+        $second = $commands->run('/return', new CommandArguments($request->options[0]->value), $controls);
 
         self::assertSame('completed', $second->status);
         self::assertSame('Stored subject', $controls->agent()->getChatHistory()->getMessages()[0]->getContent());
@@ -109,12 +109,12 @@ final class SelectionTest extends TestCase
         $controls->sessions()->start()->addMessage(new UserMessage('Direct resume'));
         $key = $controls->sessions()->list()[0]->key;
 
-        self::assertSame('completed', $commands->run('resume', new CommandArguments($key), $controls)->status);
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments($key), $controls)->status);
         self::assertSame('Direct resume', $controls->agent()->getChatHistory()->getMessages()[0]->getContent());
         self::assertSame([], $controls->selections);
 
         $history = $controls->agent()->getChatHistory();
-        self::assertSame('failed', $commands->run('resume', new CommandArguments('unknown'), $controls)->status);
+        self::assertSame('failed', $commands->run('/resume', new CommandArguments('unknown'), $controls)->status);
         self::assertSame($history, $controls->agent()->getChatHistory());
     }
 }
