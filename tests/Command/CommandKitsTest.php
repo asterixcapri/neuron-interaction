@@ -12,15 +12,15 @@ use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
-use NeuronInteraction\Command\SessionKit;
+use NeuronInteraction\Command\SessionCommandKit;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
 final class CommandKitsTest extends TestCase
 {
-    public function testSessionKitMountsInOneOperationAndClearPreservesThePreviousSession(): void
+    public function testSessionCommandKitMountsInOneOperationAndClearPreservesThePreviousSession(): void
     {
-        $commands = new Commands(new SessionKit());
+        $commands = new Commands(new SessionCommandKit());
         $controls = new FakeCommandControls($commands);
         $previous = $controls->sessions()->start();
         $previous->addMessage(new UserMessage('Keep this conversation'));
@@ -43,7 +43,7 @@ final class CommandKitsTest extends TestCase
     {
         $first = new ClearCommand('resume');
         $last = new ClearCommand('last');
-        $commands = new Commands([$first, new SessionKit(), $last]);
+        $commands = new Commands([$first, new SessionCommandKit(), $last]);
         $controls = new FakeCommandControls($commands);
         $previous = $controls->sessions()->start();
         $controls->agent()->setChatHistory($previous);
@@ -61,7 +61,7 @@ final class CommandKitsTest extends TestCase
 
     public function testKitFiltersAreImmutableAndExclusionWins(): void
     {
-        $kit = new SessionKit();
+        $kit = new SessionCommandKit();
         $resumeOnly = $kit->exclude([ClearCommand::class]);
         $clearOnly = $kit->only([ClearCommand::class]);
 
@@ -91,7 +91,7 @@ final class CommandKitsTest extends TestCase
 
     public function testResumeWithNoStoredSessionWarnsWithoutRequestingSelection(): void
     {
-        $commands = new Commands(new SessionKit());
+        $commands = new Commands(new SessionCommandKit());
         $controls = new FakeCommandControls($commands);
 
         self::assertSame('completed', $commands->run('resume', new CommandArguments(), $controls)->status);
