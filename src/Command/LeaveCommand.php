@@ -8,9 +8,9 @@ namespace NeuronInteraction\Command;
 final readonly class LeaveCommand implements CommandInterface
 {
     /**
-     * @param string $name the name it answers to, slash omitted
+     * @param string $name the name it answers to, including the leading slash
      */
-    public function __construct(private string $name = 'exit')
+    public function __construct(private string $name = '/exit')
     {
     }
 
