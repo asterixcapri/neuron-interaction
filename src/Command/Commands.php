@@ -8,17 +8,26 @@ use InvalidArgumentException;
 use Throwable;
 
 /** Mounted Commands in order, with the first matching identifier winning. */
-final readonly class Commands
+final class Commands
 {
     /** @var list<CommandInterface> */
-    private array $commands;
+    private array $commands = [];
 
     /**
      * @param CommandInterface|CommandKitInterface<CommandInterface>|array<array-key, mixed> $commands
      */
     public function __construct(CommandInterface|CommandKitInterface|array $commands = [])
     {
-        $mounted = [];
+        $this->addCommand($commands);
+    }
+
+    /**
+     * Mount Commands before running the Adapter. Mutates this collection.
+     *
+     * @param CommandInterface|CommandKitInterface<CommandInterface>|array<array-key, mixed> $commands
+     */
+    public function addCommand(CommandInterface|CommandKitInterface|array $commands): self
+    {
 
         foreach (is_array($commands) ? $commands : [$commands] as $command) {
             $members = $command instanceof CommandKitInterface
@@ -26,11 +35,11 @@ final readonly class Commands
                 : [$command];
 
             foreach ($members as $member) {
-                $mounted[] = self::requireCommand($member);
+                $this->commands[] = self::requireCommand($member);
             }
         }
 
-        $this->commands = $mounted;
+        return $this;
     }
 
     private static function requireCommand(mixed $command): CommandInterface
