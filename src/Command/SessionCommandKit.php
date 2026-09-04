@@ -18,7 +18,7 @@ namespace NeuronInteraction\Command;
  *
  * @extends AbstractCommandKit<CommandInterface>
  */
-final class SessionKit extends AbstractCommandKit
+final class SessionCommandKit extends AbstractCommandKit
 {
     protected function provide(): array
     {

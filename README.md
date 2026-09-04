@@ -4,11 +4,26 @@ Presentation-independent interaction modules for Neuron AI Agents. Host
 Applications compose the modules directly and own presentation, Agent turn
 execution and response streaming.
 
-Requires PHP 8.4.1 or later.
+Requires PHP 8.4.1 or later. The extraction is available on the development
+branch `feat/extract-neuron-interaction`; it has not been released. Put this
+configuration in the Host Application's root `composer.json`, then run
+`composer update`:
 
-```bash
-composer require asterixcapri/neuron-interaction
+```json
+{
+    "repositories": [
+        {"type": "vcs", "url": "https://github.com/asterixcapri/neuron-interaction"}
+    ],
+    "require": {
+        "asterixcapri/neuron-interaction": "dev-feat/extract-neuron-interaction"
+    }
+}
 ```
+
+The explicit development constraint permits this package's prerelease while
+leaving other packages at Composer's default stable minimum. Composer uses
+repositories declared by the root application; a dependency's repository
+configuration is not inherited.
 
 ## Sessions and Storage
 
@@ -68,9 +83,9 @@ migration is supplied. Existing legacy files are left untouched.
 ```php
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\Commands;
-use NeuronInteraction\Command\SessionKit;
+use NeuronInteraction\Command\SessionCommandKit;
 
-$commands = new Commands(new SessionKit());
+$commands = new Commands(new SessionCommandKit());
 // $controls is your Adapter's CommandControlsInterface implementation.
 // $execution = $commands->run('resume', new CommandArguments(), $controls);
 ```
@@ -91,6 +106,42 @@ presentation and the interaction lifecycle remain Adapter responsibilities.
 Custom kits extend `AbstractCommandKit<TCommand>` and provide their members.
 Adapters may use this shared filtering behavior for their own Command types;
 the shared `Commands` dispatcher accepts only `CommandInterface` members.
+
+## Backend Adapter example
+
+[BackendControls](examples/BackendControls.php) implements every operation of
+`CommandControlsInterface`. It collects notices, warnings and a
+`SelectionRequest` for one response and delegates `promptAgent()` to a callback
+supplied by the Host Application. Agent execution, scheduling and response
+streaming are outside this package. The example callback only prints the
+handoff; no model request is made.
+
+Run the [backend example](examples/backend.php) after installing development
+dependencies:
+
+```bash
+php examples/backend.php
+```
+
+The first request dispatches `resume` with empty `CommandArguments`. It finishes
+with a serializable request containing `command`, `prompt`, `description` and
+ordered `options`; each option has `value`, `label` and `description`. A frontend
+displays those options. A later request submits the target command and chosen
+value. Fresh controls dispatch them as new `CommandArguments`, installing the
+selected Session History on the second request's Agent. No selection is retained
+between controls instances. Cancellation simply omits the second invocation.
+
+The example uses `InMemoryStorage` to simulate both requests in one process;
+separate backend requests can configure `FileStorage` with the same root.
+The Host Application supplies its configured Agent and restores the active
+Session when appropriate. Original submitted input is recorded at the Adapter
+boundary; generated prompts and the internal selection continuation are not
+additional typed submissions.
+
+Commands, Sessions, Input history and Storage are composed directly. There is
+no required application facade, HTTP framework, authentication subsystem,
+worker topology or subagent orchestration. Terminal Help and Leave Commands,
+concurrent Command policy and Picker presentation belong to Neuron TUI.
 
 ## Development
 
