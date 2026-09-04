@@ -1,0 +1,53 @@
+# Neuron Interaction
+
+Presentation-independent interaction modules for Neuron AI Agents. Host
+Applications compose the modules directly and own presentation, Agent turn
+execution and response streaming.
+
+Requires PHP 8.4.1 or later.
+
+```bash
+composer require asterixcapri/neuron-interaction
+```
+
+## Sessions and Storage
+
+```php
+use NeuronAI\Agent\Agent;
+use NeuronInteraction\Session\Sessions;
+use NeuronInteraction\Storage\FileStorage;
+
+$storage = new FileStorage(__DIR__ . '/interaction-state');
+$sessions = new Sessions($storage);
+$agent = new Agent();
+$agent->setChatHistory($sessions->start());
+
+// After the Agent has exchanged messages, list recognizable Sessions.
+foreach ($sessions->list() as $session) {
+    // Render $session->title according to your Adapter's rules.
+    // Resume a chosen Session by installing its History on the Agent:
+    // $agent->setChatHistory($sessions->resume($session->key));
+}
+```
+
+Use `InMemoryStorage` for transient state, or implement `StorageInterface`
+for application-specific persistence. Storage holds namespaced JSON documents
+identified by logical keys. It preserves string metadata together with data;
+`StoredDocument::size()` reports the JSON size of its data.
+
+`Sessions::start()` creates a distinct empty History. `Sessions::list()`
+returns Sessions with user-authored text, ordered by most recent use and then
+key. Titles preserve the first non-blank user-authored textual content without
+terminal placeholders, escaping or truncation. `Sessions::resume($key)`
+reopens its stored History and rejects unknown keys.
+
+No Neuron TUI dependency, legacy reader, format fallback or automatic
+migration is supplied. Existing legacy files are left untouched.
+
+## Development
+
+```bash
+composer install
+composer test
+composer stan
+```

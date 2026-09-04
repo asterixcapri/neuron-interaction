@@ -1,0 +1,37 @@
+{
+    "name": "asterixcapri/neuron-interaction",
+    "description": "Presentation-independent interaction modules for Neuron AI Agents.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Alessandro Astarita",
+            "email": "aleast@caprionline.it"
+        }
+    ],
+    "require": {
+        "php": ">=8.4.1",
+        "neuron-core/neuron-ai": "^3.0"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "NeuronInteraction\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "NeuronInteraction\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "stan": "phpstan analyse --no-progress --memory-limit=512M",
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
