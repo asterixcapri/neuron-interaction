@@ -63,6 +63,35 @@ navigation cursor, draft and recall behavior.
 No Neuron TUI dependency, legacy reader, format fallback or automatic
 migration is supplied. Existing legacy files are left untouched.
 
+## Commands
+
+```php
+use NeuronInteraction\Command\CommandArguments;
+use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\SessionKit;
+
+$commands = new Commands(new SessionKit());
+// $controls is your Adapter's CommandControlsInterface implementation.
+// $execution = $commands->run('resume', new CommandArguments(), $controls);
+```
+
+Commands receive `CommandControlsInterface`, use its shared verbs and return
+`void`. Dispatch reports `completed`, `unknown` or `failed`; failures retain
+the original exception. The collection preserves mounting order and executes
+the first duplicate identifier. Its constructor also accepts individual
+Commands or arrays mixing Commands and kits. Kits support immutable `only()`
+and `exclude()` filters by class.
+
+`resume` without arguments emits a `SelectionRequest` and returns. The Adapter
+presents its options and invokes the request's target Command again with the
+chosen value in new `CommandArguments`. `clear` installs a distinct empty
+Session History while preserving the previous Session. Agent prompting,
+presentation and the interaction lifecycle remain Adapter responsibilities.
+
+Custom kits extend `AbstractCommandKit<TCommand>` and provide their members.
+Adapters may use this shared filtering behavior for their own Command types;
+the shared `Commands` dispatcher accepts only `CommandInterface` members.
+
 ## Development
 
 ```bash
