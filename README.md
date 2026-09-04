@@ -169,3 +169,13 @@ composer install
 composer test
 composer stan
 ```
+
+## Help and Leave
+
+Mount `NeuronInteraction\Command\HelpCommand` and
+`NeuronInteraction\Command\LeaveCommand` explicitly, like Session Commands.
+Both implement `CommandInterface` and use `CommandControlsInterface`. Help lists
+the mounted Commands and descriptions through controls; Leave calls `stop()`.
+The Adapter defines the stop effect. Neither Command depends on a terminal,
+and the shared dispatcher imposes no concurrency policy. Both accept a
+configured identifier in their constructor.
