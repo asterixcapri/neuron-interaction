@@ -18,7 +18,7 @@ final class CommandControlsTest extends TestCase
     public function testAnOrdinaryCommandUsesSharedControlsWithoutATerminal(): void
     {
         $replacement = new Agent();
-        $selection = new SelectionRequest('inspect', 'Pick one', [
+        $selection = new SelectionRequest('/inspect', 'Pick one', [
             new SelectionOption('chosen-value', 'Visible label', 'Description'),
         ]);
         $command = new class($replacement, $selection) implements CommandInterface {
@@ -28,7 +28,7 @@ final class CommandControlsTest extends TestCase
 
             public function name(): string
             {
-                return 'inspect';
+                return '/inspect';
             }
 
             public function describe(): string
@@ -50,10 +50,10 @@ final class CommandControlsTest extends TestCase
         };
         $commands = new Commands([$command]);
         $controls = new FakeCommandControls($commands);
-        $execution = $commands->run('inspect', new CommandArguments('A warning.'), $controls);
+        $execution = $commands->run('/inspect', new CommandArguments('A warning.'), $controls);
 
         self::assertSame('completed', $execution->status);
-        self::assertSame(['inspect', 'The request has returned.'], $controls->notices);
+        self::assertSame(['/inspect', 'The request has returned.'], $controls->notices);
         self::assertSame(['A warning.'], $controls->warnings);
         self::assertSame(['A generated Agent prompt.'], $controls->prompts);
         self::assertSame([$selection], $controls->selections);

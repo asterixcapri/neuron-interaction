@@ -26,7 +26,7 @@ final class BackendExampleTest extends TestCase
         }
 
         self::assertIsString($output);
-        self::assertStringContainsString('"command":"resume"', $output);
+        self::assertStringContainsString('"command":"\/resume"', $output);
         self::assertStringEndsWith('A conversation to reopen' . PHP_EOL, $output);
     }
 

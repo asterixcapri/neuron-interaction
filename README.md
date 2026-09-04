@@ -101,8 +101,13 @@ use NeuronInteraction\Command\SessionCommandKit;
 
 $commands = new Commands(new SessionCommandKit());
 // $controls is your Adapter's CommandControlsInterface implementation.
-// $execution = $commands->run('resume', new CommandArguments(), $controls);
+// $execution = $commands->run('/resume', new CommandArguments(), $controls);
 ```
+
+Every mounted identifier includes its leading slash, including aliases. Names
+without a slash are rejected immediately; lookup is exact, with no case or
+prefix normalization. This revision supersedes the historical extraction
+requirement for neutral identifiers. Backend Adapters use the same identifiers.
 
 Commands receive `CommandControlsInterface`, use its shared verbs and return
 `void`. Dispatch reports `completed`, `unknown` or `failed`; failures retain
@@ -111,9 +116,9 @@ the first duplicate identifier. Its constructor also accepts individual
 Commands or arrays mixing Commands and kits. Kits support immutable `only()`
 and `exclude()` filters by class.
 
-`resume` without arguments emits a `SelectionRequest` and returns. The Adapter
+`/resume` without arguments emits a `SelectionRequest` and returns. The Adapter
 presents its options and invokes the request's target Command again with the
-chosen value in new `CommandArguments`. `clear` installs a distinct empty
+chosen value in new `CommandArguments`. `/clear` installs a distinct empty
 Session History while preserving the previous Session. Agent prompting,
 presentation and the interaction lifecycle remain Adapter responsibilities.
 
@@ -137,7 +142,7 @@ dependencies:
 php examples/backend.php
 ```
 
-The first request dispatches `resume` with empty `CommandArguments`. It finishes
+The first request dispatches `/resume` with empty `CommandArguments`. It finishes
 with a serializable request containing `command`, `prompt`, `description` and
 ordered `options`; each option has `value`, `label` and `description`. A frontend
 displays those options. A later request submits the target command and chosen

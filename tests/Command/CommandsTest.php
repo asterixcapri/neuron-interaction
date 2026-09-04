@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use Closure;
+use InvalidArgumentException;
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandControlsInterface;
 use NeuronInteraction\Command\CommandInterface;
@@ -17,34 +18,34 @@ final class CommandsTest extends TestCase
     public function testDispatchPreservesRawArgumentsAndMountingOrderWithFirstDuplicateWinning(): void
     {
         $received = null;
-        $first = self::command('review', static function (CommandArguments $arguments) use (&$received): void {
+        $first = self::command('/review', static function (CommandArguments $arguments) use (&$received): void {
             $received = $arguments;
         });
-        $duplicate = self::command('review', static function (): void {
+        $duplicate = self::command('/review', static function (): void {
             self::fail('The duplicate must not execute.');
         });
-        $last = self::command('last', static function (): void {
+        $last = self::command('/last', static function (): void {
         });
         $commands = new Commands([$first, $duplicate, $last]);
         $arguments = new CommandArguments(" \tline one\n  line two \t");
 
-        $execution = $commands->run('review', $arguments, self::controls());
+        $execution = $commands->run('/review', $arguments, self::controls());
 
         self::assertSame([$first, $duplicate, $last], $commands->all());
-        self::assertSame($first, $commands->named('review'));
+        self::assertSame($first, $commands->named('/review'));
         self::assertSame($arguments, $received);
         self::assertSame('completed', $execution->status);
-        self::assertSame('review', $execution->identifier);
+        self::assertSame('/review', $execution->identifier);
         self::assertNull($execution->exception);
     }
 
-    public function testUnknownIdentifierIsAnOutcomeAndSlashSyntaxIsNotInterpreted(): void
+    public function testLookupIsExactWithoutPrefixOrCaseNormalization(): void
     {
-        $commands = new Commands([self::command('review', static function (): void {
+        $commands = new Commands([self::command('/review', static function (): void {
             self::fail('An unknown identifier must not execute.');
         })]);
 
-        foreach (['missing', '/review'] as $identifier) {
+        foreach (['/missing', 'review', '/Review'] as $identifier) {
             $execution = $commands->run($identifier, new CommandArguments(), self::controls());
             self::assertSame('unknown', $execution->status);
             self::assertSame($identifier, $execution->identifier);
@@ -56,19 +57,42 @@ final class CommandsTest extends TestCase
     {
         $failure = new RuntimeException('Command failed');
         $commands = new Commands([
-            self::command('broken', static function () use ($failure): void {
+            self::command('/broken', static function () use ($failure): void {
                 throw $failure;
             }),
-            self::command('healthy', static function (): void {
+            self::command('/healthy', static function (): void {
             }),
         ]);
         $controls = self::controls();
-        $execution = $commands->run('broken', new CommandArguments(), $controls);
+        $execution = $commands->run('/broken', new CommandArguments(), $controls);
 
         self::assertSame('failed', $execution->status);
-        self::assertSame('broken', $execution->identifier);
+        self::assertSame('/broken', $execution->identifier);
         self::assertSame($failure, $execution->exception);
-        self::assertSame('completed', $commands->run('healthy', new CommandArguments(), $controls)->status);
+        self::assertSame('completed', $commands->run('/healthy', new CommandArguments(), $controls)->status);
+    }
+
+    public function testSlashlessIdentifiersAreRejectedInEveryConstructorMountingForm(): void
+    {
+        foreach (['review', ''] as $name) {
+            $command = self::command($name, static function (): void {});
+            foreach ([$command, [$command], [new ObjectKit([$command])]] as $mount) {
+                try {
+                    new Commands($mount);
+                    self::fail('A slashless identifier must fail at mounting.');
+                } catch (InvalidArgumentException $exception) {
+                    self::assertStringContainsString('slash', $exception->getMessage());
+                }
+            }
+        }
+    }
+
+    public function testSlashRequirementDoesNotIntroduceAdditionalIdentifierGrammar(): void
+    {
+        foreach (['/', '//review', '/Review', '/two words'] as $name) {
+            $command = self::command($name, static function (): void {});
+            self::assertSame($command, (new Commands($command))->named($name));
+        }
     }
 
     /** @param Closure(CommandArguments): void $run */
