@@ -90,7 +90,8 @@ final class InMemoryStorage extends AbstractStorage
         $entries = [];
 
         foreach ($documents as $key => $document) {
-            $entries[] = $this->storedDocument($key, $document);
+            // PHP coerces numeric string array keys to integers.
+            $entries[] = $this->storedDocument((string) $key, $document);
         }
 
         return $entries;

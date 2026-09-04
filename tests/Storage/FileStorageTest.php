@@ -13,6 +13,19 @@ use RuntimeException;
 
 final class FileStorageTest extends TestCase
 {
+    public function testNumericStringKeysRemainStringsWhenListed(): void
+    {
+        $storage = new FileStorage($this->directory);
+        $storage->write('demo', '123', ['value' => 'numeric key']);
+
+        $entries = iterator_to_array($storage->entries('demo'));
+
+        self::assertCount(1, $entries);
+        self::assertSame('123', $entries[0]->key);
+        self::assertSame(['value' => 'numeric key'], $entries[0]->data);
+        self::assertEquals($storage->read('demo', '123'), $entries[0]);
+    }
+
     private string $directory;
 
     protected function setUp(): void
