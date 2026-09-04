@@ -28,7 +28,7 @@ $submitPrompt = static function (Agent $agent, string $prompt): void {
     echo 'Host received a prompt: ' . $prompt . PHP_EOL;
 };
 
-// First request: the route supplies a neutral identifier and raw arguments.
+// First request: the route supplies a slash-prefixed identifier and raw arguments.
 $first = new BackendControls(new Agent(), $commands, $sessions, $submitPrompt);
 $inputs->record('/resume'); // The original submission in this Adapter's syntax.
 $execution = $commands->run('/resume', new CommandArguments(), $first);
@@ -63,8 +63,8 @@ if ($execution->status !== 'completed') {
 echo $second->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;
 
 // These ordinary Commands use this backend's own output and lifecycle effects.
-$commands->run('help', new CommandArguments(), $second);
-$commands->run('exit', new CommandArguments(), $second);
+$commands->run('/help', new CommandArguments(), $second);
+$commands->run('/exit', new CommandArguments(), $second);
 
 if ($second->notices === [] || !$second->stopped) {
     throw new RuntimeException('Shared Help and Leave did not reach the backend controls.');
