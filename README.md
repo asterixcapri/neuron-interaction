@@ -179,3 +179,23 @@ the mounted Commands and descriptions through controls; Leave calls `stop()`.
 The Adapter defines the stop effect. Neither Command depends on a terminal,
 and the shared dispatcher imposes no concurrency policy. Both accept a
 configured identifier in their constructor.
+
+## Mounting Commands
+
+`Commands::addCommand()` mutates the collection and returns that same instance:
+
+```php
+use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\HelpCommand;
+use NeuronInteraction\Command\LeaveCommand;
+use NeuronInteraction\Command\SessionCommandKit;
+
+$commands = (new Commands())
+    ->addCommand(new HelpCommand())
+    ->addCommand([new SessionCommandKit(), new LeaveCommand()]);
+```
+
+Constructor mounting and incremental mounting accept individual Commands, kits
+and mixed arrays, preserve order, and reject invalid members or identifiers
+immediately. The first matching duplicate receives dispatch. Configure Commands
+before running an Adapter; live reconfiguration is outside this contract.
