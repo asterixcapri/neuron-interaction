@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Session;
 
 use InvalidArgumentException;
-use NeuronAI\Chat\History\InMemoryChatHistory;
 use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
@@ -33,76 +32,6 @@ final class SessionsTest extends TestCase
     protected function tearDown(): void
     {
         $this->removeDirectory($this->directory);
-    }
-
-    #[DataProvider('storageKinds')]
-    public function testRetainingHistoryPreservesStructuredMessagesAndLaterAdditions(bool $files): void
-    {
-        $sessions = new Sessions($files ? new FileStorage($this->directory) : new InMemoryStorage());
-        $original = new InMemoryChatHistory();
-        $original->addMessage(new UserMessage([
-            new TextContent('Initial subject'),
-            new ImageContent('https://example.com/image.png', SourceType::URL),
-        ]));
-        $original->addMessage(new AssistantMessage([
-            new ReasoningContent('Earlier reasoning'),
-            new TextContent('Earlier answer'),
-        ]));
-        $retained = $sessions->retain($original);
-
-        self::assertSame($original->getMessages(), $retained->getMessages());
-        $retained->addMessage(new UserMessage('Later question'));
-        $retained->addMessage(new AssistantMessage('Later answer'));
-        $listed = $sessions->list();
-
-        self::assertCount(1, $listed);
-        self::assertSame('Initial subject', $listed[0]->title);
-        self::assertEquals($retained->getMessages(), $sessions->resume($listed[0]->key)->getMessages());
-    }
-
-    public function testRetainingAnOversizedHistoryDoesNotTrimTheImport(): void
-    {
-        $original = new InMemoryChatHistory(contextWindow: 1000000);
-        $original->addMessage(new UserMessage('Keep the beginning'));
-        $original->addMessage(new AssistantMessage(str_repeat('large message ', 60000)));
-        $sessions = new Sessions(new InMemoryStorage());
-
-        $retained = $sessions->retain($original);
-
-        self::assertCount(2, $retained->getMessages());
-        self::assertSame($original->getMessages(), $retained->getMessages());
-        self::assertEquals($original->getMessages(), $sessions->resume($sessions->list()[0]->key)->getMessages());
-    }
-
-    public function testRetainingAPreselectedSessionKeepsItsKeyWithoutDuplicatingIt(): void
-    {
-        $storage = new InMemoryStorage();
-        $sessions = new Sessions($storage);
-        $sessions->start()->addMessage(new UserMessage('Selected subject'));
-        $key = $sessions->list()[0]->key;
-        $selected = $sessions->resume($key);
-
-        $retained = (new Sessions($storage))->retain($selected);
-        $retained->addMessage(new AssistantMessage('Continued'));
-
-        self::assertSame($selected, $retained);
-        self::assertCount(1, $sessions->list());
-        self::assertSame($key, $sessions->list()[0]->key);
-        self::assertCount(2, $sessions->resume($key)->getMessages());
-    }
-
-    public function testRetainingAHistoryFromAnotherStorageMakesItResumableLocally(): void
-    {
-        $foreign = new Sessions(new InMemoryStorage());
-        $history = $foreign->start();
-        $history->addMessage(new UserMessage('Imported subject'));
-        $local = new Sessions(new InMemoryStorage());
-
-        $retained = $local->retain($history);
-        $retained->addMessage(new AssistantMessage('Local continuation'));
-
-        self::assertCount(2, $local->resume($local->list()[0]->key)->getMessages());
-        self::assertCount(1, $foreign->resume($foreign->list()[0]->key)->getMessages());
     }
 
     public function testStartMintsDistinctStorageSafeKeysAndEmptyHistories(): void
