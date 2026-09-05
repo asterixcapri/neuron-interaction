@@ -9,7 +9,7 @@ use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
 use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\SessionCommandKit;
-use NeuronInteraction\Examples\BackendControls;
+use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\Sessions;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -29,43 +29,48 @@ $submitPrompt = static function (Agent $agent, string $prompt): void {
 };
 
 // First request: the route supplies a slash-prefixed identifier and raw arguments.
-$first = new BackendControls(new Agent(), $commands, $sessions, $submitPrompt);
+$first = new BackendAdapter(new Agent(), $commands, $sessions, $submitPrompt);
 $inputs->record('/resume'); // The original submission in this Adapter's syntax.
-$execution = $commands->run('/resume', new CommandArguments(), $first);
+$response = $commands->run('/resume', new CommandArguments(), $first);
 
-if ($execution->status !== 'completed' || $first->selection === null) {
+if ($response === null || $response['status'] !== 'completed' || $response['selection'] === null) {
     throw new RuntimeException('The first invocation did not request selection.');
 }
 
-$response = json_encode($first->selection, JSON_THROW_ON_ERROR);
-echo $response . PHP_EOL;
+$serialized = json_encode($response, JSON_THROW_ON_ERROR);
+echo $serialized . PHP_EOL;
 
 // A frontend displays the response and later submits the command and chosen
 // option value. Decode the first response to simulate that separate round trip.
-$decoded = json_decode($response, true, flags: JSON_THROW_ON_ERROR);
-$options = is_array($decoded) ? ($decoded['options'] ?? null) : null;
+$decoded = json_decode($serialized, true, flags: JSON_THROW_ON_ERROR);
+$selection = is_array($decoded) ? ($decoded['selection'] ?? null) : null;
+$options = is_array($selection) ? ($selection['options'] ?? null) : null;
 $option = is_array($options) ? ($options[0] ?? null) : null;
 $selected = is_array($option) ? ($option['value'] ?? null) : null;
-$command = is_array($decoded) ? ($decoded['command'] ?? null) : null;
+$command = is_array($selection) ? ($selection['command'] ?? null) : null;
 
 if (!is_string($selected) || !is_string($command)) {
     throw new RuntimeException('A command and selected value are required.');
 }
 
-// Second request: fresh controls, no retained selection or first-request Agent.
-$second = new BackendControls(new Agent(), $commands, $sessions, $submitPrompt);
-$execution = $commands->run($command, new CommandArguments($selected), $second);
+// Second request: a fresh Adapter, no retained selection or first-request Agent.
+$second = new BackendAdapter(new Agent(), $commands, $sessions, $submitPrompt);
+$response = $commands->run($command, new CommandArguments($selected), $second);
 
-if ($execution->status !== 'completed') {
+if ($response === null || $response['status'] !== 'completed') {
     throw new RuntimeException('The selected Session could not be resumed.');
 }
 
 echo $second->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;
 
 // These ordinary Commands use this backend's own output and lifecycle effects.
-$commands->run('/help', new CommandArguments(), $second);
-$commands->run('/exit', new CommandArguments(), $second);
+$help = $commands->run('/help', new CommandArguments(), new BackendAdapter(
+    $second->agent(), $commands, $sessions, $submitPrompt,
+));
+$leave = $commands->run('/exit', new CommandArguments(), new BackendAdapter(
+    $second->agent(), $commands, $sessions, $submitPrompt,
+));
 
-if ($second->notices === [] || !$second->stopped) {
-    throw new RuntimeException('Shared Help and Leave did not reach the backend controls.');
+if ($help === null || $leave === null || $help['notices'] === [] || !$leave['stopped']) {
+    throw new RuntimeException('Shared Help and Leave did not reach the backend Adapter.');
 }

@@ -6,7 +6,7 @@ namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandArguments;
-use NeuronInteraction\Command\CommandControlsInterface;
+use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
@@ -37,22 +37,23 @@ final class SelectionTest extends TestCase
                 return 'Select a value.';
             }
 
-            public function run(CommandControlsInterface $controls, CommandArguments $arguments): void
+            /** @param CommandAdapterInterface<mixed> $adapter */
+            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
             {
                 if ($arguments->text === '') {
-                    $controls->requestSelection($this->request);
-                    $controls->say('First invocation finished.');
+                    $adapter->requestSelection($this->request);
+                    $adapter->say('First invocation finished.');
 
                     return;
                 }
 
-                $controls->say($arguments->text);
+                $adapter->say($arguments->text);
             }
         };
         $commands = new Commands([$command]);
-        $first = new FakeCommandControls($commands);
+        $first = new FakeCommandAdapter($commands);
 
-        self::assertSame('completed', $commands->run('/choose', new CommandArguments(), $first)->status);
+        self::assertSame('completed', $commands->run('/choose', new CommandArguments(), $first)?->status);
         self::assertSame(['First invocation finished.'], $first->notices);
         self::assertSame([$request], $first->selections);
         self::assertEquals([
@@ -65,10 +66,11 @@ final class SelectionTest extends TestCase
             'description' => null,
         ], json_decode(json_encode($request, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR));
 
-        // A later Adapter invocation has fresh controls, without hidden selection state.
-        $second = new FakeCommandControls($commands);
+        // A later Adapter invocation has a fresh Adapter, without hidden selection state.
+        $second = new FakeCommandAdapter($commands);
         $execution = $commands->run($request->command, new CommandArguments($request->options[1]->value), $second);
 
+        self::assertNotNull($execution);
         self::assertSame('completed', $execution->status);
         self::assertSame([' raw value '], $second->notices);
         self::assertSame([], $second->selections);
@@ -77,44 +79,46 @@ final class SelectionTest extends TestCase
     public function testResumeRequestsSelectionThenInstallsTheChosenHistoryOnlyOnTheSecondInvocation(): void
     {
         $commands = new Commands([new ResumeCommand('/return')]);
-        $controls = new FakeCommandControls($commands);
-        $stored = $controls->sessions()->start();
+        $adapter = new FakeCommandAdapter($commands);
+        $stored = $adapter->sessions()->start();
         $stored->addMessage(new UserMessage('Stored subject'));
-        $active = $controls->sessions()->start();
-        $controls->agent()->setChatHistory($active);
-        $session = $controls->sessions()->list()[0];
+        $active = $adapter->sessions()->start();
+        $adapter->agent()->setChatHistory($active);
+        $session = $adapter->sessions()->list()[0];
 
-        $first = $commands->run('/return', new CommandArguments(), $controls);
+        $first = $commands->run('/return', new CommandArguments(), $adapter);
 
+        self::assertNotNull($first);
         self::assertSame('completed', $first->status);
-        self::assertSame($active, $controls->agent()->getChatHistory());
-        self::assertCount(1, $controls->selections);
-        $request = $controls->selections[0];
+        self::assertSame($active, $adapter->agent()->getChatHistory());
+        self::assertCount(1, $adapter->selections);
+        $request = $adapter->selections[0];
         self::assertSame('/return', $request->command);
         self::assertSame($session->key, $request->options[0]->value);
         self::assertSame('Stored subject', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
-        $second = $commands->run('/return', new CommandArguments($request->options[0]->value), $controls);
+        $second = $commands->run('/return', new CommandArguments($request->options[0]->value), $adapter);
 
+        self::assertNotNull($second);
         self::assertSame('completed', $second->status);
-        self::assertSame('Stored subject', $controls->agent()->getChatHistory()->getMessages()[0]->getContent());
-        self::assertCount(1, $controls->selections);
+        self::assertSame('Stored subject', $adapter->agent()->getChatHistory()->getMessages()[0]->getContent());
+        self::assertCount(1, $adapter->selections);
     }
 
     public function testResumeWithAKeyNeedsNoPriorSelectionAndUnknownKeysFailNormally(): void
     {
         $commands = new Commands([new ResumeCommand()]);
-        $controls = new FakeCommandControls($commands);
-        $controls->sessions()->start()->addMessage(new UserMessage('Direct resume'));
-        $key = $controls->sessions()->list()[0]->key;
+        $adapter = new FakeCommandAdapter($commands);
+        $adapter->sessions()->start()->addMessage(new UserMessage('Direct resume'));
+        $key = $adapter->sessions()->list()[0]->key;
 
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments($key), $controls)->status);
-        self::assertSame('Direct resume', $controls->agent()->getChatHistory()->getMessages()[0]->getContent());
-        self::assertSame([], $controls->selections);
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments($key), $adapter)?->status);
+        self::assertSame('Direct resume', $adapter->agent()->getChatHistory()->getMessages()[0]->getContent());
+        self::assertSame([], $adapter->selections);
 
-        $history = $controls->agent()->getChatHistory();
-        self::assertSame('failed', $commands->run('/resume', new CommandArguments('unknown'), $controls)->status);
-        self::assertSame($history, $controls->agent()->getChatHistory());
+        $history = $adapter->agent()->getChatHistory();
+        self::assertSame('failed', $commands->run('/resume', new CommandArguments('unknown'), $adapter)?->status);
+        self::assertSame($history, $adapter->agent()->getChatHistory());
     }
 }

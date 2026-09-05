@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Command;
 
-/** Lists the mounted Commands through the Adapter controls. */
+/** Lists the mounted Commands through the Adapter. */
 final readonly class HelpCommand implements CommandInterface
 {
     /**
@@ -24,10 +24,11 @@ final readonly class HelpCommand implements CommandInterface
         return 'Lists what can be typed here.';
     }
 
-    public function run(CommandControlsInterface $controls, CommandArguments $arguments): void
+    /** @param CommandAdapterInterface<mixed> $adapter */
+    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
     {
-        foreach ($controls->commands()->all() as $command) {
-            $controls->say($command->name() . ' — ' . $command->describe());
+        foreach ($adapter->commands()->all() as $command) {
+            $adapter->say($command->name() . ' — ' . $command->describe());
         }
     }
 }

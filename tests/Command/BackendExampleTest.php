@@ -5,12 +5,21 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Messages\UserMessage;
+use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandArguments;
+use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
-use NeuronInteraction\Examples\BackendControls;
+use NeuronInteraction\Command\HelpCommand;
+use NeuronInteraction\Command\LeaveCommand;
+use NeuronInteraction\Command\SelectionOption;
+use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\Sessions;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class BackendExampleTest extends TestCase
 {
@@ -30,25 +39,154 @@ final class BackendExampleTest extends TestCase
         self::assertStringEndsWith('A conversation to reopen' . PHP_EOL, $output);
     }
 
-    public function testPromptingDelegatesToTheHostWithoutRecordingGeneratedInput(): void
+    public function testSelectionAndGeneratedPromptsCompleteAcrossFreshRequestsWithoutRecordingMoreInput(): void
     {
         $storage = new InMemoryStorage();
         $inputs = new InputHistory($storage);
-        $inputs->record('summarize');
-        $agent = new Agent();
+        $inputs->record('/choose');
+        $sessions = new Sessions($storage);
+        $command = new class implements CommandInterface {
+            public function name(): string
+            {
+                return '/choose';
+            }
+
+            public function describe(): string
+            {
+                return 'Prompt the Agent with a chosen value.';
+            }
+
+            /** @param CommandAdapterInterface<mixed> $adapter */
+            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            {
+                if ($arguments->text === '') {
+                    $adapter->requestSelection(new SelectionRequest('/choose', 'Choose a value', [
+                        new SelectionOption(" 007\n ", 'Visible label'),
+                    ]));
+                    $adapter->say('The selection request has returned.');
+
+                    return;
+                }
+
+                $adapter->promptAgent($arguments->text);
+                $adapter->warn('A response may still be pending.');
+            }
+        };
+        $commands = new Commands($command);
         $received = [];
-        $controls = new BackendControls(
-            $agent,
-            new Commands(),
-            new Sessions($storage),
-            static function (Agent $answering, string $prompt) use (&$received): void {
-                $received[] = [$answering, $prompt];
-            },
-        );
+        $submitPrompt = static function (Agent $answering, string $prompt) use (&$received): void {
+            $received[] = [$answering, $prompt];
+        };
+        $first = $commands->run('/choose', new CommandArguments(), new BackendAdapter(
+            new Agent(), $commands, $sessions, $submitPrompt,
+        ));
 
-        $controls->promptAgent('A generated summary prompt');
+        self::assertNotNull($first);
+        self::assertSame('completed', $first['status']);
+        self::assertSame(['The selection request has returned.'], $first['notices']);
+        self::assertSame([], $received); // Cancelling here requires no other invocation.
+        self::assertEquals([
+            'command' => '/choose',
+            'prompt' => 'Choose a value',
+            'options' => [['value' => " 007\n ", 'label' => 'Visible label', 'description' => null]],
+            'description' => null,
+        ], json_decode(json_encode($first['selection'], JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR));
+        self::assertNotNull($first['selection']);
+        $selection = $first['selection'];
+        $secondAgent = new Agent();
+        $second = $commands->run($selection->command, new CommandArguments($selection->options[0]->value), new BackendAdapter(
+            $secondAgent, $commands, $sessions, $submitPrompt,
+        ));
 
-        self::assertSame([[$agent, 'A generated summary prompt']], $received);
-        self::assertSame(['summarize'], $inputs->entries());
+        self::assertNotNull($second);
+        self::assertSame('completed', $second['status']);
+        self::assertNull($second['selection']);
+        self::assertSame([], $second['notices']);
+        self::assertSame(['A response may still be pending.'], $second['warnings']);
+        self::assertSame([[$secondAgent, " 007\n "]], $received);
+        self::assertSame(['/choose'], $inputs->entries());
+    }
+
+    public function testAgentReplacementTransfersHistoryAndImmediatelyUsesTheReplacementForFurtherEffects(): void
+    {
+        $storage = new InMemoryStorage();
+        $sessions = new Sessions($storage);
+        $original = new Agent();
+        $history = $original->getChatHistory();
+        $history->addMessage(new UserMessage('Original conversation'));
+        $replacement = new Agent();
+        $command = new class($replacement) implements CommandInterface {
+            public function __construct(private Agent $replacement)
+            {
+            }
+
+            public function name(): string
+            {
+                return '/replace';
+            }
+
+            public function describe(): string
+            {
+                return 'Replace the Agent and choose another History.';
+            }
+
+            /** @param CommandAdapterInterface<mixed> $adapter */
+            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            {
+                $previous = $adapter->agent()->getChatHistory();
+                $adapter->useAgent($this->replacement);
+                TestCase::assertSame($this->replacement, $adapter->agent());
+                TestCase::assertSame($previous, $adapter->agent()->getChatHistory());
+                $adapter->agent()->setChatHistory($adapter->sessions()->start());
+                $adapter->promptAgent('A generated prompt for the replacement.');
+                $adapter->say($adapter->commands()->all()[0]->name());
+                throw new RuntimeException('Failed after replacement.');
+            }
+        };
+        $commands = new Commands($command);
+        $received = [];
+        $adapter = new BackendAdapter($original, $commands, $sessions, static function (Agent $answering, string $prompt) use (&$received): void {
+            $received[] = [$answering, $prompt];
+        });
+        $response = $commands->run('/replace', new CommandArguments(), $adapter);
+
+        self::assertNotNull($response);
+        self::assertSame('failed', $response['status']);
+        self::assertSame('Failed after replacement.', $response['error']);
+        self::assertSame(['/replace'], $response['notices']);
+        self::assertSame($replacement, $adapter->agent());
+        self::assertNotSame($history, $replacement->getChatHistory());
+        self::assertSame([], $replacement->getChatHistory()->getMessages());
+        self::assertSame('Original conversation', $history->getMessages()[0]->getContent());
+        self::assertSame($commands, $adapter->commands());
+        self::assertSame($sessions, $adapter->sessions());
+        self::assertSame([[$replacement, 'A generated prompt for the replacement.']], $received);
+    }
+
+    public function testBackendReturnsHelpLeaveAndUnknownResponsesFromRunAlone(): void
+    {
+        $commands = new Commands([new HelpCommand('/guide'), new LeaveCommand('/quit')]);
+        $sessions = new Sessions(new InMemoryStorage());
+        $responses = [];
+
+        foreach (['/guide', '/missing', '/quit'] as $identifier) {
+            $response = $commands->run($identifier, new CommandArguments(), new BackendAdapter(
+                new Agent(), $commands, $sessions, static function (): void {},
+            ));
+            self::assertNotNull($response);
+            $responses[$identifier] = $response;
+        }
+
+        self::assertSame('completed', $responses['/guide']['status']);
+        self::assertSame([
+            '/guide — Lists what can be typed here.',
+            '/quit — Stops the interaction.',
+        ], $responses['/guide']['notices']);
+        self::assertFalse($responses['/guide']['stopped']);
+        self::assertSame('unknown', $responses['/missing']['status']);
+        self::assertSame('/missing', $responses['/missing']['identifier']);
+        self::assertSame('completed', $responses['/quit']['status']);
+        self::assertSame([], $responses['/quit']['notices']);
+        self::assertTrue($responses['/quit']['stopped']);
     }
 }

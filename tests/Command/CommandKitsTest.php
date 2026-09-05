@@ -33,10 +33,10 @@ final class CommandKitsTest extends TestCase
         ));
         self::assertSame($last, $commands->all()[3]);
         self::assertSame($first, $commands->named('/resume'));
-        $controls = new FakeCommandControls($commands);
-        $previous = $controls->agent()->getChatHistory();
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $controls)->status);
-        self::assertNotSame($previous, $controls->agent()->getChatHistory());
+        $adapter = new FakeCommandAdapter($commands);
+        $previous = $adapter->agent()->getChatHistory();
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
+        self::assertNotSame($previous, $adapter->agent()->getChatHistory());
     }
 
     public function testConstructorAndIncrementalMountingApplyTheSameValidation(): void
@@ -64,22 +64,23 @@ final class CommandKitsTest extends TestCase
     public function testSessionCommandKitMountsInOneOperationAndClearPreservesThePreviousSession(): void
     {
         $commands = new Commands(new SessionCommandKit());
-        $controls = new FakeCommandControls($commands);
-        $previous = $controls->sessions()->start();
+        $adapter = new FakeCommandAdapter($commands);
+        $previous = $adapter->sessions()->start();
         $previous->addMessage(new UserMessage('Keep this conversation'));
-        $controls->agent()->setChatHistory($previous);
-        $key = $controls->sessions()->list()[0]->key;
+        $adapter->agent()->setChatHistory($previous);
+        $key = $adapter->sessions()->list()[0]->key;
 
-        $execution = $commands->run('/clear', new CommandArguments(), $controls);
+        $execution = $commands->run('/clear', new CommandArguments(), $adapter);
 
         self::assertSame(['/clear', '/resume'], array_map(
             static fn (CommandInterface $command): string => $command->name(),
             $commands->all(),
         ));
+        self::assertNotNull($execution);
         self::assertSame('completed', $execution->status);
-        self::assertNotSame($previous, $controls->agent()->getChatHistory());
-        self::assertSame([], $controls->agent()->getChatHistory()->getMessages());
-        self::assertSame('Keep this conversation', $controls->sessions()->resume($key)->getMessages()[0]->getContent());
+        self::assertNotSame($previous, $adapter->agent()->getChatHistory());
+        self::assertSame([], $adapter->agent()->getChatHistory()->getMessages());
+        self::assertSame('Keep this conversation', $adapter->sessions()->resume($key)->getMessages()[0]->getContent());
     }
 
     public function testMixedMountingPreservesOrderAndTheFirstDuplicateExecutes(): void
@@ -87,9 +88,9 @@ final class CommandKitsTest extends TestCase
         $first = new ClearCommand('/resume');
         $last = new ClearCommand('/last');
         $commands = new Commands([$first, new SessionCommandKit(), $last]);
-        $controls = new FakeCommandControls($commands);
-        $previous = $controls->sessions()->start();
-        $controls->agent()->setChatHistory($previous);
+        $adapter = new FakeCommandAdapter($commands);
+        $previous = $adapter->sessions()->start();
+        $adapter->agent()->setChatHistory($previous);
 
         self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(
             static fn (CommandInterface $command): string => $command->name(),
@@ -97,9 +98,9 @@ final class CommandKitsTest extends TestCase
         ));
         self::assertSame($first, $commands->named('/resume'));
         self::assertSame($last, $commands->named('/last'));
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $controls)->status);
-        self::assertNotSame($previous, $controls->agent()->getChatHistory());
-        self::assertSame([], $controls->warnings);
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
+        self::assertNotSame($previous, $adapter->agent()->getChatHistory());
+        self::assertSame([], $adapter->warnings);
     }
 
     public function testKitFiltersAreImmutableAndExclusionWins(): void
@@ -135,11 +136,11 @@ final class CommandKitsTest extends TestCase
     public function testResumeWithNoStoredSessionWarnsWithoutRequestingSelection(): void
     {
         $commands = new Commands(new SessionCommandKit());
-        $controls = new FakeCommandControls($commands);
+        $adapter = new FakeCommandAdapter($commands);
 
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $controls)->status);
-        self::assertSame(['There is no earlier Session to return to yet.'], $controls->warnings);
-        self::assertSame([], $controls->selections);
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
+        self::assertSame(['There is no earlier Session to return to yet.'], $adapter->warnings);
+        self::assertSame([], $adapter->selections);
     }
 }
 

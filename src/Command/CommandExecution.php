@@ -6,7 +6,10 @@ namespace NeuronInteraction\Command;
 
 use Throwable;
 
-/** The technical outcome of dispatch, independent from a Command's effects. */
+/**
+ * Technical dispatch outcome delivered to the Adapter's afterExecution().
+ * Completed invocations may still have a pending selection or Agent response.
+ */
 final readonly class CommandExecution
 {
     private function __construct(

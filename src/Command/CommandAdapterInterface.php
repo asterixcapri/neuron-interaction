@@ -7,9 +7,19 @@ namespace NeuronInteraction\Command;
 use NeuronAI\Agent\Agent;
 use NeuronInteraction\Session\Sessions;
 
-/** Presentation-independent operations supplied by the active Adapter. */
-interface CommandControlsInterface
+/**
+ * Presentation-independent operations and invocation lifecycle supplied by an Adapter.
+ *
+ * @template-covariant TOutput
+ */
+interface CommandAdapterInterface
 {
+    /** Refusal returns control to the caller without dispatch or completion. */
+    public function admit(CommandInterface $command): bool;
+
+    /** @return TOutput */
+    public function afterExecution(CommandExecution $execution): mixed;
+
     public function say(string $text): void;
 
     public function warn(string $text): void;
