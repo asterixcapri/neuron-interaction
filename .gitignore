@@ -2,3 +2,8 @@
 /composer.lock
 /.phpunit.cache/
 /.phpstan.cache/
+.agents
+.codex
+.claude
+.pi
+.opencode
