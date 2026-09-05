@@ -45,6 +45,20 @@ foreach ($sessions->list() as $session) {
 }
 ```
 
+To retain a conversation already held by an Agent, install the History returned
+by `retain()`:
+
+```php
+$agent->setChatHistory($sessions->retain($agent->getChatHistory()));
+```
+
+This imports all existing messages without trimming them and persists later
+additions through the returned History. A History already backed by the same
+Storage object is reused, so a preselected Session keeps its key. A History from
+another Storage is imported into this collection. Normal Session trimming and
+title rules still apply after startup. Adapters can then clear and resume the
+conversation without keeping a separate startup snapshot.
+
 Use `InMemoryStorage` for transient state, or implement `StorageInterface`
 for application-specific persistence. Storage holds namespaced JSON documents
 identified by logical keys. It preserves string metadata together with data;
