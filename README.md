@@ -1,29 +1,45 @@
 # Neuron Interaction
 
-Presentation-independent interaction modules for Neuron AI Agents. Host
-Applications compose the modules directly and own presentation, Agent turn
-execution and response streaming.
+Neuron Interaction is a small PHP library for building reusable interaction
+flows around [Neuron AI](https://github.com/neuron-core/neuron-ai) Agents. It
+provides the state and application-level behavior common to conversational
+interfaces while leaving presentation, Agent execution and response streaming
+to the Host Application.
 
-Requires PHP 8.4.1 or later. The extraction is available on the development
-branch `feat/extract-neuron-interaction`; it has not been released. Put this
-configuration in the Host Application's root `composer.json`, then run
-`composer update`:
+The same interaction logic can therefore serve a terminal, web backend or
+another delivery mechanism. Each Host Application supplies an Adapter that
+translates the library's operations into its own UI and response model.
 
-```json
-{
-    "repositories": [
-        {"type": "vcs", "url": "https://github.com/asterixcapri/neuron-interaction"}
-    ],
-    "require": {
-        "asterixcapri/neuron-interaction": "dev-feat/extract-neuron-interaction"
-    }
-}
-```
+## What it provides
 
-The explicit development constraint permits this package's prerelease while
-leaving other packages at Composer's default stable minimum. Composer uses
-repositories declared by the root application; a dependency's repository
-configuration is not inherited.
+- **Sessions** persist Neuron AI chat Histories and make conversations
+  discoverable, resumable and replaceable without discarding earlier ones.
+- **Input history** records original submissions across Sessions and optionally
+  provides shell-style recall navigation with independent cursor state per UI.
+- **Commands** provide presentation-independent dispatch, admission and
+  completion, together with reusable `/clear`, `/resume`, `/help` and `/exit`
+  behavior.
+- **Selections** describe choices as serializable values, labels and
+  descriptions, so multi-step interactions can cross backend request boundaries.
+- **Storage** offers in-memory and JSON-file implementations behind a small
+  interface that applications can replace with their own persistence.
+
+## Design strengths
+
+- **Presentation independence.** Commands express interaction effects through
+  an Adapter instead of printing to a terminal or returning a fixed HTTP shape.
+- **Explicit application ownership.** The Host Application controls the active
+  Agent, turn execution, authorization, scheduling, streaming and lifecycle.
+- **Composable modules.** Sessions, Commands, Input history and Storage can be
+  adopted together or independently; no application facade is required.
+- **Native Neuron AI integration.** Persisted Sessions expose Neuron AI's own
+  `ChatHistoryInterface`, so they can be installed directly on an Agent.
+- **Request-safe workflows.** Selection state is carried as data and resumed by
+  a later Command invocation; an Adapter does not need to survive between
+  requests.
+- **Replaceable boundaries.** Both presentation and persistence sit behind
+  focused interfaces, keeping framework and infrastructure choices outside the
+  shared interaction model.
 
 ## Sessions and Storage
 
