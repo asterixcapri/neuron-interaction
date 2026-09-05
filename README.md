@@ -45,19 +45,11 @@ foreach ($sessions->list() as $session) {
 }
 ```
 
-To retain a conversation already held by an Agent, install the History returned
-by `retain()`:
-
-```php
-$agent->setChatHistory($sessions->retain($agent->getChatHistory()));
-```
-
-This imports all existing messages without trimming them and persists later
-additions through the returned History. A History already backed by the same
-Storage object is reused, so a preselected Session keeps its key. A History from
-another Storage is imported into this collection. Normal Session trimming and
-title rules still apply after startup. Adapters can then clear and resume the
-conversation without keeping a separate startup snapshot.
+Host Applications explicitly install a History from `start()` or `resume($key)`
+on the Agent when they want that conversation managed by these Sessions.
+Sessions do not import arbitrary Agent Histories or automatically select the
+latest conversation. Only Histories managed through these Sessions appear in
+its listing, subject to the existing title rules.
 
 Use `InMemoryStorage` for transient state, or implement `StorageInterface`
 for application-specific persistence. Storage holds namespaced JSON documents
