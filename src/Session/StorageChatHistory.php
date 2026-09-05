@@ -37,6 +37,18 @@ final class StorageChatHistory extends AbstractChatHistory
         $this->load($document);
     }
 
+    public function belongsTo(StorageInterface $storage, string $namespace): bool
+    {
+        return $this->storage === $storage && $this->namespace === $namespace;
+    }
+
+    /** @param list<Message> $messages */
+    public function initialize(array $messages): void
+    {
+        $this->persist($messages);
+        $this->history = $messages;
+    }
+
     /**
      * @param list<Message> $messages
      */

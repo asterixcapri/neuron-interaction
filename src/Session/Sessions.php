@@ -33,6 +33,23 @@ final readonly class Sessions
     }
 
     /**
+     * Retains an existing conversation in this collection without trimming it.
+     * Install the returned History on the Agent so subsequent messages persist.
+     */
+    public function retain(ChatHistoryInterface $history): ChatHistoryInterface
+    {
+        if ($history instanceof StorageChatHistory
+            && $history->belongsTo($this->storage, self::NAMESPACE)) {
+            return $history;
+        }
+
+        $retained = $this->history($this->storage->create(self::NAMESPACE, []));
+        $retained->initialize(array_values($history->getMessages()));
+
+        return $retained;
+    }
+
+    /**
      * Returns non-empty Sessions, most recently used first.
      *
      * @return list<Session>
@@ -82,7 +99,7 @@ final readonly class Sessions
         return $this->history($document);
     }
 
-    private function history(StoredDocument $document): ChatHistoryInterface
+    private function history(StoredDocument $document): StorageChatHistory
     {
         return new StorageChatHistory(
             $this->storage,
