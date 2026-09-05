@@ -7,7 +7,7 @@ namespace NeuronInteraction\Tests\Command;
 use DateTimeImmutable;
 use Generator;
 use NeuronInteraction\Command\SessionMetadata;
-use NeuronInteraction\Session\Session;
+use NeuronInteraction\Session\SessionSummary;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -18,7 +18,7 @@ final class SessionMetadataTest extends TestCase
         string $lastUsedAt,
         string $expected,
     ): void {
-        $session = new Session(
+        $session = new SessionSummary(
             'session-key',
             new DateTimeImmutable($lastUsedAt),
             'The opening words',
@@ -79,7 +79,7 @@ final class SessionMetadataTest extends TestCase
         ?int $size,
         string $expected,
     ): void {
-        $session = new Session(
+        $session = new SessionSummary(
             'session-key',
             new DateTimeImmutable('2026-09-01 11:59:40 UTC'),
             'The opening words',

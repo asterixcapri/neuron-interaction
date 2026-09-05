@@ -23,32 +23,32 @@ final readonly class Sessions
     public function __construct(private StorageInterface $storage) {}
 
     /**
-     * Starts a distinct Session and returns its empty History.
+     * Starts a distinct Session with an empty History.
      */
-    public function start(): ChatHistoryInterface
+    public function start(): Session
     {
         $document = $this->storage->create(self::NAMESPACE, []);
 
-        return $this->history($document);
+        return $this->session($document);
     }
 
     /**
      * Returns non-empty Sessions, most recently used first.
      *
-     * @return list<Session>
+     * @return list<SessionSummary>
      */
-    public function list(): array
+    public function summaries(): array
     {
         $sessions = [];
 
         foreach ($this->storage->entries(self::NAMESPACE) as $document) {
-            $title = $this->title($this->history($document));
+            $title = $this->title($this->session($document));
 
             if ($title === null) {
                 continue;
             }
 
-            $sessions[] = new Session(
+            $sessions[] = new SessionSummary(
                 $document->key,
                 $this->lastUsedAt($document),
                 $title,
@@ -58,7 +58,7 @@ final readonly class Sessions
 
         usort(
             $sessions,
-            static fn (Session $one, Session $other): int =>
+            static fn (SessionSummary $one, SessionSummary $other): int =>
                 ($other->lastUsedAt <=> $one->lastUsedAt)
                     ?: ($one->key <=> $other->key),
         );
@@ -69,7 +69,7 @@ final readonly class Sessions
     /**
      * Resumes an existing Session. Only start() creates a key.
      */
-    public function resume(string $key): ChatHistoryInterface
+    public function resume(string $key): Session
     {
         $document = $this->storage->read(self::NAMESPACE, $key);
 
@@ -79,12 +79,12 @@ final readonly class Sessions
             );
         }
 
-        return $this->history($document);
+        return $this->session($document);
     }
 
-    private function history(StoredDocument $document): ChatHistoryInterface
+    private function session(StoredDocument $document): Session
     {
-        return new StorageChatHistory(
+        return new Session(
             $this->storage,
             self::NAMESPACE,
             $document->key,

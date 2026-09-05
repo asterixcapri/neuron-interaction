@@ -54,7 +54,7 @@ $agent = new Agent();
 $agent->setChatHistory($sessions->start());
 
 // After the Agent has exchanged messages, list recognizable Sessions.
-foreach ($sessions->list() as $session) {
+foreach ($sessions->summaries() as $session) {
     // Render $session->title according to your Adapter's rules.
     // Resume a chosen Session by installing its History on the Agent:
     // $agent->setChatHistory($sessions->resume($session->key));

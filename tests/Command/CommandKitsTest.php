@@ -68,7 +68,7 @@ final class CommandKitsTest extends TestCase
         $previous = $adapter->sessions()->start();
         $previous->addMessage(new UserMessage('Keep this conversation'));
         $adapter->agent()->setChatHistory($previous);
-        $key = $adapter->sessions()->list()[0]->key;
+        $key = $adapter->sessions()->summaries()[0]->key;
 
         $execution = $commands->run('/clear', new CommandArguments(), $adapter);
 

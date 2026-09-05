@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use DateTimeImmutable;
-use NeuronInteraction\Session\Session;
+use NeuronInteraction\Session\SessionSummary;
 
 /**
  * Presents the recognition metadata shown beneath a Session title.
@@ -15,7 +15,7 @@ use NeuronInteraction\Session\Session;
 final readonly class SessionMetadata
 {
     public static function format(
-        Session $session,
+        SessionSummary $session,
         DateTimeImmutable $now,
     ): string {
         $relativeAge = self::relativeAge($session, $now);
@@ -28,7 +28,7 @@ final readonly class SessionMetadata
     }
 
     private static function relativeAge(
-        Session $session,
+        SessionSummary $session,
         DateTimeImmutable $now,
     ): string {
         $age = $now->getTimestamp() - $session->lastUsedAt->getTimestamp();

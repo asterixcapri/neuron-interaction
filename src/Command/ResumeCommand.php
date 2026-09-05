@@ -43,7 +43,7 @@ final readonly class ResumeCommand implements CommandInterface
             return;
         }
 
-        $sessions = $adapter->sessions()->list();
+        $sessions = $adapter->sessions()->summaries();
 
         if ($sessions === []) {
             $adapter->warn('There is no earlier Session to return to yet.');

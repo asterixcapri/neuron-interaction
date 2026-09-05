@@ -84,7 +84,7 @@ final class SelectionTest extends TestCase
         $stored->addMessage(new UserMessage('Stored subject'));
         $active = $adapter->sessions()->start();
         $adapter->agent()->setChatHistory($active);
-        $session = $adapter->sessions()->list()[0];
+        $session = $adapter->sessions()->summaries()[0];
 
         $first = $commands->run('/return', new CommandArguments(), $adapter);
 
@@ -111,7 +111,7 @@ final class SelectionTest extends TestCase
         $commands = new Commands([new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
         $adapter->sessions()->start()->addMessage(new UserMessage('Direct resume'));
-        $key = $adapter->sessions()->list()[0]->key;
+        $key = $adapter->sessions()->summaries()[0]->key;
 
         self::assertSame('completed', $commands->run('/resume', new CommandArguments($key), $adapter)?->status);
         self::assertSame('Direct resume', $adapter->agent()->getChatHistory()->getMessages()[0]->getContent());

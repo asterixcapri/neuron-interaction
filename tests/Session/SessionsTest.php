@@ -11,7 +11,7 @@ use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Session\Session;
+use NeuronInteraction\Session\SessionSummary;
 use NeuronInteraction\Session\Sessions;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -40,14 +40,15 @@ final class SessionsTest extends TestCase
         $first = $sessions->start();
         $second = $sessions->start();
 
+        self::assertNotSame($first->getKey(), $second->getKey());
         self::assertSame([], $first->getMessages());
         self::assertSame([], $second->getMessages());
 
         $first->addMessage(new UserMessage('First'));
         $second->addMessage(new UserMessage('Second'));
         $keys = array_map(
-            static fn (Session $session): string => $session->key,
-            $sessions->list(),
+            static fn (SessionSummary $session): string => $session->key,
+            $sessions->summaries(),
         );
 
         self::assertCount(2, array_unique($keys));
@@ -61,11 +62,12 @@ final class SessionsTest extends TestCase
     {
         $storage = new InMemoryStorage();
         $sessions = new Sessions($storage);
-        $sessions->start();
-        $key = iterator_to_array($storage->entries('sessions'))[0]->key;
+        $key = $sessions->start()->getKey();
 
-        self::assertSame([], $sessions->list());
-        self::assertSame([], $sessions->resume($key)->getMessages());
+        self::assertSame([], $sessions->summaries());
+        $resumed = $sessions->resume($key);
+        self::assertSame($key, $resumed->getKey());
+        self::assertSame([], $resumed->getMessages());
     }
 
     #[DataProvider('storageKinds')]
@@ -79,7 +81,7 @@ final class SessionsTest extends TestCase
         $reopened = new Sessions($files
             ? new FileStorage($this->directory)
             : $storage);
-        $listed = $reopened->list();
+        $listed = $reopened->summaries();
 
         self::assertCount(1, $listed);
         self::assertSame('Written earlier', $listed[0]->title);
@@ -95,7 +97,7 @@ final class SessionsTest extends TestCase
         return ['memory' => [false], 'files' => [true]];
     }
 
-    public function testListUsesTheOpeningWordsAndMostRecentUseOrder(): void
+    public function testSummariesUseTheOpeningWordsAndMostRecentUseOrder(): void
     {
         $sessions = new Sessions(new InMemoryStorage());
         $first = $sessions->start();
@@ -107,13 +109,13 @@ final class SessionsTest extends TestCase
         self::assertSame(
             ['The newer subject', 'The older subject'],
             array_map(
-                static fn (Session $session): string => $session->title,
-                $sessions->list(),
+                static fn (SessionSummary $session): string => $session->title,
+                $sessions->summaries(),
             ),
         );
 
         $first->addMessage(new UserMessage('A later question'));
-        $listed = $sessions->list();
+        $listed = $sessions->summaries();
 
         self::assertSame('The older subject', $listed[0]->title);
         self::assertGreaterThan($listed[1]->lastUsedAt, $listed[0]->lastUsedAt);
@@ -150,7 +152,7 @@ final class SessionsTest extends TestCase
             new ImageContent('https://example.com/image.png', SourceType::URL),
         ]));
 
-        $withoutText = $sessions->list();
+        $withoutText = $sessions->summaries();
         self::assertSame([], $withoutText);
 
         $history->addMessage(new AssistantMessage('Image received'));
@@ -163,7 +165,7 @@ final class SessionsTest extends TestCase
         $history->addMessage(new AssistantMessage('An answer'));
         $history->addMessage(new UserMessage('Another subject'));
 
-        self::assertSame($title, $sessions->list()[0]->title);
+        self::assertSame($title, $sessions->summaries()[0]->title);
     }
 
     public function testEqualLastUseTimesAreOrderedByKey(): void
@@ -184,8 +186,8 @@ final class SessionsTest extends TestCase
         sort($keys);
 
         self::assertSame($keys, array_map(
-            static fn (Session $session): string => $session->key,
-            $sessions->list(),
+            static fn (SessionSummary $session): string => $session->key,
+            $sessions->summaries(),
         ));
     }
 
@@ -194,7 +196,7 @@ final class SessionsTest extends TestCase
         $sessions = new Sessions(new FileStorage($this->directory));
         $history = $sessions->start();
         $history->addMessage(new UserMessage('Stored in a file'));
-        $listed = $sessions->list();
+        $listed = $sessions->summaries();
 
         self::assertCount(1, $listed);
         $path = $this->directory . '/sessions/' . $listed[0]->key . '.json';
@@ -218,7 +220,7 @@ final class SessionsTest extends TestCase
         $contents = file_get_contents($legacy);
         $sessions = new Sessions(new FileStorage($this->directory));
 
-        self::assertSame([], $sessions->list());
+        self::assertSame([], $sessions->summaries());
 
         try {
             $sessions->resume('legacy-key');

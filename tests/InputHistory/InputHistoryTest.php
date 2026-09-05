@@ -99,7 +99,7 @@ final class InputHistoryTest extends TestCase
 
         $inputs->record('/summarize');
         $history->addMessage(new UserMessage('A generated prompt for the Agent'));
-        $key = $sessions->list()[0]->key;
+        $key = $sessions->summaries()[0]->key;
         $sessions->start()->addMessage(new UserMessage('Another conversation'));
         $inputs->record('A submitted message');
         $sessions->resume($key);
@@ -108,7 +108,7 @@ final class InputHistoryTest extends TestCase
             ['/summarize', 'A submitted message'],
             (new InputHistory($storage))->entries(),
         );
-        self::assertCount(2, $sessions->list());
+        self::assertCount(2, $sessions->summaries());
     }
 
     /** @return array<string, array{bool}> */

@@ -9,9 +9,8 @@ namespace NeuronInteraction\Command;
  *
  * A Host Application mounts it under `clear` or a name of its own.
  *
- * Starting a Session returns the empty History the Agent needs. Minting its
- * key stays behind the Sessions seam, and nothing here ever deletes what the
- * new Session replaced.
+ * Starting a Session returns the empty History the Agent needs together with
+ * its key, and nothing here ever deletes what the new Session replaced.
  */
 final readonly class ClearCommand implements CommandInterface
 {
