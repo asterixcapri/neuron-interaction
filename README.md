@@ -165,8 +165,8 @@ additional typed submissions.
 
 Commands, Sessions, Input history and Storage are composed directly. There is
 no required application facade, HTTP framework, authentication subsystem,
-worker topology or subagent orchestration. Terminal Help and Leave Commands,
-concurrent Command policy and Picker presentation belong to Neuron TUI.
+worker topology or subagent orchestration. Help and Leave are shared Commands;
+permission to run them during a Turn and Picker presentation belong to Neuron TUI.
 
 ## Development
 
