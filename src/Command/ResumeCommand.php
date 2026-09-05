@@ -32,20 +32,21 @@ final readonly class ResumeCommand implements CommandInterface
         return 'Lets you choose a stored Session to resume.';
     }
 
-    public function run(CommandControlsInterface $controls, CommandArguments $arguments): void
+    /** @param CommandAdapterInterface<mixed> $adapter */
+    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
     {
         if ($arguments->text !== '') {
-            $controls->agent()->setChatHistory(
-                $controls->sessions()->resume($arguments->text),
+            $adapter->agent()->setChatHistory(
+                $adapter->sessions()->resume($arguments->text),
             );
 
             return;
         }
 
-        $sessions = $controls->sessions()->list();
+        $sessions = $adapter->sessions()->list();
 
         if ($sessions === []) {
-            $controls->warn('There is no earlier Session to return to yet.');
+            $adapter->warn('There is no earlier Session to return to yet.');
 
             return;
         }
@@ -61,6 +62,6 @@ final readonly class ResumeCommand implements CommandInterface
             );
         }
 
-        $controls->requestSelection(new SelectionRequest($this->name(), 'Sessions', $options));
+        $adapter->requestSelection(new SelectionRequest($this->name(), 'Sessions', $options));
     }
 }

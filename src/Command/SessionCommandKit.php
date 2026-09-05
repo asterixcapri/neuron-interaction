@@ -8,7 +8,7 @@ namespace NeuronInteraction\Command;
  * The shared Session Commands, mounted in one line.
  *
  * Both commands reach the live Sessions supplied by the Adapter
- * through their Controls.
+ * through their Adapter.
  *
  * An application in which conversations are not thrown away mounts it without
  * `ClearCommand`; one that only wants to return to an earlier conversation

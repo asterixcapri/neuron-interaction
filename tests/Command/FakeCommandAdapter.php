@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Command\CommandControlsInterface;
+use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandExecution;
+use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\SelectionRequest;
 use NeuronInteraction\Session\Sessions;
 use NeuronInteraction\Storage\InMemoryStorage;
 
-final class FakeCommandControls implements CommandControlsInterface
+/** @implements CommandAdapterInterface<CommandExecution> */
+class FakeCommandAdapter implements CommandAdapterInterface
 {
     /** @var list<string> */
     public array $notices = [];
@@ -32,6 +35,16 @@ final class FakeCommandControls implements CommandControlsInterface
         private Agent $answering = new Agent(),
         private Sessions $collection = new Sessions(new InMemoryStorage()),
     ) {
+    }
+
+    public function admit(CommandInterface $command): bool
+    {
+        return true;
+    }
+
+    public function afterExecution(CommandExecution $execution): CommandExecution
+    {
+        return $execution;
     }
 
     public function say(string $text): void
@@ -61,6 +74,7 @@ final class FakeCommandControls implements CommandControlsInterface
 
     public function useAgent(Agent $agent): void
     {
+        $agent->setChatHistory($this->answering->getChatHistory());
         $this->answering = $agent;
     }
 

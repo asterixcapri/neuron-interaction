@@ -72,23 +72,34 @@ final class Commands
         return null;
     }
 
+    /**
+     * @template TOutput
+     * @param CommandAdapterInterface<TOutput> $adapter
+     * @return TOutput|null Null is also returned when admission refuses the Command.
+     */
     public function run(
         string $identifier,
         CommandArguments $arguments,
-        CommandControlsInterface $controls,
-    ): CommandExecution {
+        CommandAdapterInterface $adapter,
+    ): mixed {
         $command = $this->named($identifier);
 
         if ($command === null) {
-            return CommandExecution::unknown($identifier);
+            return $adapter->afterExecution(CommandExecution::unknown($identifier));
+        }
+
+        if (!$adapter->admit($command)) {
+            return null;
         }
 
         try {
-            $command->run($controls, $arguments);
+            $command->run($adapter, $arguments);
 
-            return CommandExecution::completed($identifier);
+            $execution = CommandExecution::completed($identifier);
         } catch (Throwable $exception) {
-            return CommandExecution::failed($identifier, $exception);
+            $execution = CommandExecution::failed($identifier, $exception);
         }
+
+        return $adapter->afterExecution($execution);
     }
 }

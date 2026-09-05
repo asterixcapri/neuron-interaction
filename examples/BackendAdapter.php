@@ -6,23 +6,38 @@ namespace NeuronInteraction\Examples;
 
 use Closure;
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Command\CommandControlsInterface;
+use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandExecution;
+use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\SelectionRequest;
 use NeuronInteraction\Session\Sessions;
 
-/** Example request-scoped Adapter; the Host Application supplies Agent execution. */
-final class BackendControls implements CommandControlsInterface
+/**
+ * Example request-scoped Adapter; the Host Application supplies Agent execution.
+ *
+ * @phpstan-type BackendResponse array{
+ *     identifier: string,
+ *     status: string,
+ *     error: ?string,
+ *     notices: list<string>,
+ *     warnings: list<string>,
+ *     selection: ?SelectionRequest,
+ *     stopped: bool,
+ * }
+ * @implements CommandAdapterInterface<BackendResponse>
+ */
+final class BackendAdapter implements CommandAdapterInterface
 {
     /** @var list<string> */
-    public array $notices = [];
+    private array $notices = [];
 
     /** @var list<string> */
-    public array $warnings = [];
+    private array $warnings = [];
 
-    public ?SelectionRequest $selection = null;
+    private ?SelectionRequest $selection = null;
 
-    public bool $stopped = false;
+    private bool $stopped = false;
 
     /** @param Closure(Agent, string): void $submitPrompt */
     public function __construct(
@@ -31,6 +46,25 @@ final class BackendControls implements CommandControlsInterface
         private readonly Sessions $storedSessions,
         private readonly Closure $submitPrompt,
     ) {
+    }
+
+    public function admit(CommandInterface $command): bool
+    {
+        return true;
+    }
+
+    /** @return BackendResponse */
+    public function afterExecution(CommandExecution $execution): array
+    {
+        return [
+            'identifier' => $execution->identifier,
+            'status' => $execution->status,
+            'error' => $execution->exception?->getMessage(),
+            'notices' => $this->notices,
+            'warnings' => $this->warnings,
+            'selection' => $this->selection,
+            'stopped' => $this->stopped,
+        ];
     }
 
     public function say(string $text): void

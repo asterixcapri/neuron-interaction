@@ -106,8 +106,8 @@ use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\SessionCommandKit;
 
 $commands = new Commands(new SessionCommandKit());
-// $controls is your Adapter's CommandControlsInterface implementation.
-// $execution = $commands->run('/resume', new CommandArguments(), $controls);
+// $adapter implements CommandAdapterInterface for this invocation.
+$output = $commands->run('/resume', new CommandArguments(), $adapter);
 ```
 
 Every mounted identifier includes its leading slash, including aliases. Names
@@ -115,12 +115,43 @@ without a slash are rejected immediately; lookup is exact, with no case or
 prefix normalization. This revision supersedes the historical extraction
 requirement for neutral identifiers. Backend Adapters use the same identifiers.
 
-Commands receive `CommandControlsInterface`, use its shared verbs and return
-`void`. Dispatch reports `completed`, `unknown` or `failed`; failures retain
-the original exception. The collection preserves mounting order and executes
-the first duplicate identifier. Its constructor also accepts individual
-Commands or arrays mixing Commands and kits. Kits support immutable `only()`
-and `exclude()` filters by class.
+Commands receive `CommandAdapterInterface`, use its nine shared verbs and return
+`void`. `Commands::run()` owns the whole invocation: it resolves the first matching
+Command, requests Adapter admission, invokes the Command, and passes its technical
+`CommandExecution` outcome to `afterExecution()`. Callers receive the Adapter's
+output from this one call; they do not coordinate completion separately.
+
+The collection preserves mounting order and executes the first duplicate
+identifier. Its constructor also accepts individual Commands or arrays mixing
+Commands and kits. Kits support immutable `only()` and `exclude()` filters by class.
+
+- An unknown identifier reaches `afterExecution()` with an `unknown` outcome,
+  without admission or Command dispatch.
+- `admit()` receives the resolved Command. Returning `false` skips dispatch and
+  completion, and `run()` returns `null`. The Adapter handles visible refusal.
+- An admitted Command produces `completed` when it returns or `failed` with its
+  original exception when it throws. Both reach `afterExecution()`.
+- Exceptions from `admit()` or `afterExecution()` propagate to the caller.
+  Completion is never retried as a failed Command invocation.
+
+`afterExecution()` defines the Adapter's output: a backend can return its response
+data or a framework response, while a terminal Adapter may perform presentation
+and return `null`. `CommandAdapterInterface<TOutput>` and the generic `run()`
+method preserve that output type in static analysis; `run()` returns
+`TOutput|null` because admission can refuse. No response format or transport
+dependency is imposed by the shared package.
+
+`CommandExecution` is a technical outcome passed to the Adapter, not a domain
+result. `completed` means the invocation returned; a requested selection or Agent
+response may still be pending. Command failures do not roll back effects already
+performed, including notices, History changes, or immediate Agent replacement.
+
+This is an intentional shared-contract migration: replace
+`CommandControlsInterface` with `CommandAdapterInterface` in Commands and Adapter
+implementations, add `admit()` and `afterExecution()`, and consume the Adapter's
+output from `run()` instead of expecting `CommandExecution`. Commands can annotate
+their parameter as `CommandAdapterInterface<mixed>`; concrete Adapters declare
+`@implements CommandAdapterInterface<TheirOutputType>`.
 
 `/resume` without arguments emits a `SelectionRequest` and returns. The Adapter
 presents its options and invokes the request's target Command again with the
@@ -134,11 +165,14 @@ the shared `Commands` dispatcher accepts only `CommandInterface` members.
 
 ## Backend Adapter example
 
-[BackendControls](examples/BackendControls.php) implements every operation of
-`CommandControlsInterface`. It collects notices, warnings and a
-`SelectionRequest` for one response and delegates `promptAgent()` to a callback
-supplied by the Host Application. Agent execution, scheduling and response
-streaming are outside this package. The example callback only prints the
+[BackendAdapter](examples/BackendAdapter.php) implements every operation of
+`CommandAdapterInterface`. It admits its Commands and collects notices, warnings,
+a `SelectionRequest`, and the stop effect for one response. Its `afterExecution()`
+returns response data containing those values, the technical status, identifier,
+and any error message. The caller obtains that response directly from `run()`.
+The example delegates `promptAgent()` to a callback supplied by the Host
+Application. Agent execution, scheduling and response streaming are outside this
+package. The example callback only prints the
 handoff; no model request is made.
 
 Run the [backend example](examples/backend.php) after installing development
@@ -148,13 +182,14 @@ dependencies:
 php examples/backend.php
 ```
 
-The first request dispatches `/resume` with empty `CommandArguments`. It finishes
-with a serializable request containing `command`, `prompt`, `description` and
-ordered `options`; each option has `value`, `label` and `description`. A frontend
-displays those options. A later request submits the target command and chosen
-value. Fresh controls dispatch them as new `CommandArguments`, installing the
-selected Session History on the second request's Agent. No selection is retained
-between controls instances. Cancellation simply omits the second invocation.
+The first request calls `run()` for `/resume` with empty `CommandArguments`. Its
+response includes a serializable `selection` containing `command`, `prompt`,
+`description` and ordered `options`; each option has `value`, `label` and
+`description`. A frontend displays those options. A later request submits the
+target command and unchanged chosen value. A fresh Adapter uses `run()` with new
+`CommandArguments`, installing the selected Session History on the second
+request's Agent. No selection is retained between Adapter instances. Cancellation
+simply omits the second invocation.
 
 The example uses `InMemoryStorage` to simulate both requests in one process;
 separate backend requests can configure `FileStorage` with the same root.
@@ -180,8 +215,8 @@ composer stan
 
 Mount `NeuronInteraction\Command\HelpCommand` and
 `NeuronInteraction\Command\LeaveCommand` explicitly, like Session Commands.
-Both implement `CommandInterface` and use `CommandControlsInterface`. Help lists
-the mounted Commands and descriptions through controls; Leave calls `stop()`.
+Both implement `CommandInterface` and use `CommandAdapterInterface`. Help lists
+the mounted Commands and descriptions through the Adapter; Leave calls `stop()`.
 The Adapter defines the stop effect. Neither Command depends on a terminal,
 and the shared dispatcher imposes no concurrency policy. Both accept a
 configured identifier in their constructor.
