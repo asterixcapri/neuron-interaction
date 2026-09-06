@@ -13,7 +13,8 @@ namespace NeuronInteraction\Storage;
 interface StorageInterface
 {
     /**
-     * Creates a document under a new adapter-generated opaque key.
+     * Creates a document with a supplied key or a new generated key.
+     * An existing key fails without replacing its document.
      *
      * @param array<array-key, mixed> $data
      * @param array<string, string> $metadata
@@ -22,6 +23,7 @@ interface StorageInterface
         string $namespace,
         array $data,
         array $metadata = [],
+        ?string $key = null,
     ): StoredDocument;
 
     /** A missing document returns null without creating storage state. */
@@ -47,7 +49,8 @@ interface StorageInterface
     /**
      * The namespace's documents, in adapter-defined order.
      *
+     * @param array<string, string> $metadata Exact AND filter.
      * @return iterable<StoredDocument>
      */
-    public function entries(string $namespace): iterable;
+    public function entries(string $namespace, array $metadata = []): iterable;
 }
