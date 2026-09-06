@@ -65,10 +65,10 @@ final class CommandKitsTest extends TestCase
     {
         $commands = new Commands(new SessionCommandKit());
         $adapter = new FakeCommandAdapter($commands);
-        $previous = $adapter->sessions()->create();
+        $previous = $adapter->sessionStore()->create();
         $previous->addMessage(new UserMessage('Keep this conversation'));
         $adapter->agent()->setChatHistory($previous);
-        $key = $adapter->sessions()->summaries()[0]->key;
+        $key = $adapter->sessionStore()->summaries()[0]->key;
 
         $execution = $commands->run('/clear', new CommandArguments(), $adapter);
 
@@ -80,7 +80,7 @@ final class CommandKitsTest extends TestCase
         self::assertSame('completed', $execution->status);
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
         self::assertSame([], $adapter->agent()->getChatHistory()->getMessages());
-        $reopened = $adapter->sessions()->read($key);
+        $reopened = $adapter->sessionStore()->read($key);
         self::assertNotNull($reopened);
         self::assertSame('Keep this conversation', $reopened->getMessages()[0]->getContent());
     }
@@ -91,7 +91,7 @@ final class CommandKitsTest extends TestCase
         $last = new ClearCommand('/last');
         $commands = new Commands([$first, new SessionCommandKit(), $last]);
         $adapter = new FakeCommandAdapter($commands);
-        $previous = $adapter->sessions()->create();
+        $previous = $adapter->sessionStore()->create();
         $adapter->agent()->setChatHistory($previous);
 
         self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(

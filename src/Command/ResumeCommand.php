@@ -39,7 +39,7 @@ final readonly class ResumeCommand implements CommandInterface
     public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
     {
         if ($arguments->text !== '') {
-            $session = $adapter->sessions()->read($arguments->text);
+            $session = $adapter->sessionStore()->read($arguments->text);
 
             if ($session === null) {
                 $adapter->warn('No Session is named by that key.');
@@ -52,7 +52,7 @@ final readonly class ResumeCommand implements CommandInterface
             return;
         }
 
-        $sessions = $adapter->sessions()->summaries();
+        $sessions = $adapter->sessionStore()->summaries();
 
         if ($sessions === []) {
             $adapter->warn('There is no earlier Session to return to yet.');

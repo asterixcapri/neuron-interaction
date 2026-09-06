@@ -32,6 +32,6 @@ final readonly class ClearCommand implements CommandInterface
     /** @param CommandAdapterInterface<mixed> $adapter */
     public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
     {
-        $adapter->useSession($adapter->sessions()->create());
+        $adapter->useSession($adapter->sessionStore()->create());
     }
 }

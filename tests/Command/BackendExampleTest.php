@@ -157,7 +157,7 @@ final class BackendExampleTest extends TestCase
                 $adapter->useAgent($this->replacement);
                 TestCase::assertSame($this->replacement, $adapter->agent());
                 TestCase::assertSame($previous, $adapter->agent()->getChatHistory());
-                $adapter->useSession($adapter->sessions()->create());
+                $adapter->useSession($adapter->sessionStore()->create());
                 $adapter->promptAgent('A generated prompt for the replacement.');
                 $adapter->say($adapter->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');
@@ -179,7 +179,7 @@ final class BackendExampleTest extends TestCase
         self::assertSame([], $replacement->getChatHistory()->getMessages());
         self::assertSame('Original conversation', $history->getMessages()[0]->getContent());
         self::assertSame($commands, $adapter->commands());
-        self::assertSame($sessions, $adapter->sessions());
+        self::assertSame($sessions, $adapter->sessionStore());
         self::assertSame([[$replacement, 'A generated prompt for the replacement.']], $received);
     }
 
