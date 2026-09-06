@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Session;
 
 use DateTimeImmutable;
-use InvalidArgumentException;
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\History\ChatHistoryInterface;
 use NeuronAI\Chat\Messages\ToolResultMessage;
@@ -16,18 +15,18 @@ use UnexpectedValueException;
 /**
  * Owns the lifecycle of conversations persisted through shared storage.
  */
-final readonly class Sessions
+final readonly class SessionStore
 {
     private const string NAMESPACE = 'sessions';
 
-    public function __construct(private StorageInterface $storage) {}
+    public function __construct(private StorageInterface $storage, private string $userId) {}
 
     /**
      * Starts a distinct Session with an empty History.
      */
-    public function start(): Session
+    public function create(): Session
     {
-        $document = $this->storage->create(self::NAMESPACE, []);
+        $document = $this->storage->create(self::NAMESPACE, [], ['userId' => $this->userId]);
 
         return $this->session($document);
     }
@@ -42,6 +41,10 @@ final readonly class Sessions
         $sessions = [];
 
         foreach ($this->storage->entries(self::NAMESPACE) as $document) {
+            if (($document->metadata['userId'] ?? null) !== $this->userId) {
+                continue;
+            }
+
             $title = $this->title($this->session($document));
 
             if ($title === null) {
@@ -66,20 +69,23 @@ final readonly class Sessions
         return $sessions;
     }
 
-    /**
-     * Resumes an existing Session. Only start() creates a key.
-     */
-    public function resume(string $key): Session
+    /** Reads only Sessions owned by this Store's user. */
+    public function read(string $key): ?Session
     {
         $document = $this->storage->read(self::NAMESPACE, $key);
 
-        if ($document === null) {
-            throw new InvalidArgumentException(
-                'No Session is named by that key.',
-            );
+        if ($document === null || ($document->metadata['userId'] ?? null) !== $this->userId) {
+            return null;
         }
 
         return $this->session($document);
+    }
+
+    public function delete(string $key): void
+    {
+        if ($this->read($key) !== null) {
+            $this->storage->delete(self::NAMESPACE, $key);
+        }
     }
 
     private function session(StoredDocument $document): Session
@@ -88,6 +94,7 @@ final readonly class Sessions
             $this->storage,
             self::NAMESPACE,
             $document->key,
+            $this->userId,
             document: $document,
         );
     }

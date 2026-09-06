@@ -6,7 +6,7 @@ namespace NeuronInteraction\Command;
 
 use NeuronAI\Agent\Agent;
 use NeuronInteraction\Session\Session;
-use NeuronInteraction\Session\Sessions;
+use NeuronInteraction\Session\SessionStore;
 
 /**
  * Presentation-independent operations and invocation lifecycle supplied by an Adapter.
@@ -39,7 +39,7 @@ interface CommandAdapterInterface
 
     public function commands(): Commands;
 
-    public function sessions(): Sessions;
+    public function sessions(): SessionStore;
 
     public function stop(): void;
 }

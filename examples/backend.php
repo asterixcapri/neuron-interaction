@@ -11,14 +11,14 @@ use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\SessionCommandKit;
 use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\InputHistory\InputHistory;
-use NeuronInteraction\Session\Sessions;
+use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $storage = new InMemoryStorage(); // A real backend may share FileStorage across requests.
-$sessions = new Sessions($storage);
-$sessions->start()->addMessage(new UserMessage('A conversation to reopen'));
+$sessions = new SessionStore($storage, 'local-user');
+$sessions->create()->addMessage(new UserMessage('A conversation to reopen'));
 $commands = new Commands([new SessionCommandKit(), new HelpCommand(), new LeaveCommand()]);
 $inputs = new InputHistory($storage);
 

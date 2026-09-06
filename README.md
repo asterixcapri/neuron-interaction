@@ -12,7 +12,7 @@ translates the library's operations into its own UI and response model.
 
 ## What it provides
 
-- **Sessions** persist Neuron AI chat Histories and make conversations
+- **SessionStore** persists Neuron AI chat Histories and make conversations
   discoverable, resumable and replaceable without discarding earlier ones.
 - **Input history** records original submissions across Sessions and optionally
   provides shell-style recall navigation with independent cursor state per UI.
@@ -30,7 +30,7 @@ translates the library's operations into its own UI and response model.
   an Adapter instead of printing to a terminal or returning a fixed HTTP shape.
 - **Explicit application ownership.** The Host Application controls the active
   Agent, turn execution, authorization, scheduling, streaming and lifecycle.
-- **Composable modules.** Sessions, Commands, Input history and Storage can be
+- **Composable modules.** SessionStore, Commands, Input history and Storage can be
   adopted together or independently; no application facade is required.
 - **Native Neuron AI integration.** Persisted Sessions expose Neuron AI's own
   `ChatHistoryInterface`, so they can be installed directly on an Agent.
@@ -41,30 +41,31 @@ translates the library's operations into its own UI and response model.
   focused interfaces, keeping framework and infrastructure choices outside the
   shared interaction model.
 
-## Sessions and Storage
+## SessionStore and Storage
 
 ```php
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Session\Sessions;
+use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');
-$sessions = new Sessions($storage);
+$sessions = new SessionStore($storage, 'local-user');
 $agent = new Agent();
-$agent->setChatHistory($sessions->start());
+$agent->setChatHistory($sessions->create());
 
 // After the Agent has exchanged messages, list recognizable Sessions.
 foreach ($sessions->summaries() as $session) {
     // Render $session->title according to your Adapter's rules.
     // Resume a chosen Session by installing its History on the Agent:
-    // $agent->setChatHistory($sessions->resume($session->key));
+    // $history = $sessions->read($session->key);
+    // if ($history !== null) { $agent->setChatHistory($history); }
 }
 ```
 
-Host Applications explicitly install a History from `start()` or `resume($key)`
-on the Agent when they want that conversation managed by these Sessions.
-Sessions do not import arbitrary Agent Histories or automatically select the
-latest conversation. Only Histories managed through these Sessions appear in
+Host Applications explicitly install a History from `create()` or `read($key)`
+on the Agent when they want that conversation managed by this SessionStore.
+SessionStore does not import arbitrary Agent Histories or automatically select the
+latest conversation. Only Histories managed through this Store appear in
 its listing, subject to the existing title rules.
 
 Use `InMemoryStorage` for transient state, or implement `StorageInterface`
@@ -72,11 +73,15 @@ for application-specific persistence. Storage holds namespaced JSON documents
 identified by logical keys. It preserves string metadata together with data;
 `StoredDocument::size()` reports the JSON size of its data.
 
-`Sessions::start()` creates a distinct empty History. `Sessions::list()`
+`SessionStore::create()` creates a distinct empty History. `SessionStore::summaries()`
 returns Sessions with user-authored text, ordered by most recent use and then
 key. Titles preserve the first non-blank user-authored textual content without
-terminal placeholders, escaping or truncation. `Sessions::resume($key)`
-reopens its stored History and rejects unknown keys.
+terminal placeholders, escaping or truncation. `SessionStore::read($key)`
+reopens its stored History or returns null for absent or other-user keys.
+`SessionStore::delete($key)` deletes only the current user’s Session and is a
+no-op when absent. Sessions expose `getKey()` and `getUserId()`; History updates
+persist automatically. Supply a stable local or authenticated identity when
+constructing the Store. Ownerless documents are never assigned implicitly.
 
 ## Input history
 
@@ -214,7 +219,7 @@ Session when appropriate. Original submitted input is recorded at the Adapter
 boundary; generated prompts and the internal selection continuation are not
 additional typed submissions.
 
-Commands, Sessions, Input history and Storage are composed directly. There is
+Commands, SessionStore, Input history and Storage are composed directly. There is
 no required application facade, HTTP framework, authentication subsystem,
 worker topology or subagent orchestration. Help and Leave are shared Commands;
 permission to run them during a Turn and Picker presentation belong to Neuron TUI.
