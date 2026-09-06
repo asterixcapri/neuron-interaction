@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\Sessions;
 
 /**
@@ -33,6 +34,8 @@ interface CommandAdapterInterface
     public function agent(): Agent;
 
     public function useAgent(Agent $agent): void;
+
+    public function useSession(Session $session): void;
 
     public function commands(): Commands;
 

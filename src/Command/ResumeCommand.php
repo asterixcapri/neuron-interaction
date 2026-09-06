@@ -36,7 +36,7 @@ final readonly class ResumeCommand implements CommandInterface
     public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
     {
         if ($arguments->text !== '') {
-            $adapter->agent()->setChatHistory(
+            $adapter->useSession(
                 $adapter->sessions()->resume($arguments->text),
             );
 
