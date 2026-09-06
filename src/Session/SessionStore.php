@@ -23,10 +23,16 @@ final readonly class SessionStore
 
     /**
      * Starts a distinct Session with an empty History.
+     *
+     * @param array<string, string> $metadata
      */
-    public function create(): Session
+    public function create(array $metadata = []): Session
     {
-        $document = $this->storage->create(self::NAMESPACE, [], ['userId' => $this->userId]);
+        $document = $this->storage->create(
+            self::NAMESPACE,
+            [],
+            ['userId' => $this->userId] + SessionMetadata::encode($metadata),
+        );
 
         return $this->session($document);
     }
@@ -34,13 +40,16 @@ final readonly class SessionStore
     /**
      * Returns non-empty Sessions, most recently used first.
      *
+     * @param array<string, string> $metadata
      * @return list<SessionSummary>
      */
-    public function summaries(): array
+    public function summaries(array $metadata = []): array
     {
         $sessions = [];
 
-        foreach ($this->storage->entries(self::NAMESPACE) as $document) {
+        $filter = ['userId' => $this->userId] + SessionMetadata::encode($metadata);
+
+        foreach ($this->storage->entries(self::NAMESPACE, $filter) as $document) {
             if (($document->metadata['userId'] ?? null) !== $this->userId) {
                 continue;
             }
