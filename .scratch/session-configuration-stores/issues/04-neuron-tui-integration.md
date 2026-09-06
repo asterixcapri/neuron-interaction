@@ -30,5 +30,5 @@ Implemented in neuron-tui commit `21bbd0f4410a8db4c7c682733f99835cb4ca0c4c`, lin
 
 - TUI: PHPUnit 217 tests / 955 assertions; PHPStan passes.
 - Demo separate dependency graph: PHPUnit 2 tests / 14 assertions; PHPStan passes.
-- Both Composer graphs resolve neuron-interaction `4eb4ad670d07e693c7c1d3c0e01cbec5de5435b4`; final review fixes will be followed by lockfile updates.
+- Both Composer graphs resolve neuron-interaction `4eb4ad670d07e693c7c1d3c0e01cbec5de5435b4`; the linked TUI PR records the final dependency refresh after review fixes.
 - Actual PTY smoke: startup, `/model`, selection and `/exit` passed with exit code 0, empty credentials and no provider requests. Automated demo tests verify History preservation.
