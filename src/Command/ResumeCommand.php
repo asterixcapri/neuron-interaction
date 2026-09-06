@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use DateTimeImmutable;
+use NeuronInteraction\Formatting\RelativeTimeFormatter;
+use NeuronInteraction\Formatting\SizeFormatter;
+use NeuronInteraction\Session\SessionSummary;
 
 /**
  * Offers the stored Sessions so a person can resume one.
@@ -64,10 +67,23 @@ final readonly class ResumeCommand implements CommandInterface
             $options[] = new SelectionOption(
                 $session->key,
                 $session->title,
-                SessionMetadata::format($session, $now),
+                $this->formatDescription($session, $now),
             );
         }
 
         $adapter->requestSelection(new SelectionRequest($this->name(), 'Sessions', $options));
+    }
+
+    private function formatDescription(
+        SessionSummary $session,
+        DateTimeImmutable $now,
+    ): string {
+        $relativeAge = RelativeTimeFormatter::format($session->lastUsedAt, $now);
+
+        if ($session->size === null) {
+            return $relativeAge;
+        }
+
+        return $relativeAge . ' · ' . SizeFormatter::format($session->size);
     }
 }
