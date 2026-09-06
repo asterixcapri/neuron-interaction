@@ -1,6 +1,6 @@
 # SessionStore e ConfigurationStore per utente
 
-Status: ready-for-agent
+Status: completed
 
 ## Problem Statement
 
