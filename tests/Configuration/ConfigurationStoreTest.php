@@ -138,6 +138,34 @@ final class ConfigurationStoreTest extends TestCase
     }
 
     #[DataProvider('adapters')]
+    public function testAcceptedValuesAreDetachedFromExternalReferences(bool $file): void
+    {
+        $storage = $this->storage($file);
+        $store = new ConfigurationStore($storage, 'alice');
+        $initial = ['temperature' => 1.0, 'nested' => [null, 'original']];
+        $initialSnapshot = $initial;
+        $configuration = $store->create('references', ['value' => &$initial]);
+        $replacement = 'accepted';
+        $configuration->set('options', ['nested' => [&$replacement]]);
+        $object = new class implements \JsonSerializable {
+            public function jsonSerialize(): mixed
+            {
+                throw new RuntimeException('An external object must never reach serialization.');
+            }
+        };
+        $initial = $object;
+        $replacement = $object;
+
+        $expected = ['value' => $initialSnapshot, 'options' => ['nested' => ['accepted']]];
+        self::assertSame($expected, $configuration->all());
+        self::assertSame($initialSnapshot, $configuration->get('value'));
+        self::assertSame(['value' => $initialSnapshot], $store->read('references')?->all());
+        $store->save($configuration);
+        $fresh = new ConfigurationStore($file ? new FileStorage($this->directory) : $storage, 'alice');
+        self::assertSame($expected, $fresh->read('references')?->all());
+    }
+
+    #[DataProvider('adapters')]
     public function testInvalidValuesAreRejectedWithoutChangingConfiguration(bool $file): void
     {
         $store = new ConfigurationStore($this->storage($file), 'alice');
