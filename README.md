@@ -212,27 +212,36 @@ returns response data containing those values, the technical status, identifier,
 and any error message. The caller obtains that response directly from `run()`.
 The example delegates `promptAgent()` to a callback supplied by the Host
 Application. Agent execution, scheduling and response streaming are outside this
-package. The example callback only prints the
-handoff; no model request is made.
+package. No model request is made by these examples.
 
-Run the [backend example](examples/backend.php) after installing development
-dependencies:
+Each backend example is self-contained and demonstrates one flow:
+
+| Example | What it shows |
+| --- | --- |
+| [help.php](examples/help.php) | Execute Help and print the response. |
+| [exit.php](examples/exit.php) | Return the stop effect to the Host Application. |
+| [clear.php](examples/clear.php) | Start an empty Session while keeping the previous conversation. |
+| [resume-by-key.php](examples/resume-by-key.php) | Reopen a conversation whose key is already known. |
+| [resume-selection.php](examples/resume-selection.php) | Offer conversations, then receive the user's choice in a second request. |
+
+Run any file after installing development dependencies:
 
 ```bash
-php examples/backend.php
+php examples/help.php
+php examples/resume-selection.php
 ```
 
-The first request calls `run()` for `/resume` with empty `CommandArguments`. Its
-response includes a serializable `selection` containing `command`, `prompt`,
-`description` and ordered `options`; each option has `value`, `label` and
-`description`. A frontend displays those options. A later request submits the
-target command and unchanged chosen value. A fresh Adapter uses `run()` with new
-`CommandArguments`, installing the selected Session History on the second
-request's Agent. No selection is retained between Adapter instances. Cancellation
-simply omits the second invocation.
+These scripts simulate backend requests without an HTTP server or model calls.
+Each supplies an empty prompt callback because these Commands do not prompt the
+Agent. The seeded conversations make the examples runnable without setup.
 
-The example uses `InMemoryStorage` to simulate both requests in one process;
-separate backend requests can configure `FileStorage` with the same root.
+In the selection example, the first response contains `selection.options` for a
+frontend to display. Each option has a `value` (the Session key), `label` and
+`description`. The script simulates choosing one conversation and submitting its
+key with `/resume` to a fresh Agent and Adapter. Cancelling means making no second
+request. The examples share `InMemoryStorage` within one process; separate backend
+requests can construct `FileStorage` with the same root and a SessionStore scoped
+to the authenticated user.
 The Host Application supplies its configured Agent and restores the active
 Session when appropriate. Original submitted input is recorded at the Adapter
 boundary; generated prompts and the internal selection continuation are not

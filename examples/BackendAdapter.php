@@ -44,7 +44,7 @@ final class BackendAdapter implements CommandAdapterInterface
     public function __construct(
         private Agent $answeringAgent,
         private readonly Commands $mountedCommands,
-        private readonly SessionStore $storedSessions,
+        private readonly SessionStore $sessionStore,
         private readonly Closure $submitPrompt,
     ) {
     }
@@ -111,7 +111,7 @@ final class BackendAdapter implements CommandAdapterInterface
 
     public function sessions(): SessionStore
     {
-        return $this->storedSessions;
+        return $this->sessionStore;
     }
 
     public function stop(): void
