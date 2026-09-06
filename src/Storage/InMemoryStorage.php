@@ -74,9 +74,14 @@ final class InMemoryStorage extends AbstractStorage
             );
         }
 
+        $metadataSnapshot = [];
+        foreach ($metadata as $name => $value) {
+            $metadataSnapshot[$name] = $value;
+        }
+
         $this->documents[$namespace][$key] = [
             'data' => $normalized,
-            'metadata' => $metadata,
+            'metadata' => $metadataSnapshot,
         ];
 
         return $this->storedDocument(

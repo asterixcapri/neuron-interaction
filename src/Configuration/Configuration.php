@@ -16,6 +16,7 @@ final class Configuration
         private array $values = [],
     ) {
         self::guardJson($values);
+        $this->values = self::snapshotArray($values);
     }
 
     public function getKey(): string
@@ -41,7 +42,7 @@ final class Configuration
     public function set(string $name, mixed $value): void
     {
         self::guardJson($value);
-        $this->values[$name] = $value;
+        $this->values[$name] = is_array($value) ? self::snapshotArray($value) : $value;
     }
 
     public function remove(string $name): void
@@ -53,6 +54,22 @@ final class Configuration
     public function all(): array
     {
         return $this->values;
+    }
+
+    /**
+     * Copy each validated value by value so nested PHP references cannot mutate it.
+     *
+     * @param array<array-key, mixed> $values
+     * @return array<array-key, mixed>
+     */
+    private static function snapshotArray(array $values): array
+    {
+        $snapshot = [];
+        foreach ($values as $key => $value) {
+            $snapshot[$key] = is_array($value) ? self::snapshotArray($value) : $value;
+        }
+
+        return $snapshot;
     }
 
     private static function guardJson(mixed $value): void

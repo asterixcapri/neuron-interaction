@@ -24,23 +24,9 @@ final class FileStorage extends AbstractStorage
         ?string $key,
     ): StoredDocument {
         $directory = $this->namespaceDirectory($namespace);
-        $encoded = json_encode(
-            ['metadata' => $metadata, 'data' => $data],
-            JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
-        );
-        $temporary = tempnam($directory, '.neuron-interaction-');
-
-        if ($temporary === false) {
-            throw new RuntimeException('A temporary storage file could not be created.');
-        }
+        $temporary = $this->prepareTemporaryDocument($directory, $data, $metadata);
 
         try {
-            $written = file_put_contents($temporary, $encoded, LOCK_EX);
-
-            if ($written === false || $written !== strlen($encoded)) {
-                throw new RuntimeException('The stored document could not be written.');
-            }
-
             // Linking publishes a complete file atomically and never replaces a key.
             do {
                 $candidate = $key ?? bin2hex(random_bytes(16));
@@ -108,6 +94,27 @@ final class FileStorage extends AbstractStorage
             throw new RuntimeException('The stored document is not a regular file.');
         }
 
+        $temporary = $this->prepareTemporaryDocument($directory, $data, $metadata);
+
+        try {
+            if (!rename($temporary, $path)) {
+                throw new RuntimeException('The stored document could not be replaced.');
+            }
+
+            return $this->storedDocument($path, $key);
+        } finally {
+            if (file_exists($temporary)) {
+                unlink($temporary);
+            }
+        }
+    }
+
+    /**
+     * @param array<array-key, mixed> $data
+     * @param array<string, string> $metadata
+     */
+    private function prepareTemporaryDocument(string $directory, array $data, array $metadata): string
+    {
         $encoded = json_encode(
             ['metadata' => $metadata, 'data' => $data],
             JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
@@ -125,15 +132,10 @@ final class FileStorage extends AbstractStorage
                 throw new RuntimeException('The stored document could not be written.');
             }
 
-            if (!rename($temporary, $path)) {
-                throw new RuntimeException('The stored document could not be replaced.');
-            }
-
-            return $this->storedDocument($path, $key);
-        } finally {
-            if (file_exists($temporary)) {
-                unlink($temporary);
-            }
+            return $temporary;
+        } catch (\Throwable $exception) {
+            unlink($temporary);
+            throw $exception;
         }
     }
 

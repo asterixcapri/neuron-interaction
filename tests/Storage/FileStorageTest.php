@@ -13,6 +13,24 @@ use RuntimeException;
 
 final class FileStorageTest extends TestCase
 {
+    public function testStoredMetadataAreDetachedFromExternalReferences(): void
+    {
+        $storage = new FileStorage($this->directory);
+        $project = 'created';
+        $created = $storage->create('metadata', [], ['project' => &$project]);
+        $project = 'external change';
+        self::assertSame(['project' => 'created'], $created->metadata);
+        self::assertSame(['project' => 'created'], $storage->read('metadata', $created->key)?->metadata);
+        self::assertCount(1, iterator_to_array($storage->entries('metadata', ['project' => 'created'])));
+
+        $written = $storage->write('metadata', $created->key, [], ['project' => &$project]);
+        $project = 'another external change';
+        self::assertSame(['project' => 'external change'], $written->metadata);
+        self::assertSame(['project' => 'external change'], $storage->read('metadata', $created->key)->metadata);
+        self::assertCount(1, iterator_to_array($storage->entries('metadata', ['project' => 'external change'])));
+        self::assertSame([], iterator_to_array($storage->entries('metadata', ['project' => 'another external change'])));
+    }
+
     public function testSuppliedKeysCannotBeCreatedTwice(): void
     {
         $storage = new FileStorage($this->directory);
