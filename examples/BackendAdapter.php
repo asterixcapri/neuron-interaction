@@ -109,7 +109,7 @@ final class BackendAdapter implements CommandAdapterInterface
         return $this->mountedCommands;
     }
 
-    public function sessions(): SessionStore
+    public function sessionStore(): SessionStore
     {
         return $this->sessionStore;
     }

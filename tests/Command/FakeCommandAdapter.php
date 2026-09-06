@@ -89,7 +89,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
         return $this->mounted;
     }
 
-    public function sessions(): SessionStore
+    public function sessionStore(): SessionStore
     {
         return $this->collection;
     }

@@ -39,7 +39,7 @@ interface CommandAdapterInterface
 
     public function commands(): Commands;
 
-    public function sessions(): SessionStore;
+    public function sessionStore(): SessionStore;
 
     public function stop(): void;
 }
