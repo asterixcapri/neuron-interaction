@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Command;
 
+use Generator;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandAdapterInterface;
@@ -18,25 +19,44 @@ use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 final class BackendExampleTest extends TestCase
 {
-    public function testSelectionExampleSurvivesItsSerializedRoundTrip(): void
+    /** @param list<string> $expected */
+    #[DataProvider('examples')]
+    public function testBackendExampleRunsOnItsOwn(string $file, array $expected): void
     {
         ob_start();
 
         try {
-            require dirname(__DIR__, 2) . '/examples/backend.php';
+            require dirname(__DIR__, 2) . '/examples/' . $file;
             $output = ob_get_contents();
         } finally {
             ob_end_clean();
         }
 
         self::assertIsString($output);
-        self::assertStringContainsString('"command":"\/resume"', $output);
-        self::assertStringEndsWith('A conversation to reopen' . PHP_EOL, $output);
+        foreach ($expected as $text) {
+            self::assertStringContainsString($text, $output);
+        }
+    }
+
+    /** @return Generator<string, array{string, list<string>}> */
+    public static function examples(): Generator
+    {
+        yield 'help' => ['help.php', ['"status": "completed"', 'Lists what can be typed here.']];
+        yield 'exit' => ['exit.php', ['"status": "completed"', '"stopped": true']];
+        yield 'clear' => ['clear.php', ['"currentMessages": []', '"storedConversations": 1']];
+        yield 'resume by key' => ['resume-by-key.php', ['A conversation to reopen' . PHP_EOL]];
+        yield 'resume selection' => ['resume-selection.php', [
+            '"selection": {',
+            '"label": "Planning a trip"',
+            '"label": "Learning PHP"',
+            '}' . PHP_EOL . 'Planning a trip' . PHP_EOL,
+        ]];
     }
 
     public function testSelectionAndGeneratedPromptsCompleteAcrossFreshRequestsWithoutRecordingMoreInput(): void

@@ -8,13 +8,13 @@ use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Storage\FileStorage;
 
 // The host supplies the identity and decides which configuration is active.
-$store = new ConfigurationStore(
+$configurationStore = new ConfigurationStore(
     new FileStorage(sys_get_temp_dir() . '/neuron-interaction-example'),
     'local-demo',
 );
 
-$configuration = $store->read('default')
-    ?? $store->create('default', [
+$configuration = $configurationStore->read('default')
+    ?? $configurationStore->create('default', [
         'model' => 'initial-model',
         'provider' => 'example-provider',
         'tools' => ['search'],
@@ -22,7 +22,7 @@ $configuration = $store->read('default')
 
 $configuration->set('model', 'another-model');
 // Related changes stay in memory until this explicit save. Provider and tools remain.
-$store->save($configuration);
+$configurationStore->save($configuration);
 
 // The host may now use these values to construct its Agent.
 echo json_encode($configuration->all(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
