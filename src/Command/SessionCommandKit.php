@@ -7,7 +7,7 @@ namespace NeuronInteraction\Command;
 /**
  * The shared Session Commands, mounted in one line.
  *
- * Both commands reach the live Sessions supplied by the Adapter
+ * Both commands reach the scoped SessionStore supplied by the Adapter
  * through their Adapter.
  *
  * An application in which conversations are not thrown away mounts it without

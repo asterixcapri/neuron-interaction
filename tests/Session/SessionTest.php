@@ -6,7 +6,6 @@ namespace NeuronInteraction\Tests\Session;
 
 use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\History\AbstractChatHistory;
-use NeuronAI\Chat\History\HistoryTrimmerInterface;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
@@ -17,24 +16,53 @@ use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Tools\Tool;
-use NeuronInteraction\Session\Session;
+use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\FileStorage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 
 final class SessionTest extends TestCase
 {
-    public function testItExtendsNeuronAiHistory(): void
-    {
-        $session = new Session(new InMemoryStorage(), 'sessions', 'one');
+    private string $directory;
 
-        self::assertInstanceOf(AbstractChatHistory::class, $session);
-        self::assertSame('one', $session->getKey());
+    protected function setUp(): void
+    {
+        $this->directory = sys_get_temp_dir() . '/neuron-session-history-' . bin2hex(random_bytes(6));
     }
 
-    public function testMessagesRoundTripWithTheirSupportedContent(): void
+    protected function tearDown(): void
     {
-        $storage = new InMemoryStorage();
-        $history = new Session($storage, 'sessions', 'known');
+        foreach (glob($this->directory . '/sessions/*.json') ?: [] as $path) {
+            unlink($path);
+        }
+        if (is_dir($this->directory . '/sessions')) {
+            rmdir($this->directory . '/sessions');
+        }
+        if (is_dir($this->directory)) {
+            rmdir($this->directory);
+        }
+    }
+
+    /** @return array<string, array{bool}> */
+    public static function storageKinds(): array
+    {
+        return ['memory' => [false], 'files' => [true]];
+    }
+
+    public function testItExtendsNeuronAiHistory(): void
+    {
+        $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
+
+        self::assertInstanceOf(AbstractChatHistory::class, $session);
+        self::assertSame('local-user', $session->getUserId());
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testMessagesRoundTripWithTheirSupportedContent(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $history = (new SessionStore($storage, 'local-user'))->create();
         $question = new UserMessage([
             (new TextContent('What is shown?'))->setMetadata(['part' => 1]),
             new ImageContent(
@@ -62,12 +90,9 @@ final class SessionTest extends TestCase
         $history->addMessage(new ToolCallMessage(tools: [$tool]));
         $history->addMessage(new ToolResultMessage([$result]));
 
-        $reopened = new Session(
-            $storage,
-            'sessions',
-            'known',
-        );
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
 
+        self::assertNotNull($reopened);
         $messages = $reopened->getMessages();
 
         self::assertCount(4, $messages);
@@ -90,95 +115,58 @@ final class SessionTest extends TestCase
     public function testSavingReplacesOnlyTheSelectedStorageValue(): void
     {
         $storage = new InMemoryStorage();
-        $storage->write('sessions', 'other', ['untouched']);
-        $history = new Session(
-            $storage,
-            'sessions',
-            'current',
-        );
-
+        $sessions = new SessionStore($storage, 'local-user');
+        $other = $sessions->create();
+        $other->addMessage(new UserMessage('Untouched'));
+        $history = $sessions->create();
         $history->addMessage(new UserMessage('First'));
-        $first = $storage->read('sessions', 'current');
-        $history->addMessage(new AssistantMessage('Second'));
-
+        $first = $sessions->read($history->getKey());
         self::assertNotNull($first);
-        self::assertStringContainsString(
-            'First',
-            json_encode($first->data, JSON_THROW_ON_ERROR),
-        );
-        self::assertSame(
-            json_decode(
-                json_encode($history->jsonSerialize(), JSON_THROW_ON_ERROR),
-                true,
-                flags: JSON_THROW_ON_ERROR,
-            ),
-            $storage->read('sessions', 'current')?->data,
-        );
-        self::assertSame(
-            ['untouched'],
-            $storage->read('sessions', 'other')?->data,
-        );
+        $history->addMessage(new AssistantMessage('Second'));
+        self::assertCount(1, $first->getMessages());
+        $current = $sessions->read($history->getKey());
+        self::assertNotNull($current);
+        self::assertCount(2, $current->getMessages());
+        $untouched = $sessions->read($other->getKey());
+        self::assertNotNull($untouched);
+        self::assertSame('Untouched', $untouched->getMessages()[0]->getContent());
     }
 
-    public function testTrimmingPersistsTheHistoryNeuronAiKeeps(): void
+    #[DataProvider('storageKinds')]
+    public function testTrimmingPersistsTheHistoryNeuronAiKeeps(bool $files): void
     {
-        $storage = new InMemoryStorage();
-        $trimmer = new class implements HistoryTrimmerInterface {
-            public function getTotalTokens(): int
-            {
-                return 73;
-            }
-
-            public function trim(array $messages, int $contextWindow): array
-            {
-                return array_slice($messages, -2);
-            }
-        };
-        $history = new Session(
-            $storage,
-            'sessions',
-            'trimmed',
-            trimmer: $trimmer,
-        );
-
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $history = (new SessionStore($storage, 'local-user'))->create();
         $history->addMessage(new UserMessage('Discarded'));
-        $history->addMessage(new AssistantMessage('Kept answer'));
-        $history->addMessage(new UserMessage('Kept question'));
+        $history->addMessage((new AssistantMessage('Discarded answer'))->setUsage(new Usage(48000, 1000)));
+        $question = str_repeat('Next question ', 2000);
+        $history->addMessage(new UserMessage($question));
 
-        self::assertSame(73, $history->calculateTotalUsage());
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
+        self::assertNotNull($reopened);
         self::assertSame(
-            ['Kept answer', 'Kept question'],
+            [$question],
             array_map(
                 static fn (Message $message): ?string => $message->getContent(),
-                (new Session(
-                    $storage,
-                    'sessions',
-                    'trimmed',
-                ))->getMessages(),
+                $reopened->getMessages(),
             ),
         );
     }
 
-    public function testClearingPersistsAnEmptyHistory(): void
+    #[DataProvider('storageKinds')]
+    public function testClearingPersistsAnEmptyHistory(bool $files): void
     {
-        $storage = new InMemoryStorage();
-        $history = new Session(
-            $storage,
-            'sessions',
-            'cleared',
-        );
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $history = (new SessionStore($storage, 'local-user'))->create();
         $history->addMessage(new UserMessage('Remove me'));
 
         $history->flushAll();
 
-        self::assertSame([], $storage->read('sessions', 'cleared')?->data);
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
+        self::assertNotNull($reopened);
         self::assertSame(
             [],
-            (new Session(
-                $storage,
-                'sessions',
-                'cleared',
-            ))->getMessages(),
+            $reopened->getMessages(),
         );
     }
 }

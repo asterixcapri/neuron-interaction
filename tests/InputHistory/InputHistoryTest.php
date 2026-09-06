@@ -6,7 +6,7 @@ namespace NeuronInteraction\Tests\InputHistory;
 
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\InputHistory\InputHistory;
-use NeuronInteraction\Session\Sessions;
+use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -94,15 +94,15 @@ final class InputHistoryTest extends TestCase
             ? new FileStorage($this->directory)
             : new InMemoryStorage();
         $inputs = new InputHistory($storage);
-        $sessions = new Sessions($storage);
-        $history = $sessions->start();
+        $sessions = new SessionStore($storage, 'local-user');
+        $history = $sessions->create();
 
         $inputs->record('/summarize');
         $history->addMessage(new UserMessage('A generated prompt for the Agent'));
         $key = $sessions->summaries()[0]->key;
-        $sessions->start()->addMessage(new UserMessage('Another conversation'));
+        $sessions->create()->addMessage(new UserMessage('Another conversation'));
         $inputs->record('A submitted message');
-        $sessions->resume($key);
+        $sessions->read($key);
 
         self::assertSame(
             ['/summarize', 'A submitted message'],

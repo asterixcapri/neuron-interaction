@@ -36,9 +36,15 @@ final readonly class ResumeCommand implements CommandInterface
     public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
     {
         if ($arguments->text !== '') {
-            $adapter->useSession(
-                $adapter->sessions()->resume($arguments->text),
-            );
+            $session = $adapter->sessions()->read($arguments->text);
+
+            if ($session === null) {
+                $adapter->warn('No Session is named by that key.');
+
+                return;
+            }
+
+            $adapter->useSession($session);
 
             return;
         }

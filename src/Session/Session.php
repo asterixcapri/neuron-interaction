@@ -24,6 +24,7 @@ final class Session extends AbstractChatHistory
         private readonly StorageInterface $storage,
         private readonly string $namespace,
         private readonly string $key,
+        private readonly string $userId,
         int $contextWindow = 50000,
         HistoryTrimmerInterface $trimmer = new HistoryTrimmer(),
         ?StoredDocument $document = null,
@@ -36,6 +37,11 @@ final class Session extends AbstractChatHistory
     public function getKey(): string
     {
         return $this->key;
+    }
+
+    public function getUserId(): string
+    {
+        return $this->userId;
     }
 
     /** @param list<Message> $messages */
@@ -85,11 +91,15 @@ final class Session extends AbstractChatHistory
             new DateTimeZone('UTC'),
         );
 
+        $metadata = $this->storage->read($this->namespace, $this->key)->metadata ?? [];
+        $metadata['userId'] = $this->userId;
+        $metadata['lastUsedAt'] = $lastUsedAt->format('Y-m-d\TH:i:s.uP');
+
         $this->storage->write(
             $this->namespace,
             $this->key,
             $messages,
-            ['lastUsedAt' => $lastUsedAt->format('Y-m-d\TH:i:s.uP')],
+            $metadata,
         );
     }
 }

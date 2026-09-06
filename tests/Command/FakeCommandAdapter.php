@@ -11,7 +11,7 @@ use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\SelectionRequest;
 use NeuronInteraction\Session\Session;
-use NeuronInteraction\Session\Sessions;
+use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
 /** @implements CommandAdapterInterface<CommandExecution> */
@@ -34,7 +34,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
     public function __construct(
         public Commands $mounted = new Commands(),
         private Agent $answering = new Agent(),
-        private Sessions $collection = new Sessions(new InMemoryStorage()),
+        private SessionStore $collection = new SessionStore(new InMemoryStorage(), 'local-user'),
     ) {
     }
 
@@ -89,7 +89,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
         return $this->mounted;
     }
 
-    public function sessions(): Sessions
+    public function sessions(): SessionStore
     {
         return $this->collection;
     }

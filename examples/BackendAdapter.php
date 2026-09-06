@@ -12,7 +12,7 @@ use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\SelectionRequest;
 use NeuronInteraction\Session\Session;
-use NeuronInteraction\Session\Sessions;
+use NeuronInteraction\Session\SessionStore;
 
 /**
  * Example request-scoped Adapter; the Host Application supplies Agent execution.
@@ -44,7 +44,7 @@ final class BackendAdapter implements CommandAdapterInterface
     public function __construct(
         private Agent $answeringAgent,
         private readonly Commands $mountedCommands,
-        private readonly Sessions $storedSessions,
+        private readonly SessionStore $storedSessions,
         private readonly Closure $submitPrompt,
     ) {
     }
@@ -109,7 +109,7 @@ final class BackendAdapter implements CommandAdapterInterface
         return $this->mountedCommands;
     }
 
-    public function sessions(): Sessions
+    public function sessions(): SessionStore
     {
         return $this->storedSessions;
     }
