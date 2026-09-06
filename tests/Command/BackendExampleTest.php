@@ -64,7 +64,7 @@ final class BackendExampleTest extends TestCase
         $storage = new InMemoryStorage();
         $inputs = new InputHistory($storage);
         $inputs->record('/choose');
-        $sessions = new SessionStore($storage, 'local-user');
+        $sessionStore = new SessionStore($storage, 'local-user');
         $command = new class implements CommandInterface {
             public function name(): string
             {
@@ -98,7 +98,7 @@ final class BackendExampleTest extends TestCase
             $received[] = [$answering, $prompt];
         };
         $first = $commands->run('/choose', new CommandArguments(), new BackendAdapter(
-            new Agent(), $commands, $sessions, $submitPrompt,
+            new Agent(), $commands, $sessionStore, $submitPrompt,
         ));
 
         self::assertNotNull($first);
@@ -115,7 +115,7 @@ final class BackendExampleTest extends TestCase
         $selection = $first['selection'];
         $secondAgent = new Agent();
         $second = $commands->run($selection->command, new CommandArguments($selection->options[0]->value), new BackendAdapter(
-            $secondAgent, $commands, $sessions, $submitPrompt,
+            $secondAgent, $commands, $sessionStore, $submitPrompt,
         ));
 
         self::assertNotNull($second);
@@ -130,7 +130,7 @@ final class BackendExampleTest extends TestCase
     public function testAgentReplacementTransfersHistoryAndImmediatelyUsesTheReplacementForFurtherEffects(): void
     {
         $storage = new InMemoryStorage();
-        $sessions = new SessionStore($storage, 'local-user');
+        $sessionStore = new SessionStore($storage, 'local-user');
         $original = new Agent();
         $history = $original->getChatHistory();
         $history->addMessage(new UserMessage('Original conversation'));
@@ -165,7 +165,7 @@ final class BackendExampleTest extends TestCase
         };
         $commands = new Commands($command);
         $received = [];
-        $adapter = new BackendAdapter($original, $commands, $sessions, static function (Agent $answering, string $prompt) use (&$received): void {
+        $adapter = new BackendAdapter($original, $commands, $sessionStore, static function (Agent $answering, string $prompt) use (&$received): void {
             $received[] = [$answering, $prompt];
         });
         $response = $commands->run('/replace', new CommandArguments(), $adapter);
@@ -179,19 +179,19 @@ final class BackendExampleTest extends TestCase
         self::assertSame([], $replacement->getChatHistory()->getMessages());
         self::assertSame('Original conversation', $history->getMessages()[0]->getContent());
         self::assertSame($commands, $adapter->commands());
-        self::assertSame($sessions, $adapter->sessionStore());
+        self::assertSame($sessionStore, $adapter->sessionStore());
         self::assertSame([[$replacement, 'A generated prompt for the replacement.']], $received);
     }
 
     public function testBackendReturnsHelpLeaveAndUnknownResponsesFromRunAlone(): void
     {
         $commands = new Commands([new HelpCommand('/guide'), new LeaveCommand('/quit')]);
-        $sessions = new SessionStore(new InMemoryStorage(), 'local-user');
+        $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
         $responses = [];
 
         foreach (['/guide', '/missing', '/quit'] as $identifier) {
             $response = $commands->run($identifier, new CommandArguments(), new BackendAdapter(
-                new Agent(), $commands, $sessions, static function (): void {},
+                new Agent(), $commands, $sessionStore, static function (): void {},
             ));
             self::assertNotNull($response);
             $responses[$identifier] = $response;

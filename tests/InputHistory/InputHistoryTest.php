@@ -94,21 +94,21 @@ final class InputHistoryTest extends TestCase
             ? new FileStorage($this->directory)
             : new InMemoryStorage();
         $inputs = new InputHistory($storage);
-        $sessions = new SessionStore($storage, 'local-user');
-        $history = $sessions->create();
+        $sessionStore = new SessionStore($storage, 'local-user');
+        $history = $sessionStore->create();
 
         $inputs->record('/summarize');
         $history->addMessage(new UserMessage('A generated prompt for the Agent'));
-        $key = $sessions->summaries()[0]->key;
-        $sessions->create()->addMessage(new UserMessage('Another conversation'));
+        $key = $sessionStore->summaries()[0]->key;
+        $sessionStore->create()->addMessage(new UserMessage('Another conversation'));
         $inputs->record('A submitted message');
-        $sessions->read($key);
+        $sessionStore->read($key);
 
         self::assertSame(
             ['/summarize', 'A submitted message'],
             (new InputHistory($storage))->entries(),
         );
-        self::assertCount(2, $sessions->summaries());
+        self::assertCount(2, $sessionStore->summaries());
     }
 
     /** @return array<string, array{bool}> */

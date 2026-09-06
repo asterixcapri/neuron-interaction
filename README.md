@@ -49,15 +49,15 @@ use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');
-$sessions = new SessionStore($storage, 'local-user');
+$sessionStore = new SessionStore($storage, 'local-user');
 $agent = new Agent();
-$agent->setChatHistory($sessions->create());
+$agent->setChatHistory($sessionStore->create());
 
 // After the Agent has exchanged messages, list recognizable Sessions.
-foreach ($sessions->summaries() as $session) {
+foreach ($sessionStore->summaries() as $session) {
     // Render $session->title according to your Adapter's rules.
     // Resume a chosen Session by installing its History on the Agent:
-    // $history = $sessions->read($session->key);
+    // $history = $sessionStore->read($session->key);
     // if ($history !== null) { $agent->setChatHistory($history); }
 }
 ```
@@ -89,11 +89,11 @@ immediately and preserve its messages. Application fields named `userId` or
 `lastUsedAt` remain ordinary metadata and cannot change ownership or ordering.
 
 ```php
-$session = $sessions->create(['projectId' => 'alpha', 'branchName' => 'main']);
+$session = $sessionStore->create(['projectId' => 'alpha', 'branchName' => 'main']);
 $session->setMetadata('branchName', 'release');
 $metadata = $session->getMetadata(); // The complete application metadata map.
 $session->removeMetadata('branchName');
-$matches = $sessions->summaries(['projectId' => 'alpha']);
+$matches = $sessionStore->summaries(['projectId' => 'alpha']);
 ```
 
 Multiple filters are combined with AND using exact string equality. Missing

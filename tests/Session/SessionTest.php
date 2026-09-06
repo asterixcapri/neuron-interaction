@@ -115,19 +115,19 @@ final class SessionTest extends TestCase
     public function testSavingReplacesOnlyTheSelectedStorageValue(): void
     {
         $storage = new InMemoryStorage();
-        $sessions = new SessionStore($storage, 'local-user');
-        $other = $sessions->create();
+        $sessionStore = new SessionStore($storage, 'local-user');
+        $other = $sessionStore->create();
         $other->addMessage(new UserMessage('Untouched'));
-        $history = $sessions->create();
+        $history = $sessionStore->create();
         $history->addMessage(new UserMessage('First'));
-        $first = $sessions->read($history->getKey());
+        $first = $sessionStore->read($history->getKey());
         self::assertNotNull($first);
         $history->addMessage(new AssistantMessage('Second'));
         self::assertCount(1, $first->getMessages());
-        $current = $sessions->read($history->getKey());
+        $current = $sessionStore->read($history->getKey());
         self::assertNotNull($current);
         self::assertCount(2, $current->getMessages());
-        $untouched = $sessions->read($other->getKey());
+        $untouched = $sessionStore->read($other->getKey());
         self::assertNotNull($untouched);
         self::assertSame('Untouched', $untouched->getMessages()[0]->getContent());
     }
