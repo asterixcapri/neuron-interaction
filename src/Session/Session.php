@@ -44,6 +44,35 @@ final class Session extends AbstractChatHistory
         return $this->userId;
     }
 
+    /** @return array<string, string> */
+    public function getMetadata(): array
+    {
+        return SessionMetadata::decode($this->storage->read($this->namespace, $this->key)->metadata ?? []);
+    }
+
+    public function setMetadata(string $key, string $value): void
+    {
+        $field = SessionMetadata::key($key);
+        $document = $this->storage->read($this->namespace, $this->key);
+        $metadata = $document->metadata ?? [];
+        $metadata[$field] = $value;
+        $metadata['userId'] = $this->userId;
+        $this->storage->write($this->namespace, $this->key, $document->data ?? $this->history, $metadata);
+    }
+
+    public function removeMetadata(string $key): void
+    {
+        $field = SessionMetadata::key($key);
+        $document = $this->storage->read($this->namespace, $this->key);
+        if ($document === null || !array_key_exists($field, $document->metadata)) {
+            return;
+        }
+
+        $metadata = $document->metadata;
+        unset($metadata[$field]);
+        $this->storage->write($this->namespace, $this->key, $document->data, $metadata);
+    }
+
     /** @param list<Message> $messages */
     protected function setMessages(array $messages): void
     {

@@ -83,6 +83,25 @@ no-op when absent. Sessions expose `getKey()` and `getUserId()`; History updates
 persist automatically. Supply a stable local or authenticated identity when
 constructing the Store. Ownerless documents are never assigned implicitly.
 
+Application metadata use camelCase names and string values. Pass initial values
+when creating a Session, then update individual values; these changes persist
+immediately and preserve its messages. Application fields named `userId` or
+`lastUsedAt` remain ordinary metadata and cannot change ownership or ordering.
+
+```php
+$session = $sessions->create(['projectId' => 'alpha', 'branchName' => 'main']);
+$session->setMetadata('branchName', 'release');
+$metadata = $session->getMetadata(); // The complete application metadata map.
+$session->removeMetadata('branchName');
+$matches = $sessions->summaries(['projectId' => 'alpha']);
+```
+
+Multiple filters are combined with AND using exact string equality. Missing
+keys do not match; extra metadata are ignored. Results always belong to the
+Store's user and retain the same title, empty-conversation and ordering rules.
+Metadata edits preserve the last History-use time; adding or clearing messages
+updates it and retains application metadata.
+
 ## Input history
 
 ```php
