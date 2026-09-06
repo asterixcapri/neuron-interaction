@@ -10,6 +10,34 @@ use PHPUnit\Framework\TestCase;
 
 final class InMemoryStorageTest extends TestCase
 {
+    public function testSuppliedKeysCannotBeCreatedTwice(): void
+    {
+        $storage = new InMemoryStorage();
+        $created = $storage->create('demo', ['value' => 'first'], key: 'chosen');
+        self::assertSame('chosen', $created->key);
+        try {
+            $storage->create('demo', ['value' => 'second'], key: 'chosen');
+            self::fail('An existing key must not be overwritten.');
+        } catch (\RuntimeException) {
+            self::assertSame(['value' => 'first'], $storage->read('demo', 'chosen')?->data);
+        }
+    }
+
+    public function testEntriesFilterExactMetadataWithAnd(): void
+    {
+        $storage = new InMemoryStorage();
+        $match = $storage->create('demo', [], ['userId' => 'alice', 'project' => 'one', 'extra' => 'yes']);
+        $storage->create('demo', [], ['userId' => 'alice', 'project' => 'two']);
+        $storage->create('demo', [], ['userId' => 'bob', 'project' => 'one']);
+        $storage->create('demo', [], ['userId' => 'alice']);
+        $storage->create('demo', [], ['userId' => 'Alice', 'project' => 'one']);
+
+        $entries = iterator_to_array($storage->entries('demo', ['userId' => 'alice', 'project' => 'one']));
+        self::assertSame([$match->key], array_column($entries, 'key'));
+        self::assertCount(5, iterator_to_array($storage->entries('demo')));
+        self::assertSame([], iterator_to_array($storage->entries('demo', ['missing' => ''])));
+    }
+
     public function testNumericStringKeysRemainStringsWhenListed(): void
     {
         $storage = new InMemoryStorage();

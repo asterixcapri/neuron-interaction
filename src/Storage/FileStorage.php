@@ -21,12 +21,46 @@ final class FileStorage extends AbstractStorage
         string $namespace,
         array $data,
         array $metadata,
+        ?string $key,
     ): StoredDocument {
-        do {
-            $key = bin2hex(random_bytes(16));
-        } while ($this->readDocument($namespace, $key) !== null);
+        $directory = $this->namespaceDirectory($namespace);
+        $encoded = json_encode(
+            ['metadata' => $metadata, 'data' => $data],
+            JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
+        );
+        $temporary = tempnam($directory, '.neuron-interaction-');
 
-        return $this->writeDocument($namespace, $key, $data, $metadata);
+        if ($temporary === false) {
+            throw new RuntimeException('A temporary storage file could not be created.');
+        }
+
+        try {
+            $written = file_put_contents($temporary, $encoded, LOCK_EX);
+
+            if ($written === false || $written !== strlen($encoded)) {
+                throw new RuntimeException('The stored document could not be written.');
+            }
+
+            // Linking publishes a complete file atomically and never replaces a key.
+            do {
+                $candidate = $key ?? bin2hex(random_bytes(16));
+                $path = $this->path($directory, $candidate);
+
+                if (@link($temporary, $path)) {
+                    return $this->storedDocument($path, $candidate);
+                }
+
+                if (!file_exists($path) && !is_link($path)) {
+                    throw new RuntimeException('The stored document could not be created.');
+                }
+
+                if ($key !== null) {
+                    throw new RuntimeException('The storage key already exists.');
+                }
+            } while (true);
+        } finally {
+            unlink($temporary);
+        }
     }
 
     protected function readDocument(
@@ -76,7 +110,7 @@ final class FileStorage extends AbstractStorage
 
         $encoded = json_encode(
             ['metadata' => $metadata, 'data' => $data],
-            JSON_THROW_ON_ERROR,
+            JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
         );
         $temporary = tempnam($directory, '.neuron-interaction-');
 
@@ -224,7 +258,7 @@ final class FileStorage extends AbstractStorage
 
     private function namespaceDirectory(string $namespace): string
     {
-        if (!is_dir($this->root) && !mkdir($this->root, 0777, true)) {
+        if (!is_dir($this->root) && !@mkdir($this->root, 0777, true) && !is_dir($this->root)) {
             throw new RuntimeException('The storage root could not be created.');
         }
 
@@ -242,7 +276,7 @@ final class FileStorage extends AbstractStorage
             );
         }
 
-        if (!is_dir($directory) && !mkdir($directory)) {
+        if (!is_dir($directory) && !@mkdir($directory) && !is_dir($directory)) {
             throw new RuntimeException(
                 'The storage namespace could not be created.',
             );

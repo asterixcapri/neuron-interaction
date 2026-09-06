@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Storage;
 
 use InvalidArgumentException;
+use RuntimeException;
 
 final class InMemoryStorage extends AbstractStorage
 {
@@ -24,10 +25,17 @@ final class InMemoryStorage extends AbstractStorage
         string $namespace,
         array $data,
         array $metadata,
+        ?string $key,
     ): StoredDocument {
-        do {
-            $key = bin2hex(random_bytes(16));
-        } while (isset($this->documents[$namespace][$key]));
+        if ($key === null) {
+            do {
+                $key = bin2hex(random_bytes(16));
+            } while (isset($this->documents[$namespace][$key]));
+        }
+
+        if (isset($this->documents[$namespace][$key])) {
+            throw new RuntimeException('The storage key already exists.');
+        }
 
         return $this->writeDocument($namespace, $key, $data, $metadata);
     }
@@ -55,7 +63,7 @@ final class InMemoryStorage extends AbstractStorage
         array $metadata,
     ): StoredDocument {
         $normalized = json_decode(
-            json_encode($data, JSON_THROW_ON_ERROR),
+            json_encode($data, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION),
             true,
             flags: JSON_THROW_ON_ERROR,
         );

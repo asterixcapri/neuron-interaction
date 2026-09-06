@@ -19,14 +19,20 @@ abstract class AbstractStorage implements StorageInterface
         string $namespace,
         array $data,
         array $metadata = [],
+        ?string $key = null,
     ): StoredDocument {
         $this->guardIdentifier($namespace, 'namespace');
         $this->guardMetadata($metadata);
+
+        if ($key !== null) {
+            $this->guardIdentifier($key, 'key');
+        }
 
         $document = $this->createDocument(
             $namespace,
             $data,
             $metadata,
+            $key,
         );
         $this->guardIdentifier($document->key, 'key');
 
@@ -73,12 +79,17 @@ abstract class AbstractStorage implements StorageInterface
         $this->deleteDocument($namespace, $key);
     }
 
-    /** @return iterable<StoredDocument> */
-    final public function entries(string $namespace): iterable
+    /**
+     * @param array<string, string> $metadata
+     * @return iterable<StoredDocument>
+     */
+    final public function entries(string $namespace, array $metadata = []): iterable
     {
         $this->guardIdentifier($namespace, 'namespace');
 
-        return $this->guardEntries($this->readEntries($namespace));
+        $this->guardMetadata($metadata);
+
+        return $this->guardEntries($this->readEntries($namespace), $metadata);
     }
 
     /**
@@ -89,6 +100,7 @@ abstract class AbstractStorage implements StorageInterface
         string $namespace,
         array $data,
         array $metadata,
+        ?string $key,
     ): StoredDocument;
 
     abstract protected function readDocument(
@@ -144,13 +156,20 @@ abstract class AbstractStorage implements StorageInterface
 
     /**
      * @param iterable<StoredDocument> $entries
+     * @param array<string, string> $metadata
      *
      * @return iterable<StoredDocument>
      */
-    private function guardEntries(iterable $entries): iterable
+    private function guardEntries(iterable $entries, array $metadata): iterable
     {
         foreach ($entries as $document) {
             $this->guardIdentifier($document->key, 'key');
+
+            foreach ($metadata as $name => $value) {
+                if (($document->metadata[$name] ?? null) !== $value) {
+                    continue 2;
+                }
+            }
 
             yield $document;
         }
