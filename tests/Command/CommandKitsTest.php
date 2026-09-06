@@ -65,7 +65,7 @@ final class CommandKitsTest extends TestCase
     {
         $commands = new Commands(new SessionCommandKit());
         $adapter = new FakeCommandAdapter($commands);
-        $previous = $adapter->sessions()->start();
+        $previous = $adapter->sessions()->create();
         $previous->addMessage(new UserMessage('Keep this conversation'));
         $adapter->agent()->setChatHistory($previous);
         $key = $adapter->sessions()->summaries()[0]->key;
@@ -80,7 +80,9 @@ final class CommandKitsTest extends TestCase
         self::assertSame('completed', $execution->status);
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
         self::assertSame([], $adapter->agent()->getChatHistory()->getMessages());
-        self::assertSame('Keep this conversation', $adapter->sessions()->resume($key)->getMessages()[0]->getContent());
+        $reopened = $adapter->sessions()->read($key);
+        self::assertNotNull($reopened);
+        self::assertSame('Keep this conversation', $reopened->getMessages()[0]->getContent());
     }
 
     public function testMixedMountingPreservesOrderAndTheFirstDuplicateExecutes(): void
@@ -89,7 +91,7 @@ final class CommandKitsTest extends TestCase
         $last = new ClearCommand('/last');
         $commands = new Commands([$first, new SessionCommandKit(), $last]);
         $adapter = new FakeCommandAdapter($commands);
-        $previous = $adapter->sessions()->start();
+        $previous = $adapter->sessions()->create();
         $adapter->agent()->setChatHistory($previous);
 
         self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(

@@ -80,9 +80,9 @@ final class SelectionTest extends TestCase
     {
         $commands = new Commands([new ResumeCommand('/return')]);
         $adapter = new FakeCommandAdapter($commands);
-        $stored = $adapter->sessions()->start();
+        $stored = $adapter->sessions()->create();
         $stored->addMessage(new UserMessage('Stored subject'));
-        $active = $adapter->sessions()->start();
+        $active = $adapter->sessions()->create();
         $adapter->agent()->setChatHistory($active);
         $session = $adapter->sessions()->summaries()[0];
 
@@ -110,7 +110,7 @@ final class SelectionTest extends TestCase
     {
         $commands = new Commands([new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
-        $adapter->sessions()->start()->addMessage(new UserMessage('Direct resume'));
+        $adapter->sessions()->create()->addMessage(new UserMessage('Direct resume'));
         $key = $adapter->sessions()->summaries()[0]->key;
 
         self::assertSame('completed', $commands->run('/resume', new CommandArguments($key), $adapter)?->status);
@@ -118,7 +118,8 @@ final class SelectionTest extends TestCase
         self::assertSame([], $adapter->selections);
 
         $history = $adapter->agent()->getChatHistory();
-        self::assertSame('failed', $commands->run('/resume', new CommandArguments('unknown'), $adapter)?->status);
+        self::assertSame('completed', $commands->run('/resume', new CommandArguments('unknown'), $adapter)?->status);
         self::assertSame($history, $adapter->agent()->getChatHistory());
+        self::assertContains('No Session is named by that key.', $adapter->warnings);
     }
 }

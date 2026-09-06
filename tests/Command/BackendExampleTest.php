@@ -16,7 +16,7 @@ use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Command\SelectionRequest;
 use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\InputHistory\InputHistory;
-use NeuronInteraction\Session\Sessions;
+use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -44,7 +44,7 @@ final class BackendExampleTest extends TestCase
         $storage = new InMemoryStorage();
         $inputs = new InputHistory($storage);
         $inputs->record('/choose');
-        $sessions = new Sessions($storage);
+        $sessions = new SessionStore($storage, 'local-user');
         $command = new class implements CommandInterface {
             public function name(): string
             {
@@ -110,7 +110,7 @@ final class BackendExampleTest extends TestCase
     public function testAgentReplacementTransfersHistoryAndImmediatelyUsesTheReplacementForFurtherEffects(): void
     {
         $storage = new InMemoryStorage();
-        $sessions = new Sessions($storage);
+        $sessions = new SessionStore($storage, 'local-user');
         $original = new Agent();
         $history = $original->getChatHistory();
         $history->addMessage(new UserMessage('Original conversation'));
@@ -137,7 +137,7 @@ final class BackendExampleTest extends TestCase
                 $adapter->useAgent($this->replacement);
                 TestCase::assertSame($this->replacement, $adapter->agent());
                 TestCase::assertSame($previous, $adapter->agent()->getChatHistory());
-                $adapter->useSession($adapter->sessions()->start());
+                $adapter->useSession($adapter->sessions()->create());
                 $adapter->promptAgent('A generated prompt for the replacement.');
                 $adapter->say($adapter->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');
@@ -166,7 +166,7 @@ final class BackendExampleTest extends TestCase
     public function testBackendReturnsHelpLeaveAndUnknownResponsesFromRunAlone(): void
     {
         $commands = new Commands([new HelpCommand('/guide'), new LeaveCommand('/quit')]);
-        $sessions = new Sessions(new InMemoryStorage());
+        $sessions = new SessionStore(new InMemoryStorage(), 'local-user');
         $responses = [];
 
         foreach (['/guide', '/missing', '/quit'] as $identifier) {
