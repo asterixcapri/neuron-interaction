@@ -37,3 +37,9 @@ Neuron TUI PHPUnit 231 tests / 1096 assertions; both full PHPStan suites and exp
 demo PHPStan passed. Backend executable examples and demo lint passed. TUI and demo
 consume the feature contract via dev-feat/command-agent-factories; migration and
 configuration documentation explain replacement with the coordinated release.
+
+Review follow-up: both backend configuration scenarios now use the application-owned
+`ConfiguredAgent` example, removing the duplicate anonymous Agent while preserving
+its required provider dependency, factory configuration, setters, and behavioral
+assertions. BackendExampleTest passed (10 tests / 96 assertions); targeted PHPStan
+for that test and ConfiguredAgent passed.

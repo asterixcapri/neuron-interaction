@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use Generator;
-use Closure;
 use InvalidArgumentException;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Providers\AIProviderInterface;
@@ -54,27 +53,7 @@ final class BackendExampleTest extends TestCase
             if (!is_string($model) || !is_string($capability)) {
                 throw new InvalidArgumentException('Model and capability must be strings.');
             }
-            $agent = new class($dependency) extends Agent {
-                private string $modelId = '';
-                private string $capability = '';
-
-                /** @param Closure(string, string): AIProviderInterface $dependency */
-                public function __construct(private readonly Closure $dependency)
-                {
-                    parent::__construct();
-                }
-
-                public function configure(string $model, string $capability): void
-                {
-                    $this->modelId = $model;
-                    $this->capability = $capability;
-                }
-
-                protected function provider(): AIProviderInterface
-                {
-                    return ($this->dependency)($this->modelId, $this->capability);
-                }
-            };
+            $agent = new ConfiguredAgent($dependency);
             $agent->configure($model, $capability);
 
             return $agent;
