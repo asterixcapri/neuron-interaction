@@ -5,6 +5,15 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use Generator;
+use Closure;
+use InvalidArgumentException;
+use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\Testing\FakeAIProvider;
+use NeuronInteraction\Agent\AgentFactoryRegistry;
+use NeuronInteraction\Configuration\Configuration;
+use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\Command\ClearCommand;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandControlsAdapterInterface;
@@ -25,6 +34,83 @@ use RuntimeException;
 
 final class BackendExampleTest extends TestCase
 {
+    public function testClearConstructsAnAgentWithRequiredDependenciesAndCurrentSetterOptions(): void
+    {
+        $storage = new InMemoryStorage();
+        $sessions = new SessionStore($storage, 'backend-user');
+        $configurations = new ConfigurationStore($storage, 'backend-user');
+        $configuration = $configurations->create('global', [
+            'agent' => 'configured', 'model' => 'initial-model', 'capability' => 'search',
+        ]);
+        $factories = new AgentFactoryRegistry();
+        $dependency = static fn (string $model, string $capability): AIProviderInterface =>
+            new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
+        $factories->register('configured', static function (Configuration $configuration) use ($dependency): Agent {
+            $model = $configuration->get('model');
+            $capability = $configuration->get('capability');
+            if (!is_string($model) || !is_string($capability)) {
+                throw new InvalidArgumentException('Model and capability must be strings.');
+            }
+            $agent = new class($dependency) extends Agent {
+                private string $modelId = '';
+                private string $capability = '';
+
+                /** @param Closure(string, string): AIProviderInterface $dependency */
+                public function __construct(private readonly Closure $dependency)
+                {
+                    parent::__construct();
+                }
+
+                public function configure(string $model, string $capability): void
+                {
+                    $this->modelId = $model;
+                    $this->capability = $capability;
+                }
+
+                protected function provider(): AIProviderInterface
+                {
+                    return ($this->dependency)($this->modelId, $this->capability);
+                }
+            };
+            $agent->configure($model, $capability);
+
+            return $agent;
+        });
+        $original = $factories->create($configuration);
+        $previous = $sessions->create();
+        $original->setChatHistory($previous);
+        $commands = new Commands(new ClearCommand());
+        $adapter = new BackendAdapter(
+            $original, $commands, $sessions,
+            static function (Agent $agent, string $prompt): void {
+                $agent->chat(new UserMessage($prompt));
+            },
+            $factories, $configurations,
+        );
+        $adapter->promptAgent('First turn');
+        self::assertSame('initial-model:search', $previous->getMessages()[1]->getContent());
+
+        $configuration->set('model', 'current-model');
+        $configuration->set('capability', 'research');
+        $configurations->save($configuration);
+        $response = $commands->run('/clear', new CommandArguments(), $adapter);
+
+        self::assertNotNull($response);
+        self::assertSame('completed', $response['status']);
+        self::assertNotSame($original, $adapter->agent());
+        self::assertNotSame($previous, $adapter->agent()->getChatHistory());
+        self::assertNotSame($original->getThreadId(), $adapter->agent()->getThreadId());
+        self::assertSame([], $adapter->agent()->getChatHistory()->getMessages());
+        self::assertSame($factories, $adapter->agentFactoryRegistry());
+        self::assertSame($configurations, $adapter->configurationStore());
+
+        $adapter->promptAgent('Second turn');
+        self::assertSame('current-model:research', $adapter->agent()->getChatHistory()->getMessages()[1]->getContent());
+        self::assertSame('initial-model:search', $sessions->read($previous->getKey())?->getMessages()[1]->getContent());
+        self::assertCount(2, $sessions->summaries());
+        self::assertSame($configuration->all(), $configurations->read('global')?->all());
+    }
+
     /** @param list<string> $expected */
     #[DataProvider('examples')]
     public function testBackendExampleRunsOnItsOwn(string $file, array $expected): void

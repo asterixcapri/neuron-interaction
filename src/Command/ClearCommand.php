@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Command;
 
+use RuntimeException;
+
 /**
  * Starts a new Session, leaving the previous one where it is stored.
  *
@@ -32,7 +34,9 @@ final readonly class ClearCommand implements CommandInterface
     /** @param CommandControlsAdapterInterface<mixed> $adapter */
     public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
     {
-        $agent = $adapter->newAgent();
+        $configuration = $adapter->configurationStore()->read('global')
+            ?? throw new RuntimeException('General configuration "global" is missing.');
+        $agent = $adapter->agentFactoryRegistry()->create($configuration);
         $agent->setChatHistory($adapter->sessionStore()->create());
         $adapter->useAgent($agent);
     }

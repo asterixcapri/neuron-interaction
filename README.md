@@ -57,20 +57,46 @@ TUI, Neuron Interaction is already included as its dependency.
 
 ## Agent creation and replacement
 
-`CommandControlsAdapterInterface::agent()` returns the active Agent. `newAgent()` creates
-an inactive instance of its class by calling `make()` without arguments.
-`useAgent($agent)` activates the supplied Agent with its own History; visual
-Adapters also display that History. `useSession()` has been removed.
+The Host Application registers Agent factories under stable identifiers and stores
+its general settings as the `global` Configuration. Factories receive a detached
+Configuration and construct fresh Agents with required dependencies, model settings
+and custom setters. They do not select or assign History.
 
-`ClearCommand` and `ResumeCommand` obtain a fresh Agent through `newAgent()`,
-install the created or recovered Session, and activate it through `useAgent()`.
-Their constructors still take only an optional command name.
+```php
+use NeuronAI\Agent\Agent;
+use NeuronInteraction\Agent\AgentFactoryRegistry;
+use NeuronInteraction\Configuration\Configuration;
+use NeuronInteraction\Configuration\ConfigurationStore;
 
-The Agent class must be constructible without required arguments and provide its
-own default configuration. Changes made to an existing instance after construction
-are not copied. A Host Application changing models while keeping a conversation
-must explicitly set the old History on its replacement before `useAgent()`.
-After a command replaces the Agent, read the active instance through `agent()`.
+$configurationStore = new ConfigurationStore($storage, 'local-user');
+$configuration = $configurationStore->read('global')
+    ?? $configurationStore->create('global', ['agent' => 'assistant']);
+$factories = new AgentFactoryRegistry();
+$factories->register('assistant', static function (Configuration $configuration): Agent {
+    return new Agent(); // Supply application dependencies and settings here.
+});
+$agent = $factories->create($configuration);
+$agent->setChatHistory($sessionStore->create());
+```
+
+Supply those same modules to the Adapter. Commands access them through
+`agentFactoryRegistry()` and `configurationStore()`. `ClearCommand` reads the
+current `global` Configuration, constructs an Agent, assigns a new Session and
+then activates it through `useAgent()`. It leaves the previous conversation and
+saved settings intact. Missing configuration, invalid or unregistered factory
+identifiers, construction errors and History errors follow normal Command failure
+handling; the previously active Agent remains active. A Session created before a
+History error is not rolled back.
+
+`agent()` returns the active Agent; `useAgent($agent)` activates an already prepared
+Agent and presents its History. To preserve a conversation during replacement,
+explicitly assign its existing History to the candidate before activation.
+Factories must return a fresh Agent on every call; returning a cached Agent cannot
+safely change its thread. Duplicate factory identifiers are rejected, and there is
+no fallback to a class name or argument-free constructor.
+
+During the staged migration, `ResumeCommand` still uses `newAgent()`; its migration
+to the same configured factory path follows separately.
 
 A Session's storage key is also its Neuron thread ID, preserved when reopening it.
 Neuron 4 does not allow rebinding an Agent to a different thread.
@@ -93,7 +119,7 @@ foreach ($sessionStore->summaries() as $session) {
     // Resume a chosen Session on a fresh, configured Agent:
     // $history = $sessionStore->read($session->key);
     // if ($history !== null) {
-    //     $next = $agent::make();
+    //     $next = $factories->create($configuration);
     //     $next->setChatHistory($history);
     //     $agent = $next;
     // }

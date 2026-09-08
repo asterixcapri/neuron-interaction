@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use InvalidArgumentException;
+use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\AbstractCommandKit;
 use NeuronInteraction\Command\ClearCommand;
@@ -34,6 +35,8 @@ final class CommandKitsTest extends TestCase
         self::assertSame($last, $commands->all()[3]);
         self::assertSame($first, $commands->named('/resume'));
         $adapter = new FakeCommandAdapter($commands);
+        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => new Agent());
+        $adapter->configurationStore()->create('global', ['agent' => 'test']);
         $previous = $adapter->agent()->getChatHistory();
         self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
@@ -65,6 +68,8 @@ final class CommandKitsTest extends TestCase
     {
         $commands = new Commands(new SessionCommandKit());
         $adapter = new FakeCommandAdapter($commands);
+        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => new Agent());
+        $adapter->configurationStore()->create('global', ['agent' => 'test']);
         $previous = $adapter->sessionStore()->create();
         $previous->addMessage(new UserMessage('Keep this conversation'));
         $adapter->agent()->setChatHistory($previous);
@@ -91,6 +96,8 @@ final class CommandKitsTest extends TestCase
         $last = new ClearCommand('/last');
         $commands = new Commands([$first, new SessionCommandKit(), $last]);
         $adapter = new FakeCommandAdapter($commands);
+        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => new Agent());
+        $adapter->configurationStore()->create('global', ['agent' => 'test']);
         $previous = $adapter->sessionStore()->create();
         $adapter->agent()->setChatHistory($previous);
 
@@ -139,6 +146,8 @@ final class CommandKitsTest extends TestCase
     {
         $commands = new Commands(new SessionCommandKit());
         $adapter = new FakeCommandAdapter($commands);
+        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => new Agent());
+        $adapter->configurationStore()->create('global', ['agent' => 'test']);
 
         self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
         self::assertSame(['There is no earlier Session to return to yet.'], $adapter->warnings);

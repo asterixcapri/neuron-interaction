@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace NeuronInteraction\Examples;
 
 use Closure;
+use NeuronInteraction\Agent\AgentFactoryRegistry;
+use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronAI\Agent\Agent;
 use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
@@ -45,6 +48,8 @@ final class BackendAdapter implements CommandControlsAdapterInterface
         private readonly Commands $mountedCommands,
         private readonly SessionStore $sessionStore,
         private readonly Closure $submitPrompt,
+        private readonly AgentFactoryRegistry $agentFactoryRegistry = new AgentFactoryRegistry(),
+        private readonly ConfigurationStore $configurationStore = new ConfigurationStore(new InMemoryStorage(), 'backend'),
     ) {
     }
 
@@ -112,6 +117,16 @@ final class BackendAdapter implements CommandControlsAdapterInterface
     public function sessionStore(): SessionStore
     {
         return $this->sessionStore;
+    }
+
+    public function agentFactoryRegistry(): AgentFactoryRegistry
+    {
+        return $this->agentFactoryRegistry;
+    }
+
+    public function configurationStore(): ConfigurationStore
+    {
+        return $this->configurationStore;
     }
 
     public function stop(): void

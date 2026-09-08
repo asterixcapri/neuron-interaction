@@ -21,8 +21,8 @@ final class CommandAdapterTest extends TestCase
         $selection = new SelectionRequest('/inspect', 'Pick one', [
             new SelectionOption('chosen-value', 'Visible label', 'Description'),
         ]);
-        $command = new class($replacement, $selection) implements CommandInterface {
-            public function __construct(private Agent $replacement, private SelectionRequest $selection)
+        $command = new class($selection) implements CommandInterface {
+            public function __construct(private SelectionRequest $selection)
             {
             }
 
@@ -41,8 +41,13 @@ final class CommandAdapterTest extends TestCase
             {
                 $adapter->say($adapter->commands()->all()[0]->name());
                 $adapter->warn($arguments->text);
-                $this->replacement->setChatHistory($adapter->sessionStore()->create());
-                $adapter->useAgent($this->replacement);
+                $configuration = $adapter->configurationStore()->read('global');
+                if ($configuration === null) {
+                    throw new \RuntimeException('Missing test configuration.');
+                }
+                $replacement = $adapter->agentFactoryRegistry()->create($configuration);
+                $replacement->setChatHistory($adapter->sessionStore()->create());
+                $adapter->useAgent($replacement);
                 $adapter->promptAgent('A generated Agent prompt.');
                 $adapter->requestSelection($this->selection);
                 $adapter->say('The request has returned.');
@@ -51,6 +56,8 @@ final class CommandAdapterTest extends TestCase
         };
         $commands = new Commands([$command]);
         $adapter = new FakeCommandAdapter($commands);
+        $adapter->configurationStore()->create('global', ['agent' => 'test']);
+        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => $replacement);
         $execution = $commands->run('/inspect', new CommandArguments('A warning.'), $adapter);
 
         self::assertNotNull($execution);

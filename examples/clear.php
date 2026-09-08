@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
+use NeuronInteraction\Agent\AgentFactoryRegistry;
+use NeuronInteraction\Configuration\Configuration;
+use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\Commands;
@@ -13,16 +16,22 @@ use NeuronInteraction\Storage\InMemoryStorage;
 
 require_once dirname(__DIR__) . '/vendor/autoload.php';
 
-$sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
+$storage = new InMemoryStorage();
+$sessionStore = new SessionStore($storage, 'demo-user');
+$configurationStore = new ConfigurationStore($storage, 'demo-user');
+$configuration = $configurationStore->read('global')
+    ?? $configurationStore->create('global', ['agent' => 'demo']);
+$factories = new AgentFactoryRegistry();
+$factories->register('demo', static fn (Configuration $configuration): Agent => new Agent());
 
 $previousSession = $sessionStore->create();
 $previousSession->addMessage(new UserMessage('The previous conversation'));
 
-$agent = new Agent();
+$agent = $factories->create($configuration);
 $agent->setChatHistory($previousSession);
 
 $commands = new Commands(new ClearCommand());
-$adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
+$adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {}, $factories, $configurationStore);
 $commands->run('/clear', new CommandArguments(), $adapter);
 
 // The Agent now has an empty Session; the previous conversation is still stored.

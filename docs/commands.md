@@ -120,3 +120,17 @@ Commands, SessionStore, Input history and Storage are composed directly. There i
 no required application facade, HTTP framework, authentication subsystem,
 worker topology or subagent orchestration. Help and Leave are shared Commands;
 permission to run them during a Turn and Picker presentation belong to Neuron TUI.
+
+## Configured Clear
+
+Adapters expose the Host Application's `AgentFactoryRegistry` and
+`ConfigurationStore` through `agentFactoryRegistry()` and `configurationStore()`.
+Custom Commands can use these same modules without constructor injection or
+additional Adapter controls. Empty default modules do not infer settings from the
+active Agent; configure `global` and register its `agent` identifier explicitly
+before invoking Clear.
+
+Clear reads current settings on every invocation. Construction precedes Session
+creation; History assignment precedes activation. Factory and History exceptions
+reach the ordinary failed outcome without replacing the active Agent. Configuration
+is not saved again, and already-created Sessions are not rolled back.
