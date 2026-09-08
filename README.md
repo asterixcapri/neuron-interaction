@@ -10,6 +10,19 @@ The same interaction logic can therefore serve a terminal, web backend or
 another delivery mechanism. Each Host Application supplies an Adapter that
 translates the library's operations into its own UI and response model.
 
+## Installation
+
+Requires PHP 8.4.1+. The `0.8.x` branch supports Neuron AI 3.
+
+Run this command in your application's directory:
+
+```bash
+composer require asterixcapri/neuron-interaction
+```
+
+Composer also installs Neuron AI as a required dependency. If you install Neuron
+TUI, Neuron Interaction is already included as its dependency.
+
 ## What it provides
 
 - **SessionStore** persists Neuron AI chat Histories and make conversations
