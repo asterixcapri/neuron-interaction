@@ -57,7 +57,7 @@ TUI, Neuron Interaction is already included as its dependency.
 
 ## Agent creation and replacement
 
-`CommandAdapterInterface::agent()` returns the active Agent. `newAgent()` creates
+`CommandControlsAdapterInterface::agent()` returns the active Agent. `newAgent()` creates
 an inactive instance of its class by calling `make()` without arguments.
 `useAgent($agent)` activates the supplied Agent with its own History; visual
 Adapters also display that History. `useSession()` has been removed.
@@ -223,7 +223,7 @@ $output = $commands->run('/resume', new CommandArguments($sessionKey), $adapter)
 A Command provides its name, a short description and the action to perform:
 
 ```php
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
 
 final class HelloCommand implements CommandInterface
@@ -238,7 +238,7 @@ final class HelloCommand implements CommandInterface
         return 'Say hello.';
     }
 
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+    public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
     {
         $adapter->say('Hello!');
     }

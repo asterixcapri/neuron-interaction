@@ -7,7 +7,7 @@ namespace NeuronInteraction\Tests\Command;
 use Generator;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
@@ -76,8 +76,8 @@ final class BackendExampleTest extends TestCase
                 return 'Prompt the Agent with a chosen value.';
             }
 
-            /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $adapter */
+            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
             {
                 if ($arguments->text === '') {
                     $adapter->requestSelection(new SelectionRequest('/choose', 'Choose a value', [
@@ -150,8 +150,8 @@ final class BackendExampleTest extends TestCase
                 return 'Replace the Agent and choose another History.';
             }
 
-            /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $adapter */
+            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
             {
                 $session = $adapter->sessionStore()->create();
                 $this->replacement->setChatHistory($session);

@@ -29,8 +29,8 @@ final readonly class ClearCommand implements CommandInterface
         return 'Starts a new Session, leaving the current one stored.';
     }
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+    /** @param CommandControlsAdapterInterface<mixed> $adapter */
+    public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
     {
         $agent = $adapter->newAgent();
         $agent->setChatHistory($adapter->sessionStore()->create());

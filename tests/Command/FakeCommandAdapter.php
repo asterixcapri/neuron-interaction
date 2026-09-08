@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
@@ -13,8 +13,8 @@ use NeuronInteraction\Command\SelectionRequest;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
-/** @implements CommandAdapterInterface<CommandExecution> */
-class FakeCommandAdapter implements CommandAdapterInterface
+/** @implements CommandControlsAdapterInterface<CommandExecution> */
+class FakeCommandAdapter implements CommandControlsAdapterInterface
 {
     /** @var list<string> */
     public array $notices = [];

@@ -6,7 +6,7 @@ namespace NeuronInteraction\Tests\Command;
 
 use Closure;
 use InvalidArgumentException;
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
@@ -144,10 +144,10 @@ final class CommandsTest extends TestCase
         $failure = new RuntimeException('Command failed after its notice.');
         $output = CommandExecution::completed('/adapter-output');
         $commands = new Commands([
-            self::command('/healthy', static function (CommandArguments $arguments, CommandAdapterInterface $adapter): void {
+            self::command('/healthy', static function (CommandArguments $arguments, CommandControlsAdapterInterface $adapter): void {
                 $adapter->say($arguments->text);
             }),
-            self::command('/broken', static function (CommandArguments $arguments, CommandAdapterInterface $adapter) use ($failure): void {
+            self::command('/broken', static function (CommandArguments $arguments, CommandControlsAdapterInterface $adapter) use ($failure): void {
                 $adapter->say($arguments->text);
                 throw $failure;
             }),
@@ -268,11 +268,11 @@ final class CommandsTest extends TestCase
         }
     }
 
-    /** @param Closure(CommandArguments, CommandAdapterInterface<mixed>): void $run */
+    /** @param Closure(CommandArguments, CommandControlsAdapterInterface<mixed>): void $run */
     private static function command(string $name, Closure $run): CommandInterface
     {
         return new class($name, $run) implements CommandInterface {
-            /** @param Closure(CommandArguments, CommandAdapterInterface<mixed>): void $run */
+            /** @param Closure(CommandArguments, CommandControlsAdapterInterface<mixed>): void $run */
             public function __construct(private string $name, private Closure $run)
             {
             }
@@ -287,8 +287,8 @@ final class CommandsTest extends TestCase
                 return 'A test Command';
             }
 
-            /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $adapter */
+            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
             {
                 ($this->run)($arguments, $adapter);
             }

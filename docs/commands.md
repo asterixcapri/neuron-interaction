@@ -9,7 +9,7 @@ Every mounted identifier includes its leading slash, including aliases. Names
 without a slash are rejected immediately; lookup is exact, with no case or
 prefix normalization. Backend Adapters use the same identifiers.
 
-Commands receive `CommandAdapterInterface`, use its shared operations and return
+Commands receive `CommandControlsAdapterInterface`, use its shared operations and return
 `void`. `Commands::run()` owns the whole invocation: it resolves the first matching
 Command, requests Adapter admission, invokes the Command, and passes its technical
 `CommandExecution` outcome to `afterExecution()`. Callers receive the Adapter's
@@ -30,7 +30,7 @@ output from this one call; they do not coordinate completion separately.
 
 `afterExecution()` defines the Adapter's output: a backend can return its response
 data or a framework response, while a terminal Adapter may perform presentation
-and return `null`. `CommandAdapterInterface<TOutput>` and the generic `run()`
+and return `null`. `CommandControlsAdapterInterface<TOutput>` and the generic `run()`
 method preserve that output type in static analysis; `run()` returns
 `TOutput|null` because admission can refuse. No response format or transport
 dependency is imposed by the shared package.
@@ -42,11 +42,11 @@ performed, including notices, History changes, or immediate Agent replacement.
 
 ## Migrating from CommandControlsInterface
 
-Replace `CommandControlsInterface` with `CommandAdapterInterface` in Commands and Adapter
+Replace `CommandControlsInterface` with `CommandControlsAdapterInterface` in Commands and Adapter
 implementations, add `admit()` and `afterExecution()`, and consume the Adapter's
 output from `run()` instead of expecting `CommandExecution`. Commands can annotate
-their parameter as `CommandAdapterInterface<mixed>`; concrete Adapters declare
-`@implements CommandAdapterInterface<TheirOutputType>`.
+their parameter as `CommandControlsAdapterInterface<mixed>`; concrete Adapters declare
+`@implements CommandControlsAdapterInterface<TheirOutputType>`.
 
 ## Session selection
 
@@ -86,7 +86,7 @@ before running an Adapter; live reconfiguration is outside this contract.
 
 Mount `NeuronInteraction\Command\HelpCommand` and
 `NeuronInteraction\Command\LeaveCommand` explicitly, like Session Commands.
-Both implement `CommandInterface` and use `CommandAdapterInterface`. Help lists
+Both implement `CommandInterface` and use `CommandControlsAdapterInterface`. Help lists
 the mounted Commands and descriptions through the Adapter; Leave calls `stop()`.
 The Adapter defines the stop effect. Neither Command depends on a terminal,
 and the shared dispatcher imposes no concurrency policy. Both accept a
@@ -95,7 +95,7 @@ configured identifier in their constructor.
 ## Backend Adapter
 
 [BackendAdapter](../examples/BackendAdapter.php) implements every operation of
-`CommandAdapterInterface`. It admits its Commands and collects notices, warnings,
+`CommandControlsAdapterInterface`. It admits its Commands and collects notices, warnings,
 a `SelectionRequest`, and the stop effect for one response. Its `afterExecution()`
 returns response data containing those values, the technical status, identifier,
 and any error message. The caller obtains that response directly from `run()`.

@@ -35,8 +35,8 @@ final readonly class ResumeCommand implements CommandInterface
         return 'Lets you choose a stored Session to resume.';
     }
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+    /** @param CommandControlsAdapterInterface<mixed> $adapter */
+    public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
     {
         if ($arguments->text !== '') {
             $session = $adapter->sessionStore()->read($arguments->text);

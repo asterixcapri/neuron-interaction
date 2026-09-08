@@ -24,8 +24,8 @@ final readonly class HelpCommand implements CommandInterface
         return 'Lists what can be typed here.';
     }
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+    /** @param CommandControlsAdapterInterface<mixed> $adapter */
+    public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
     {
         foreach ($adapter->commands()->all() as $command) {
             $adapter->say($command->name() . ' — ' . $command->describe());

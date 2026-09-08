@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
@@ -36,8 +36,8 @@ final class CommandAdapterTest extends TestCase
                 return 'Exercises the shared Command Adapter.';
             }
 
-            /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $adapter */
+            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
             {
                 $adapter->say($adapter->commands()->all()[0]->name());
                 $adapter->warn($arguments->text);

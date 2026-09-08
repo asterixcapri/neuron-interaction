@@ -17,6 +17,6 @@ interface CommandInterface
      */
     public function describe(): string;
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void;
+    /** @param CommandControlsAdapterInterface<mixed> $adapter */
+    public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void;
 }

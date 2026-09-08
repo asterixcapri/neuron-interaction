@@ -6,7 +6,7 @@ namespace NeuronInteraction\Examples;
 
 use Closure;
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
@@ -25,9 +25,9 @@ use NeuronInteraction\Session\SessionStore;
  *     selection: ?SelectionRequest,
  *     stopped: bool,
  * }
- * @implements CommandAdapterInterface<BackendResponse>
+ * @implements CommandControlsAdapterInterface<BackendResponse>
  */
-final class BackendAdapter implements CommandAdapterInterface
+final class BackendAdapter implements CommandControlsAdapterInterface
 {
     /** @var list<string> */
     private array $notices = [];

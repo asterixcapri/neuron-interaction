@@ -12,7 +12,7 @@ use NeuronInteraction\Session\SessionStore;
  *
  * @template-covariant TOutput
  */
-interface CommandAdapterInterface
+interface CommandControlsAdapterInterface
 {
     /** Refusal returns control to the caller without dispatch or completion. */
     public function admit(CommandInterface $command): bool;

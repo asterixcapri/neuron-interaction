@@ -74,13 +74,13 @@ final class Commands
 
     /**
      * @template TOutput
-     * @param CommandAdapterInterface<TOutput> $adapter
+     * @param CommandControlsAdapterInterface<TOutput> $adapter
      * @return TOutput|null Null is also returned when admission refuses the Command.
      */
     public function run(
         string $identifier,
         CommandArguments $arguments,
-        CommandAdapterInterface $adapter,
+        CommandControlsAdapterInterface $adapter,
     ): mixed {
         $command = $this->named($identifier);
 

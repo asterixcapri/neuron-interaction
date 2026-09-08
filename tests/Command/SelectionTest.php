@@ -6,7 +6,7 @@ namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandArguments;
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
@@ -37,8 +37,8 @@ final class SelectionTest extends TestCase
                 return 'Select a value.';
             }
 
-            /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $adapter */
+            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
             {
                 if ($arguments->text === '') {
                     $adapter->requestSelection($this->request);
