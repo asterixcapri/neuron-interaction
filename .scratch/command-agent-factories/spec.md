@@ -1,6 +1,6 @@
 # Configured Agent reconstruction across Neuron Interaction and Neuron TUI
 
-Status: ready-for-agent
+Status: resolved
 Repositories: neuron-interaction, neuron-tui
 Feature: command-agent-factories
 Scope: one coordinated implementation across both repositories.

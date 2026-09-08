@@ -26,9 +26,11 @@ use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Command\SelectionRequest;
 use NeuronInteraction\Examples\BackendAdapter;
+use NeuronInteraction\Examples\ConfiguredAgent;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\FileStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -152,6 +154,81 @@ final class BackendExampleTest extends TestCase
         self::assertCount(2, $sessions->summaries());
         self::assertSame($configuration->all(), $configurations->read('global')?->all());
 
+    }
+
+    public function testBackendReopensSavedConfigurationAndSessionsForClearAndResume(): void
+    {
+        $directory = sys_get_temp_dir() . '/neuron-backend-' . bin2hex(random_bytes(8));
+
+        try {
+            $storage = new FileStorage($directory);
+            $savedConfigurations = new ConfigurationStore($storage, 'backend-user');
+            $savedConfigurations->create('global', [
+                'agent' => 'configured', 'model' => 'saved-model', 'capability' => 'research',
+            ]);
+            $savedSession = (new SessionStore($storage, 'backend-user'))->create();
+            $savedSession->addMessage(new UserMessage('Earlier conversation'));
+            $savedSession->addMessage(new AssistantMessage('Earlier answer'));
+
+            $reopenedStorage = new FileStorage($directory);
+            $configurations = new ConfigurationStore($reopenedStorage, 'backend-user');
+            $sessions = new SessionStore($reopenedStorage, 'backend-user');
+            $configuration = $configurations->read('global');
+            $session = $sessions->read($savedSession->getKey());
+            self::assertNotNull($configuration);
+            self::assertNotNull($session);
+            $factories = new AgentFactoryRegistry();
+            $providerFactory = static fn (string $model, string $capability): AIProviderInterface =>
+                new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
+            $factories->register('configured', static function (Configuration $configuration) use ($providerFactory): Agent {
+                $model = $configuration->get('model');
+                $capability = $configuration->get('capability');
+                if (!is_string($model) || !is_string($capability)) {
+                    throw new InvalidArgumentException('Model and capability must be strings.');
+                }
+
+                return (new ConfiguredAgent($providerFactory))->configure($model, $capability);
+            });
+            $initial = $factories->create($configuration);
+            $initial->setChatHistory($session);
+            $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
+            $adapter = new BackendAdapter(
+                $initial, $commands, $sessions,
+                static function (Agent $agent, string $prompt): void {
+                    $agent->chat(new UserMessage($prompt));
+                },
+                $factories, $configurations,
+            );
+            $adapter->promptAgent('First turn after restart');
+            self::assertSame('saved-model:research', $session->getMessages()[3]->getContent());
+
+            $cleared = $commands->run('/clear', new CommandArguments(), $adapter);
+            self::assertNotNull($cleared);
+            self::assertSame('completed', $cleared['status']);
+            self::assertNotSame($initial, $adapter->agent());
+            self::assertNotSame($initial->getThreadId(), $adapter->agent()->getThreadId());
+            $adapter->promptAgent('New conversation');
+            self::assertSame('saved-model:research', $adapter->agent()->getChatHistory()->getMessages()[1]->getContent());
+
+            $resumed = $commands->run('/resume', new CommandArguments($session->getKey()), $adapter);
+            self::assertNotNull($resumed);
+            self::assertSame('completed', $resumed['status']);
+            self::assertSame($initial->getThreadId(), $adapter->agent()->getThreadId());
+            $adapter->promptAgent('Continue earlier conversation');
+            self::assertSame('saved-model:research', $adapter->agent()->getChatHistory()->getMessages()[5]->getContent());
+            self::assertSame($configuration->all(), $savedConfigurations->read('global')?->all());
+            self::assertSame('saved-model:research', $sessions->read($session->getKey())?->getMessages()[5]->getContent());
+        } finally {
+            foreach (glob($directory . '/*/*') ?: [] as $path) {
+                unlink($path);
+            }
+            foreach (glob($directory . '/*') ?: [] as $path) {
+                rmdir($path);
+            }
+            if (is_dir($directory)) {
+                rmdir($directory);
+            }
+        }
     }
 
     /** @param list<string> $expected */

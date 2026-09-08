@@ -45,3 +45,21 @@ meanings belong to the host application. It also selects the active
 configuration and constructs or replaces its Agent.
 
 Run `php examples/configuration.php` for a file-backed example.
+
+## Reproducible Agent choices
+
+Shared Clear and Resume Commands read the `global` document and select a registered
+factory using its `agent` field. This convention leaves other ConfigurationStore
+keys available to the Host Application. Create `global` with explicit defaults only
+when absent; restarting should read the existing values.
+
+The factory receives a detached Configuration and interprets application fields,
+such as `model` or `searchEnabled`. Keep live clients and tools in the factory's
+captured dependencies, outside persisted configuration. Saving a choice makes it
+available to later construction; changing a setter on the live Agent alone does not.
+
+A model-changing Command can read fresh settings, change only `model`, construct
+through AgentFactoryRegistry and assign the current History. Save after successful
+preparation and before activation through `useAgent()`. If preparation or saving
+throws, do not activate the candidate. Storage and activation are not transactional;
+a Storage that writes before throwing cannot promise rollback.
