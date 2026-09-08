@@ -44,7 +44,7 @@ final class BackendAdapter implements CommandControlsAdapterInterface
 
     /** @param Closure(Agent, string): void $submitPrompt */
     public function __construct(
-        private Agent $answeringAgent,
+        private Agent $agent,
         private readonly Commands $commands,
         private readonly SessionStore $sessionStore,
         private readonly Closure $submitPrompt,
@@ -84,7 +84,7 @@ final class BackendAdapter implements CommandControlsAdapterInterface
 
     public function promptAgent(string $prompt): void
     {
-        ($this->submitPrompt)($this->answeringAgent, $prompt);
+        ($this->submitPrompt)($this->agent, $prompt);
     }
 
     public function requestSelection(SelectionRequest $request): void
@@ -94,12 +94,12 @@ final class BackendAdapter implements CommandControlsAdapterInterface
 
     public function agent(): Agent
     {
-        return $this->answeringAgent;
+        return $this->agent;
     }
 
     public function useAgent(Agent $agent): void
     {
-        $this->answeringAgent = $agent;
+        $this->agent = $agent;
     }
 
     public function commands(): Commands
