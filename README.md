@@ -95,8 +95,15 @@ Factories must return a fresh Agent on every call; returning a cached Agent cann
 safely change its thread. Duplicate factory identifiers are rejected, and there is
 no fallback to a class name or argument-free constructor.
 
-During the staged migration, `ResumeCommand` still uses `newAgent()`; its migration
-to the same configured factory path follows separately.
+`ResumeCommand` checks the selected Session first, then reads the latest saved
+`global` Configuration and prepares a fresh Agent with that History. Opening its
+selection does not construct an Agent; the follow-up rereads availability and
+settings. Resume uses current settings, not a historical configuration snapshot.
+
+Migration: replace `CommandAdapterInterface` with `CommandControlsAdapterInterface`
+and remove `newAgent()` implementations. Supply a registered reproducible factory
+and ConfigurationStore instead. Save runtime choices that should survive Clear,
+Resume and application restart; arbitrary instance mutations are not recovered.
 
 A Session's storage key is also its Neuron thread ID, preserved when reopening it.
 Neuron 4 does not allow rebinding an Agent to a different thread.

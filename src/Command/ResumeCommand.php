@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use DateTimeImmutable;
+use RuntimeException;
 use NeuronInteraction\Formatting\RelativeTimeFormatter;
 use NeuronInteraction\Formatting\SizeFormatter;
 use NeuronInteraction\Session\SessionSummary;
@@ -47,7 +48,9 @@ final readonly class ResumeCommand implements CommandInterface
                 return;
             }
 
-            $agent = $adapter->newAgent();
+            $configuration = $adapter->configurationStore()->read('global')
+                ?? throw new RuntimeException('General configuration "global" is missing.');
+            $agent = $adapter->agentFactoryRegistry()->create($configuration);
             $agent->setChatHistory($session);
             $adapter->useAgent($agent);
 

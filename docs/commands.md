@@ -121,16 +121,35 @@ no required application facade, HTTP framework, authentication subsystem,
 worker topology or subagent orchestration. Help and Leave are shared Commands;
 permission to run them during a Turn and Picker presentation belong to Neuron TUI.
 
-## Configured Clear
+## Configured Clear and Resume
 
 Adapters expose the Host Application's `AgentFactoryRegistry` and
 `ConfigurationStore` through `agentFactoryRegistry()` and `configurationStore()`.
 Custom Commands can use these same modules without constructor injection or
 additional Adapter controls. Empty default modules do not infer settings from the
 active Agent; configure `global` and register its `agent` identifier explicitly
-before invoking Clear.
+before invoking Clear or resuming an existing Session.
 
 Clear reads current settings on every invocation. Construction precedes Session
 creation; History assignment precedes activation. Factory and History exceptions
 reach the ordinary failed outcome without replacing the active Agent. Configuration
 is not saved again, and already-created Sessions are not rolled back.
+
+Resume reads the chosen Session through the supplied user-scoped Store before
+reading configuration. Missing Sessions retain their warning without preparing
+an Agent. For an existing Session it reads the latest `global` document, asks the
+registry for a fresh Agent, assigns the selected History and activates it. It does
+not save unchanged configuration or recover settings from the historical Session.
+The selection-only invocation constructs nothing. A later invocation receives the
+chosen value unchanged and rereads Session availability and current settings.
+
+`useAgent()` only activates the caller-prepared Agent. It does not choose a
+factory, read settings or assign History. Custom Commands retain responsibility
+for their own preparation and persistence; Agent replacement with the same History
+can preserve conversation presentation.
+
+Adapters migrating from `CommandAdapterInterface` implement
+`CommandControlsAdapterInterface` and expose the registry and ConfigurationStore.
+Remove `newAgent()` and its argument-free class reconstruction. Factories must
+capture constructor dependencies and apply application setters using saved
+configuration. Persist runtime settings that should survive reconstruction.

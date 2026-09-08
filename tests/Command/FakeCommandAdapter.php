@@ -76,13 +76,6 @@ class FakeCommandAdapter implements CommandControlsAdapterInterface
         return $this->answering;
     }
 
-    public function newAgent(): Agent
-    {
-        $current = $this->agent();
-
-        return $current::make();
-    }
-
     public function useAgent(Agent $agent): void
     {
         $this->answering = $agent;

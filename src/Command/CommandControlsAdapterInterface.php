@@ -35,13 +35,6 @@ interface CommandControlsAdapterInterface
     /** The currently active Agent, including its configuration and conversation. */
     public function agent(): Agent;
 
-    /**
-     * Construct a fresh Agent of the active Agent's class without activating it.
-     * The class must support make() without arguments. Instance configuration
-     * applied after construction is not copied.
-     */
-    public function newAgent(): Agent;
-
     /** Activate the supplied Agent with its own History and present that History. */
     public function useAgent(Agent $agent): void;
 

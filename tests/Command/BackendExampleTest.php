@@ -14,6 +14,7 @@ use NeuronInteraction\Agent\AgentFactoryRegistry;
 use NeuronInteraction\Configuration\Configuration;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Command\ClearCommand;
+use NeuronInteraction\Command\ResumeCommand;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandControlsAdapterInterface;
@@ -34,7 +35,7 @@ use RuntimeException;
 
 final class BackendExampleTest extends TestCase
 {
-    public function testClearConstructsAnAgentWithRequiredDependenciesAndCurrentSetterOptions(): void
+    public function testClearAndDeferredResumeUseCurrentConfigurationAfterActualTurns(): void
     {
         $storage = new InMemoryStorage();
         $sessions = new SessionStore($storage, 'backend-user');
@@ -79,7 +80,7 @@ final class BackendExampleTest extends TestCase
         $original = $factories->create($configuration);
         $previous = $sessions->create();
         $original->setChatHistory($previous);
-        $commands = new Commands(new ClearCommand());
+        $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
         $adapter = new BackendAdapter(
             $original, $commands, $sessions,
             static function (Agent $agent, string $prompt): void {
@@ -109,6 +110,48 @@ final class BackendExampleTest extends TestCase
         self::assertSame('initial-model:search', $sessions->read($previous->getKey())?->getMessages()[1]->getContent());
         self::assertCount(2, $sessions->summaries());
         self::assertSame($configuration->all(), $configurations->read('global')?->all());
+
+        $clearedAgent = $adapter->agent();
+        $clearedHistory = $clearedAgent->getChatHistory();
+        $selection = $commands->run('/resume', new CommandArguments(), $adapter);
+        self::assertNotNull($selection);
+        self::assertSame('completed', $selection['status']);
+        self::assertSame($clearedAgent, $adapter->agent());
+        $request = $selection['selection'];
+        self::assertNotNull($request);
+        $chosen = null;
+        foreach ($request->options as $option) {
+            if ($option->value === $previous->getKey()) {
+                $chosen = $option->value;
+            }
+        }
+        self::assertSame($previous->getKey(), $chosen);
+
+        // Settings are saved while the client is presenting the selection.
+        $configuration->set('model', 'latest-model');
+        $configuration->set('capability', 'summarize');
+        $configurations->save($configuration);
+        $followUp = new BackendAdapter(
+            $clearedAgent, $commands, $sessions,
+            static function (Agent $agent, string $prompt): void {
+                $agent->chat(new UserMessage($prompt));
+            },
+            $factories, $configurations,
+        );
+        $resumed = $commands->run($request->command, new CommandArguments($chosen), $followUp);
+        self::assertNotNull($resumed);
+        self::assertSame('completed', $resumed['status']);
+        self::assertNotSame($original, $followUp->agent());
+        self::assertNotSame($clearedAgent, $followUp->agent());
+        self::assertSame($original->getThreadId(), $followUp->agent()->getThreadId());
+        self::assertInstanceOf(\NeuronInteraction\Session\Session::class, $followUp->agent()->getChatHistory());
+        self::assertSame($previous->getKey(), $followUp->agent()->getChatHistory()->getKey());
+        $followUp->promptAgent('Third turn');
+        self::assertSame('latest-model:summarize', $followUp->agent()->getChatHistory()->getMessages()[3]->getContent());
+        self::assertSame('current-model:research', $clearedHistory->getMessages()[1]->getContent());
+        self::assertCount(2, $sessions->summaries());
+        self::assertSame($configuration->all(), $configurations->read('global')?->all());
+
     }
 
     /** @param list<string> $expected */

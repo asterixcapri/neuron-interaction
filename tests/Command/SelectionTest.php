@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Command;
 
+use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandControlsAdapterInterface;
@@ -80,6 +81,8 @@ final class SelectionTest extends TestCase
     {
         $commands = new Commands([new ResumeCommand('/return')]);
         $adapter = new FakeCommandAdapter($commands);
+        $adapter->configurationStore()->create('global', ['agent' => 'test']);
+        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => new Agent());
         $stored = $adapter->sessionStore()->create();
         $stored->addMessage(new UserMessage('Stored subject'));
         $active = $adapter->sessionStore()->create();
@@ -110,6 +113,8 @@ final class SelectionTest extends TestCase
     {
         $commands = new Commands([new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
+        $adapter->configurationStore()->create('global', ['agent' => 'test']);
+        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => new Agent());
         $adapter->sessionStore()->create()->addMessage(new UserMessage('Direct resume'));
         $key = $adapter->sessionStore()->summaries()[0]->key;
 

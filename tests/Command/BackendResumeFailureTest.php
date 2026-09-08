@@ -1,0 +1,185 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NeuronInteraction\Tests\Command;
+
+use Generator;
+use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\ChatHistoryInterface;
+use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Chat\Messages\UserMessage;
+use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\Testing\FakeAIProvider;
+use NeuronInteraction\Agent\AgentFactoryRegistry;
+use NeuronInteraction\Command\CommandArguments;
+use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\ResumeCommand;
+use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\Examples\BackendAdapter;
+use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\InMemoryStorage;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use RuntimeException;
+
+final class BackendResumeFailureTest extends TestCase
+{
+    #[DataProvider('preparationFailures')]
+    public function testPreparationFailureLeavesPreviouslyStartedAgentUsable(string $failure, string $message): void
+    {
+        $storage = new InMemoryStorage();
+        $sessions = new SessionStore($storage, 'owner');
+        $configurations = new ConfigurationStore($storage, 'owner');
+        $factories = new AgentFactoryRegistry();
+        $selected = $sessions->create();
+        $selected->addMessage(new UserMessage('Saved conversation'));
+        $original = $this->answeringAgent();
+        $history = $sessions->create();
+        $original->setChatHistory($history);
+        $commands = new Commands(new ResumeCommand());
+        $adapter = $this->adapter($original, $commands, $sessions, $factories, $configurations);
+        $adapter->promptAgent('Initial turn');
+        $thread = $original->getThreadId();
+
+        if ($failure !== 'missing configuration') {
+            $configurations->create('global', ['agent' => 'configured']);
+        }
+        if ($failure === 'factory') {
+            $factories->register('configured', static function (): Agent {
+                throw new RuntimeException('Factory dependency unavailable.');
+            });
+        }
+        if ($failure === 'history') {
+            $factories->register('configured', static fn (): Agent => new class extends Agent {
+                public function setChatHistory(ChatHistoryInterface $chatHistory): self
+                {
+                    throw new RuntimeException('History assignment failed.');
+                }
+            });
+        }
+
+        $response = $commands->run('/resume', new CommandArguments($selected->getKey()), $adapter);
+
+        self::assertNotNull($response);
+        self::assertSame('failed', $response['status']);
+        self::assertSame($message, $response['error']);
+        self::assertSame($original, $adapter->agent());
+        self::assertSame($history, $adapter->agent()->getChatHistory());
+        self::assertSame($thread, $adapter->agent()->getThreadId());
+        $adapter->promptAgent('Turn after failed Resume');
+        self::assertSame('Still answering', $history->getMessages()[3]->getContent());
+        self::assertSame('Turn after failed Resume', $history->getMessages()[2]->getContent());
+        self::assertCount(1, $sessions->read($selected->getKey())?->getMessages() ?? []);
+        self::assertCount(2, $sessions->summaries());
+    }
+
+    /** @return Generator<string, array{string, string}> */
+    public static function preparationFailures(): Generator
+    {
+        yield 'missing configuration' => ['missing configuration', 'General configuration "global" is missing.'];
+        yield 'unknown factory' => ['unknown factory', 'Unknown Agent factory: configured'];
+        yield 'factory exception' => ['factory', 'Factory dependency unavailable.'];
+        yield 'History assignment exception' => ['history', 'History assignment failed.'];
+    }
+
+    #[DataProvider('inaccessibleSessions')]
+    public function testMissingAndForeignSessionsWarnBeforeReadingConfigurationOrCallingFactory(bool $foreign, bool $configured): void
+    {
+        $storage = new InMemoryStorage();
+        $sessions = new SessionStore($storage, 'owner');
+        $configurations = new ConfigurationStore($storage, 'owner');
+        if ($configured) {
+            $configurations->create('global', ['agent' => 'configured']);
+        }
+        $constructions = 0;
+        $factories = new AgentFactoryRegistry();
+        $factories->register('configured', static function () use (&$constructions): Agent {
+            ++$constructions;
+            throw new RuntimeException('Factory must not run.');
+        });
+        $key = $foreign ? (new SessionStore($storage, 'someone-else'))->create()->getKey() : 'missing';
+        $original = $this->answeringAgent();
+        $commands = new Commands(new ResumeCommand());
+        $adapter = $this->adapter($original, $commands, $sessions, $factories, $configurations);
+
+        $response = $commands->run('/resume', new CommandArguments($key), $adapter);
+
+        self::assertNotNull($response);
+        self::assertSame('completed', $response['status']);
+        self::assertNull($response['error']);
+        self::assertSame(['No Session is named by that key.'], $response['warnings']);
+        self::assertSame(0, $constructions);
+        self::assertSame($original, $adapter->agent());
+    }
+
+    /** @return Generator<string, array{bool, bool}> */
+    public static function inaccessibleSessions(): Generator
+    {
+        yield 'missing without configuration' => [false, false];
+        yield 'foreign without configuration' => [true, false];
+        yield 'missing with failing factory' => [false, true];
+        yield 'foreign with failing factory' => [true, true];
+    }
+
+    public function testSelectionNeedsNoConfigurationAndRechecksAvailabilityOnLaterRequest(): void
+    {
+        $storage = new InMemoryStorage();
+        $sessions = new SessionStore($storage, 'owner');
+        $selected = $sessions->create();
+        $selected->addMessage(new UserMessage('Choice to remove'));
+        $configurations = new ConfigurationStore($storage, 'owner');
+        $factories = new AgentFactoryRegistry();
+        $constructions = 0;
+        $factories->register('configured', static function () use (&$constructions): Agent {
+            ++$constructions;
+            throw new RuntimeException('Factory must not run.');
+        });
+        $original = $this->answeringAgent();
+        $commands = new Commands(new ResumeCommand());
+        $first = $commands->run('/resume', new CommandArguments(), $this->adapter(
+            $original, $commands, $sessions, $factories, $configurations,
+        ));
+
+        self::assertNotNull($first);
+        self::assertSame('completed', $first['status']);
+        self::assertNotNull($first['selection']);
+        self::assertCount(1, $first['selection']->options);
+        self::assertSame($selected->getKey(), $first['selection']->options[0]->value);
+        self::assertSame(0, $constructions);
+
+        $storage->delete('sessions', $selected->getKey());
+        $configurations->create('global', ['agent' => 'configured']);
+        $adapter = $this->adapter($original, $commands, $sessions, $factories, $configurations);
+        $second = $commands->run($first['selection']->command, new CommandArguments($first['selection']->options[0]->value), $adapter);
+
+        self::assertNotNull($second);
+        self::assertSame('completed', $second['status']);
+        self::assertSame(['No Session is named by that key.'], $second['warnings']);
+        self::assertNull($second['selection']);
+        self::assertSame(0, $constructions);
+        self::assertSame($original, $adapter->agent());
+    }
+
+    private function answeringAgent(): Agent
+    {
+        return new class extends Agent {
+            protected function provider(): AIProviderInterface
+            {
+                return new FakeAIProvider(new AssistantMessage('Initial answer'), new AssistantMessage('Still answering'));
+            }
+        };
+    }
+
+    private function adapter(
+        Agent $agent,
+        Commands $commands,
+        SessionStore $sessions,
+        AgentFactoryRegistry $factories,
+        ConfigurationStore $configurations,
+    ): BackendAdapter {
+        return new BackendAdapter($agent, $commands, $sessions, static function (Agent $answering, string $prompt): void {
+            $answering->chat(new UserMessage($prompt));
+        }, $factories, $configurations);
+    }
+}

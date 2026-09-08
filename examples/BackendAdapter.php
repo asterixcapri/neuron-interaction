@@ -97,13 +97,6 @@ final class BackendAdapter implements CommandControlsAdapterInterface
         return $this->answeringAgent;
     }
 
-    public function newAgent(): Agent
-    {
-        $current = $this->agent();
-
-        return $current::make();
-    }
-
     public function useAgent(Agent $agent): void
     {
         $this->answeringAgent = $agent;
