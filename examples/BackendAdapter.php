@@ -45,7 +45,7 @@ final class BackendAdapter implements CommandControlsAdapterInterface
     /** @param Closure(Agent, string): void $submitPrompt */
     public function __construct(
         private Agent $answeringAgent,
-        private readonly Commands $mountedCommands,
+        private readonly Commands $commands,
         private readonly SessionStore $sessionStore,
         private readonly Closure $submitPrompt,
         private readonly AgentFactoryRegistry $agentFactoryRegistry = new AgentFactoryRegistry(),
@@ -104,7 +104,7 @@ final class BackendAdapter implements CommandControlsAdapterInterface
 
     public function commands(): Commands
     {
-        return $this->mountedCommands;
+        return $this->commands;
     }
 
     public function sessionStore(): SessionStore
