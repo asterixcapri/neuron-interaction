@@ -41,7 +41,7 @@ final class CommandAdapterTest extends TestCase
             {
                 $adapter->say($adapter->commands()->all()[0]->name());
                 $adapter->warn($arguments->text);
-                $adapter->useSession($adapter->sessionStore()->create());
+                $this->replacement->setChatHistory($adapter->sessionStore()->create());
                 $adapter->useAgent($this->replacement);
                 $adapter->promptAgent('A generated Agent prompt.');
                 $adapter->requestSelection($this->selection);

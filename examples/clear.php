@@ -27,6 +27,6 @@ $commands->run('/clear', new CommandArguments(), $adapter);
 
 // The Agent now has an empty Session; the previous conversation is still stored.
 echo json_encode([
-    'currentMessages' => $agent->getChatHistory()->getMessages(),
+    'currentMessages' => $adapter->agent()->getChatHistory()->getMessages(),
     'storedConversations' => count($sessionStore->summaries()),
 ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;

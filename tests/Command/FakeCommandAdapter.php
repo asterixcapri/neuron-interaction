@@ -10,7 +10,6 @@ use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\SelectionRequest;
-use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
@@ -73,15 +72,16 @@ class FakeCommandAdapter implements CommandAdapterInterface
         return $this->answering;
     }
 
-    public function useAgent(Agent $agent): void
+    public function newAgent(): Agent
     {
-        $agent->setChatHistory($this->answering->getChatHistory());
-        $this->answering = $agent;
+        $current = $this->agent();
+
+        return $current::make();
     }
 
-    public function useSession(Session $session): void
+    public function useAgent(Agent $agent): void
     {
-        $this->answering->setChatHistory($session);
+        $this->answering = $agent;
     }
 
     public function commands(): Commands

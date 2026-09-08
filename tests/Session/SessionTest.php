@@ -15,7 +15,7 @@ use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronAI\Tools\Tool;
+use NeuronAI\Tools\ToolCall;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -56,6 +56,7 @@ final class SessionTest extends TestCase
 
         self::assertInstanceOf(AbstractChatHistory::class, $session);
         self::assertSame('local-user', $session->getUserId());
+        self::assertSame($session->getKey(), $session->getThreadId());
     }
 
     #[DataProvider('storageKinds')]
@@ -76,11 +77,10 @@ final class SessionTest extends TestCase
             new ReasoningContent('I inspected it.', 'reasoning-1'),
             new TextContent('A small diagram.'),
         ]))->setUsage(new Usage(18, 4));
-        $tool = Tool::make('inspect', 'Inspect an image')
-            ->setParameters(['type' => 'object'])
+        $tool = ToolCall::make('inspect', description: 'Inspect an image')
             ->setInputs(['detail' => 'high'])
             ->setCallId('call-1');
-        $result = Tool::make('inspect', 'Inspect an image')
+        $result = ToolCall::make('inspect', description: 'Inspect an image')
             ->setInputs(['detail' => 'high'])
             ->setCallId('call-1')
             ->setResult('diagram');
@@ -93,6 +93,7 @@ final class SessionTest extends TestCase
         $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
 
         self::assertNotNull($reopened);
+        self::assertSame($history->getThreadId(), $reopened->getThreadId());
         $messages = $reopened->getMessages();
 
         self::assertCount(4, $messages);
@@ -106,10 +107,10 @@ final class SessionTest extends TestCase
         );
         self::assertEquals(new Usage(18, 4), $messages[1]->getUsage());
         self::assertInstanceOf(ToolCallMessage::class, $messages[2]);
-        self::assertSame('inspect', $messages[2]->getTools()[0]->getName());
-        self::assertSame('call-1', $messages[2]->getTools()[0]->getCallId());
+        self::assertSame('inspect', $messages[2]->getToolCalls()[0]->getName());
+        self::assertSame('call-1', $messages[2]->getToolCalls()[0]->getCallId());
         self::assertInstanceOf(ToolResultMessage::class, $messages[3]);
-        self::assertSame('diagram', $messages[3]->getTools()[0]->getResult());
+        self::assertSame('diagram', $messages[3]->getToolCalls()[0]->getResult());
     }
 
     public function testSavingReplacesOnlyTheSelectedStorageValue(): void

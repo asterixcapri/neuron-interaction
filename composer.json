@@ -11,7 +11,7 @@
     ],
     "require": {
         "php": ">=8.4.1",
-        "neuron-core/neuron-ai": "^3.0"
+        "neuron-core/neuron-ai": "^4.0@dev"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.1",

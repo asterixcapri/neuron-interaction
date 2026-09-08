@@ -27,4 +27,4 @@ $sessionKey = $session->getKey();
 $commands->run('/resume', new CommandArguments($sessionKey), $adapter);
 
 // Resume has installed the stored conversation as the Agent's History.
-echo $agent->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;
+echo $adapter->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;

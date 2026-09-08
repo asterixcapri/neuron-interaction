@@ -35,4 +35,4 @@ $agent = new Agent();
 $secondRequest = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
 $commands->run('/resume', new CommandArguments($sessionKey), $secondRequest);
 
-echo $agent->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;
+echo $secondRequest->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;

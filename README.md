@@ -12,12 +12,13 @@ translates the library's operations into its own UI and response model.
 
 ## Installation
 
-Requires PHP 8.4.1+. The `0.8.x` branch supports Neuron AI 3.
+Requires PHP 8.4.1+. The `0.9.x` branch targets Neuron AI 4 (`4.x-dev`).
+Use `0.8.x` for Neuron AI 3.
 
 Run this command in your application's directory:
 
 ```bash
-composer require asterixcapri/neuron-interaction
+composer require asterixcapri/neuron-interaction:0.9.x-dev "neuron-core/neuron-ai:^4.0@dev"
 ```
 
 Composer also installs Neuron AI as a required dependency. If you install Neuron
@@ -54,6 +55,26 @@ TUI, Neuron Interaction is already included as its dependency.
   focused interfaces, keeping framework and infrastructure choices outside the
   shared interaction model.
 
+## Agent creation and replacement
+
+`CommandAdapterInterface::agent()` returns the active Agent. `newAgent()` creates
+an inactive instance of its class by calling `make()` without arguments.
+`useAgent($agent)` activates the supplied Agent with its own History; visual
+Adapters also display that History. `useSession()` has been removed.
+
+`ClearCommand` and `ResumeCommand` obtain a fresh Agent through `newAgent()`,
+install the created or recovered Session, and activate it through `useAgent()`.
+Their constructors still take only an optional command name.
+
+The Agent class must be constructible without required arguments and provide its
+own default configuration. Changes made to an existing instance after construction
+are not copied. A Host Application changing models while keeping a conversation
+must explicitly set the old History on its replacement before `useAgent()`.
+After a command replaces the Agent, read the active instance through `agent()`.
+
+A Session's storage key is also its Neuron thread ID, preserved when reopening it.
+Neuron 4 does not allow rebinding an Agent to a different thread.
+
 ## SessionStore and Storage
 
 ```php
@@ -69,9 +90,13 @@ $agent->setChatHistory($sessionStore->create());
 // After the Agent has exchanged messages, list recognizable Sessions.
 foreach ($sessionStore->summaries() as $session) {
     // Render $session->title according to your Adapter's rules.
-    // Resume a chosen Session by installing its History on the Agent:
+    // Resume a chosen Session on a fresh, configured Agent:
     // $history = $sessionStore->read($session->key);
-    // if ($history !== null) { $agent->setChatHistory($history); }
+    // if ($history !== null) {
+    //     $next = $agent::make();
+    //     $next->setChatHistory($history);
+    //     $agent = $next;
+    // }
 }
 ```
 

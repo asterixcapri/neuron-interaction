@@ -127,7 +127,7 @@ final class BackendExampleTest extends TestCase
         self::assertSame(['/choose'], $inputs->entries());
     }
 
-    public function testAgentReplacementTransfersHistoryAndImmediatelyUsesTheReplacementForFurtherEffects(): void
+    public function testAgentReplacementUsesItsOwnHistoryAndImmediatelyHandlesFurtherEffects(): void
     {
         $storage = new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
@@ -153,11 +153,11 @@ final class BackendExampleTest extends TestCase
             /** @param CommandAdapterInterface<mixed> $adapter */
             public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
             {
-                $previous = $adapter->agent()->getChatHistory();
+                $session = $adapter->sessionStore()->create();
+                $this->replacement->setChatHistory($session);
                 $adapter->useAgent($this->replacement);
                 TestCase::assertSame($this->replacement, $adapter->agent());
-                TestCase::assertSame($previous, $adapter->agent()->getChatHistory());
-                $adapter->useSession($adapter->sessionStore()->create());
+                TestCase::assertSame($session, $adapter->agent()->getChatHistory());
                 $adapter->promptAgent('A generated prompt for the replacement.');
                 $adapter->say($adapter->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');

@@ -30,6 +30,7 @@ final class Session extends AbstractChatHistory
         ?StoredDocument $document = null,
     ) {
         parent::__construct($contextWindow, $trimmer);
+        $this->setThreadId($this->key);
 
         $this->load($document);
     }

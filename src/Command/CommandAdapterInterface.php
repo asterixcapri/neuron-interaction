@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 
 /**
@@ -31,11 +30,18 @@ interface CommandAdapterInterface
     /** Request a later invocation with the chosen value, then return immediately. */
     public function requestSelection(SelectionRequest $request): void;
 
+    /** The currently active Agent, including its configuration and conversation. */
     public function agent(): Agent;
 
-    public function useAgent(Agent $agent): void;
+    /**
+     * Construct a fresh Agent of the active Agent's class without activating it.
+     * The class must support make() without arguments. Instance configuration
+     * applied after construction is not copied.
+     */
+    public function newAgent(): Agent;
 
-    public function useSession(Session $session): void;
+    /** Activate the supplied Agent with its own History and present that History. */
+    public function useAgent(Agent $agent): void;
 
     public function commands(): Commands;
 
