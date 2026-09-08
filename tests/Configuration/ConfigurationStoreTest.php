@@ -95,7 +95,7 @@ final class ConfigurationStoreTest extends TestCase
         $configuration->remove('missing');
 
         self::assertSame($original, $store->read('default')?->all());
-        $store->save($configuration);
+        $store->write($configuration);
         $reopened = new ConfigurationStore($file ? new FileStorage($this->directory) : $storage, 'alice');
         self::assertSame([
             'model' => 'new',
@@ -116,7 +116,7 @@ final class ConfigurationStoreTest extends TestCase
         $bob->delete('default');
         $bob->create('default', ['model' => 'bob']);
         $configuration->set('model', 'alice-updated');
-        $alice->save($configuration);
+        $alice->write($configuration);
         self::assertSame('bob', $bob->read('default')?->get('model'));
         $alice->delete('default');
         $alice->delete('default');
@@ -160,7 +160,7 @@ final class ConfigurationStoreTest extends TestCase
         self::assertSame($expected, $configuration->all());
         self::assertSame($initialSnapshot, $configuration->get('value'));
         self::assertSame(['value' => $initialSnapshot], $store->read('references')?->all());
-        $store->save($configuration);
+        $store->write($configuration);
         $fresh = new ConfigurationStore($file ? new FileStorage($this->directory) : $storage, 'alice');
         self::assertSame($expected, $fresh->read('references')?->all());
     }

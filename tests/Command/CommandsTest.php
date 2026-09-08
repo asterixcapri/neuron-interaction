@@ -144,11 +144,11 @@ final class CommandsTest extends TestCase
         $failure = new RuntimeException('Command failed after its notice.');
         $output = CommandExecution::completed('/adapter-output');
         $commands = new Commands([
-            self::command('/healthy', static function (CommandArguments $arguments, CommandControlsAdapterInterface $adapter): void {
-                $adapter->say($arguments->text);
+            self::command('/healthy', static function (CommandArguments $arguments, CommandControlsAdapterInterface $controls): void {
+                $controls->say($arguments->text);
             }),
-            self::command('/broken', static function (CommandArguments $arguments, CommandControlsAdapterInterface $adapter) use ($failure): void {
-                $adapter->say($arguments->text);
+            self::command('/broken', static function (CommandArguments $arguments, CommandControlsAdapterInterface $controls) use ($failure): void {
+                $controls->say($arguments->text);
                 throw $failure;
             }),
         ]);
@@ -287,10 +287,10 @@ final class CommandsTest extends TestCase
                 return 'A test Command';
             }
 
-            /** @param CommandControlsAdapterInterface<mixed> $adapter */
-            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $controls */
+            public function run(CommandControlsAdapterInterface $controls, CommandArguments $arguments): void
             {
-                ($this->run)($arguments, $adapter);
+                ($this->run)($arguments, $controls);
             }
         };
     }

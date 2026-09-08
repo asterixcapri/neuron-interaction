@@ -123,33 +123,28 @@ permission to run them during a Turn and Picker presentation belong to Neuron TU
 
 ## Configured Clear and Resume
 
-Adapters expose the Host Application's `AgentFactoryRegistry` and
-`ConfigurationStore` through `agentFactoryRegistry()` and `configurationStore()`.
-Custom Commands can use these same modules without constructor injection or
-additional Adapter controls. Empty default modules do not infer settings from the
-active Agent; configure `global` and register its `agent` identifier explicitly
-before invoking Clear or resuming an existing Session.
+Adapters expose `createAgent(): Agent` and `configurationStore(): ConfigurationStore`.
+The Adapter connects its selected identifier, registry and store. Commands need
+no knowledge of Agent registration or application configuration keys.
 
-Clear reads current settings on every invocation. Construction precedes Session
+Clear requests a fresh Agent on every invocation. Construction precedes Session
 creation; History assignment precedes activation. Factory and History exceptions
 reach the ordinary failed outcome without replacing the active Agent. Configuration
-is not saved again, and already-created Sessions are not rolled back.
+is not written again, and already-created Sessions are not rolled back.
 
 Resume reads the chosen Session through the supplied user-scoped Store before
-reading configuration. Missing Sessions retain their warning without preparing
-an Agent. For an existing Session it reads the latest `global` document, asks the
-registry for a fresh Agent, assigns the selected History and activates it. It does
-not save unchanged configuration or recover settings from the historical Session.
-The selection-only invocation constructs nothing. A later invocation receives the
-chosen value unchanged and rereads Session availability and current settings.
+requesting an Agent. Missing Sessions retain their warning without construction.
+For an existing Session it calls `createAgent()`, assigns the selected History and
+activates the replacement. It does not write unchanged configuration or recover
+settings from the historical Session. The selection-only invocation constructs
+nothing; a later invocation rechecks availability and uses current settings.
 
-`useAgent()` only activates the caller-prepared Agent. It does not choose a
-factory, read settings or assign History. Custom Commands retain responsibility
-for their own preparation and persistence; Agent replacement with the same History
-can preserve conversation presentation.
+`useAgent()` activates the caller-prepared Agent. It does not choose a class,
+read settings or assign History. Custom Commands own preparation and persistence;
+replacement with the same History can preserve conversation presentation.
 
 Adapters migrating from `CommandAdapterInterface` implement
-`CommandControlsAdapterInterface` and expose the registry and ConfigurationStore.
-Remove `newAgent()` and its argument-free class reconstruction. Factories must
-capture constructor dependencies and apply application setters using saved
-configuration. Persist runtime settings that should survive reconstruction.
+`CommandControlsAdapterInterface`. Replace `newAgent()` or `agentFactoryRegistry()`
+with `createAgent()`. Register Agent classes implementing `ConfiguredAgentInterface`
+instead of closures. Each static creation method reads the configuration documents
+it needs. Persist runtime settings that should survive reconstruction.

@@ -24,9 +24,9 @@ final readonly class LeaveCommand implements CommandInterface
         return 'Stops the interaction.';
     }
 
-    /** @param CommandControlsAdapterInterface<mixed> $adapter */
-    public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
+    /** @param CommandControlsAdapterInterface<mixed> $controls */
+    public function run(CommandControlsAdapterInterface $controls, CommandArguments $arguments): void
     {
-        $adapter->stop();
+        $controls->stop();
     }
 }

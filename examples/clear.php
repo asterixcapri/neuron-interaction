@@ -2,13 +2,8 @@
 
 declare(strict_types=1);
 
-use NeuronAI\Agent\Agent;
-use NeuronAI\Chat\Messages\AssistantMessage;
-use NeuronAI\Providers\AIProviderInterface;
-use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Examples\ConfiguredAgent;
 use NeuronInteraction\Agent\AgentFactoryRegistry;
-use NeuronInteraction\Configuration\Configuration;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandArguments;
@@ -23,27 +18,15 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 $storage = new InMemoryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
-$configuration = $configurationStore->read('global')
-    ?? $configurationStore->create('global', ['agent' => 'demo', 'model' => 'local', 'capability' => 'search']);
+$configurationStore->read('agent')
+    ?? $configurationStore->create('agent', ['model' => 'local', 'capability' => 'search']);
 $agentFactoryRegistry = new AgentFactoryRegistry();
-// This local provider makes the example runnable without credentials or network.
-// Production factories can capture the application's provider clients instead.
-$providerFactory = static fn (string $model, string $capability): AIProviderInterface =>
-    new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
-$agentFactoryRegistry->register('demo', static function (Configuration $configuration) use ($providerFactory): Agent {
-    $model = $configuration->get('model');
-    $capability = $configuration->get('capability');
-    if (!is_string($model) || !is_string($capability)) {
-        throw new InvalidArgumentException('Model and capability must be strings.');
-    }
-
-    return (new ConfiguredAgent($providerFactory))->configure($model, $capability);
-});
+$agentFactoryRegistry->register('demo', ConfiguredAgent::class);
 
 $previousSession = $sessionStore->create();
 $previousSession->addMessage(new UserMessage('The previous conversation'));
 
-$agent = $agentFactoryRegistry->create($configuration);
+$agent = $agentFactoryRegistry->create('demo', $configurationStore);
 $agent->setChatHistory($previousSession);
 
 $commands = new Commands(new ClearCommand());

@@ -50,6 +50,7 @@ final class BackendAdapter implements CommandControlsAdapterInterface
         private readonly Closure $submitPrompt,
         private readonly AgentFactoryRegistry $agentFactoryRegistry = new AgentFactoryRegistry(),
         private readonly ConfigurationStore $configurationStore = new ConfigurationStore(new InMemoryStorage(), 'backend'),
+        private readonly string $agentIdentifier = 'demo',
     ) {
     }
 
@@ -112,9 +113,9 @@ final class BackendAdapter implements CommandControlsAdapterInterface
         return $this->sessionStore;
     }
 
-    public function agentFactoryRegistry(): AgentFactoryRegistry
+    public function createAgent(): Agent
     {
-        return $this->agentFactoryRegistry;
+        return $this->agentFactoryRegistry->create($this->agentIdentifier, $this->configurationStore);
     }
 
     public function configurationStore(): ConfigurationStore

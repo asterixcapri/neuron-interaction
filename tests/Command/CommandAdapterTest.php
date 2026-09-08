@@ -36,28 +36,24 @@ final class CommandAdapterTest extends TestCase
                 return 'Exercises the shared Command Adapter.';
             }
 
-            /** @param CommandControlsAdapterInterface<mixed> $adapter */
-            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $controls */
+            public function run(CommandControlsAdapterInterface $controls, CommandArguments $arguments): void
             {
-                $adapter->say($adapter->commands()->all()[0]->name());
-                $adapter->warn($arguments->text);
-                $configuration = $adapter->configurationStore()->read('global');
-                if ($configuration === null) {
-                    throw new \RuntimeException('Missing test configuration.');
-                }
-                $replacement = $adapter->agentFactoryRegistry()->create($configuration);
-                $replacement->setChatHistory($adapter->sessionStore()->create());
-                $adapter->useAgent($replacement);
-                $adapter->promptAgent('A generated Agent prompt.');
-                $adapter->requestSelection($this->selection);
-                $adapter->say('The request has returned.');
-                $adapter->stop();
+                $controls->say($controls->commands()->all()[0]->name());
+                $controls->warn($arguments->text);
+$replacement = $controls->createAgent();
+                $replacement->setChatHistory($controls->sessionStore()->create());
+                $controls->useAgent($replacement);
+                $controls->promptAgent('A generated Agent prompt.');
+                $controls->requestSelection($this->selection);
+                $controls->say('The request has returned.');
+                $controls->stop();
             }
         };
         $commands = new Commands([$command]);
         $adapter = new FakeCommandAdapter($commands);
         $adapter->configurationStore()->create('global', ['agent' => 'test']);
-        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => $replacement);
+        $adapter->factory = static fn (): Agent => $replacement;
         $execution = $commands->run('/inspect', new CommandArguments('A warning.'), $adapter);
 
         self::assertNotNull($execution);

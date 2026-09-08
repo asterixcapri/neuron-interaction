@@ -57,56 +57,78 @@ TUI, Neuron Interaction is already included as its dependency.
 
 ## Agent creation and replacement
 
-The Host Application registers Agent factories under stable identifiers and stores
-its general settings as the `global` Configuration. Factories receive a detached
-Configuration and construct fresh Agents with required dependencies, model settings
-and custom setters. They do not select or assign History.
+The Host Application registers Agent classes under stable identifiers. Each class
+extends Neuron AI's `Agent` and implements `ConfiguredAgentInterface`. Its static
+`createAgent(ConfigurationStore $configurationStore): static` method reads the
+application documents it needs and returns a fresh Agent ready to receive History.
+The library imposes no document names or configuration fields.
 
 ```php
 use NeuronAI\Agent\Agent;
+use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
+use NeuronInteraction\Agent\ConfiguredAgentInterface;
 use NeuronInteraction\Agent\AgentFactoryRegistry;
-use NeuronInteraction\Configuration\Configuration;
 use NeuronInteraction\Configuration\ConfigurationStore;
 
+final class MyAgent extends Agent implements ConfiguredAgentInterface
+{
+    public static function createAgent(ConfigurationStore $configurationStore): static
+    {
+        $model = $configurationStore->read('agent')?->get('model');
+        if (!is_string($model) || $model === '') {
+            throw new RuntimeException('A model is required.');
+        }
+        $agent = new static();
+        $agent->setAiProvider(new OpenAIResponses(
+            key: (string) getenv('OPENAI_API_KEY'),
+            model: $model,
+        ));
+
+        return $agent;
+    }
+}
+
 $configurationStore = new ConfigurationStore($storage, 'local-user');
-$configuration = $configurationStore->read('global')
-    ?? $configurationStore->create('global', ['agent' => 'assistant']);
+$configurationStore->read('agent')
+    ?? $configurationStore->create('agent', ['model' => 'gpt-5.4-nano']);
 $agentFactoryRegistry = new AgentFactoryRegistry();
-$agentFactoryRegistry->register('assistant', static function (Configuration $configuration): Agent {
-    return new Agent(); // Supply application dependencies and settings here.
-});
-$agent = $agentFactoryRegistry->create($configuration);
+$agentFactoryRegistry->register('assistant', MyAgent::class);
+$agent = $agentFactoryRegistry->create('assistant', $configurationStore);
 $agent->setChatHistory($sessionStore->create());
 ```
 
-Supply those same modules to the Adapter. Commands access them through
-`agentFactoryRegistry()` and `configurationStore()`. `ClearCommand` reads the
-current `global` Configuration, constructs an Agent, assigns a new Session and
-then activates it through `useAgent()`. It leaves the previous conversation and
-saved settings intact. Missing configuration, invalid or unregistered factory
-identifiers, construction errors and History errors follow normal Command failure
-handling; the previously active Agent remains active. A Session created before a
-History error is not rolled back.
+The identifier `assistant` and document `agent` above are application conventions.
+The registry rejects duplicate identifiers and classes that are not concrete Agents
+implementing the interface. It forwards the same user-scoped store to the selected
+class; there is no fallback to an arbitrary class name or constructor.
 
-`agent()` returns the active Agent; `useAgent($agent)` activates an already prepared
-Agent and presents its History. To preserve a conversation during replacement,
-explicitly assign its existing History to the candidate before activation.
-Factories must return a fresh Agent on every call; returning a cached Agent cannot
-safely change its thread. Duplicate factory identifiers are rejected, and there is
-no fallback to a class name or argument-free constructor.
+Adapters implement `createAgent(): Agent` using their selected identifier, registry
+and configuration store. Commands do not receive the registry. `ClearCommand`
+asks the controls for a fresh Agent, assigns a new Session, then activates it with
+`useAgent()`. `ResumeCommand` checks the selected Session before requesting a fresh
+Agent and assigning that Session. Opening a selection constructs nothing; the
+follow-up checks availability and reads current settings again.
 
-`ResumeCommand` checks the selected Session first, then reads the latest saved
-`global` Configuration and prepares a fresh Agent with that History. Opening its
-selection does not construct an Agent; the follow-up rereads availability and
-settings. Resume uses current settings, not a historical configuration snapshot.
+`agent()` returns the active Agent. `useAgent($agent)` activates the prepared
+instance and presents its History. To preserve a conversation during replacement,
+assign the current History to the new Agent before activation. Construction or
+History assignment errors leave the previous Agent active. A Session created
+before a History error can remain stored. Neuron 4 cannot rebind a started Agent
+to another thread, so creation must return a fresh instance each time.
 
-Migration: replace `CommandAdapterInterface` with `CommandControlsAdapterInterface`
-and remove `newAgent()` implementations. Supply a registered reproducible factory
-and ConfigurationStore instead. Save runtime choices that should survive Clear,
-Resume and application restart; arbitrary instance mutations are not recovered.
+`Configuration` remains a JSON-compatible document with a key and user identity.
+`ConfigurationStore` provides `create`, `read`, `write` and `delete`. Editing a
+read document does not persist it until `write($configuration)` is called.
+For configuration-changing commands, write the new values before `createAgent()`
+so the factory reads them. There is no automatic rollback if creation later fails;
+the previous Agent remains active while the new settings remain saved.
 
-A Session's storage key is also its Neuron thread ID, preserved when reopening it.
-Neuron 4 does not allow rebinding an Agent to a different thread.
+Migration: replace `CommandAdapterInterface` with `CommandControlsAdapterInterface`,
+replace `newAgent()` or `agentFactoryRegistry()` with `createAgent()`, register
+Agent class names instead of closures, and rename configuration `save()` calls to
+`write()`. `configurationStore()` remains available for application commands.
+Durable choices must be saved explicitly; arbitrary instance mutations are not
+recovered by Clear or Resume.
 
 ## SessionStore and Storage
 
@@ -126,7 +148,7 @@ foreach ($sessionStore->summaries() as $session) {
     // Resume a chosen Session on a fresh, configured Agent:
     // $history = $sessionStore->read($session->key);
     // if ($history !== null) {
-    //     $next = $agentFactoryRegistry->create($configuration);
+    //     $next = $agentFactoryRegistry->create('assistant', $configurationStore);
     //     $next->setChatHistory($history);
     //     $agent = $next;
     // }
@@ -237,8 +259,8 @@ $commands = new Commands([
     new LeaveCommand(),
 ]);
 
-// $adapter connects the Commands to your application.
-$output = $commands->run('/resume', new CommandArguments(), $adapter);
+// $controls connects the Commands to your application.
+$output = $commands->run('/resume', new CommandArguments(), $controls);
 ```
 
 The Adapter decides how to display messages, offer choices and end the
@@ -248,7 +270,7 @@ return response data. The Commands work with either.
 To reopen a known Session, pass its key as the arguments:
 
 ```php
-$output = $commands->run('/resume', new CommandArguments($sessionKey), $adapter);
+$output = $commands->run('/resume', new CommandArguments($sessionKey), $controls);
 ```
 
 ### Write a Command
@@ -271,9 +293,9 @@ final class HelloCommand implements CommandInterface
         return 'Say hello.';
     }
 
-    public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
+    public function run(CommandControlsAdapterInterface $controls, CommandArguments $arguments): void
     {
-        $adapter->say('Hello!');
+        $controls->say('Hello!');
     }
 }
 

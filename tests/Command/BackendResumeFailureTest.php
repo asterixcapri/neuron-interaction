@@ -45,19 +45,11 @@ final class BackendResumeFailureTest extends TestCase
         if ($failure !== 'missing configuration') {
             $configurations->create('global', ['agent' => 'configured']);
         }
-        if ($failure === 'factory') {
-            $agentFactoryRegistry->register('configured', static function (): Agent {
-                throw new RuntimeException('Factory dependency unavailable.');
-            });
+        if ($failure !== 'unknown factory') {
+            $agentFactoryRegistry->register('configured', ResumeFailureAgent::class);
         }
-        if ($failure === 'history') {
-            $agentFactoryRegistry->register('configured', static fn (): Agent => new class extends Agent {
-                public function setChatHistory(ChatHistoryInterface $chatHistory): self
-                {
-                    throw new RuntimeException('History assignment failed.');
-                }
-            });
-        }
+        ResumeFailureAgent::$failure = $failure;
+        ResumeFailureAgent::$constructions = 0;
 
         $response = $commands->run('/resume', new CommandArguments($selected->getKey()), $adapter);
 
@@ -77,7 +69,7 @@ final class BackendResumeFailureTest extends TestCase
     /** @return Generator<string, array{string, string}> */
     public static function preparationFailures(): Generator
     {
-        yield 'missing configuration' => ['missing configuration', 'General configuration "global" is missing.'];
+        yield 'missing configuration' => ['missing configuration', 'Application configuration is missing.'];
         yield 'unknown factory' => ['unknown factory', 'Unknown Agent factory: configured'];
         yield 'factory exception' => ['factory', 'Factory dependency unavailable.'];
         yield 'History assignment exception' => ['history', 'History assignment failed.'];
@@ -92,12 +84,10 @@ final class BackendResumeFailureTest extends TestCase
         if ($configured) {
             $configurations->create('global', ['agent' => 'configured']);
         }
-        $constructions = 0;
         $agentFactoryRegistry = new AgentFactoryRegistry();
-        $agentFactoryRegistry->register('configured', static function () use (&$constructions): Agent {
-            ++$constructions;
-            throw new RuntimeException('Factory must not run.');
-        });
+        ResumeFailureAgent::$constructions = 0;
+        ResumeFailureAgent::$failure = 'factory';
+        $agentFactoryRegistry->register('configured', ResumeFailureAgent::class);
         $key = $foreign ? (new SessionStore($storage, 'someone-else'))->create()->getKey() : 'missing';
         $original = $this->answeringAgent();
         $commands = new Commands(new ResumeCommand());
@@ -109,7 +99,7 @@ final class BackendResumeFailureTest extends TestCase
         self::assertSame('completed', $response['status']);
         self::assertNull($response['error']);
         self::assertSame(['No Session is named by that key.'], $response['warnings']);
-        self::assertSame(0, $constructions);
+        self::assertSame(0, ResumeFailureAgent::$constructions);
         self::assertSame($original, $adapter->agent());
     }
 
@@ -130,11 +120,9 @@ final class BackendResumeFailureTest extends TestCase
         $selected->addMessage(new UserMessage('Choice to remove'));
         $configurations = new ConfigurationStore($storage, 'owner');
         $agentFactoryRegistry = new AgentFactoryRegistry();
-        $constructions = 0;
-        $agentFactoryRegistry->register('configured', static function () use (&$constructions): Agent {
-            ++$constructions;
-            throw new RuntimeException('Factory must not run.');
-        });
+        ResumeFailureAgent::$constructions = 0;
+        ResumeFailureAgent::$failure = 'factory';
+        $agentFactoryRegistry->register('configured', ResumeFailureAgent::class);
         $original = $this->answeringAgent();
         $commands = new Commands(new ResumeCommand());
         $first = $commands->run('/resume', new CommandArguments(), $this->adapter(
@@ -146,7 +134,7 @@ final class BackendResumeFailureTest extends TestCase
         self::assertNotNull($first['selection']);
         self::assertCount(1, $first['selection']->options);
         self::assertSame($selected->getKey(), $first['selection']->options[0]->value);
-        self::assertSame(0, $constructions);
+        self::assertSame(0, ResumeFailureAgent::$constructions);
 
         $storage->delete('sessions', $selected->getKey());
         $configurations->create('global', ['agent' => 'configured']);
@@ -157,7 +145,7 @@ final class BackendResumeFailureTest extends TestCase
         self::assertSame('completed', $second['status']);
         self::assertSame(['No Session is named by that key.'], $second['warnings']);
         self::assertNull($second['selection']);
-        self::assertSame(0, $constructions);
+        self::assertSame(0, ResumeFailureAgent::$constructions);
         self::assertSame($original, $adapter->agent());
     }
 
@@ -180,6 +168,29 @@ final class BackendResumeFailureTest extends TestCase
     ): BackendAdapter {
         return new BackendAdapter($agent, $commands, $sessions, static function (Agent $answering, string $prompt): void {
             $answering->chat(new UserMessage($prompt));
-        }, $agentFactoryRegistry, $configurations);
+        }, $agentFactoryRegistry, $configurations, 'configured');
+    }
+}
+
+final class ResumeFailureAgent extends Agent implements \NeuronInteraction\Agent\ConfiguredAgentInterface
+{
+    public static string $failure = '';
+    public static int $constructions = 0;
+
+    public static function createAgent(ConfigurationStore $configurationStore): static
+    {
+        ++self::$constructions;
+        if ($configurationStore->read('global') === null) {
+            throw new RuntimeException('Application configuration is missing.');
+        }
+        if (self::$failure === 'factory') {
+            throw new RuntimeException('Factory dependency unavailable.');
+        }
+        return new static();
+    }
+
+    public function setChatHistory(ChatHistoryInterface $chatHistory): self
+    {
+        throw new RuntimeException('History assignment failed.');
     }
 }

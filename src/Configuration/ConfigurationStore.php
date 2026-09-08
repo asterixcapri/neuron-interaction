@@ -40,7 +40,7 @@ final class ConfigurationStore
         return new Configuration($key, $this->userId, $document->data);
     }
 
-    public function save(Configuration $configuration): void
+    public function write(Configuration $configuration): void
     {
         $this->storage->write(
             self::NAMESPACE,

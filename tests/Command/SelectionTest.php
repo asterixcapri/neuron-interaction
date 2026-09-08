@@ -38,17 +38,17 @@ final class SelectionTest extends TestCase
                 return 'Select a value.';
             }
 
-            /** @param CommandControlsAdapterInterface<mixed> $adapter */
-            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $controls */
+            public function run(CommandControlsAdapterInterface $controls, CommandArguments $arguments): void
             {
                 if ($arguments->text === '') {
-                    $adapter->requestSelection($this->request);
-                    $adapter->say('First invocation finished.');
+                    $controls->requestSelection($this->request);
+                    $controls->say('First invocation finished.');
 
                     return;
                 }
 
-                $adapter->say($arguments->text);
+                $controls->say($arguments->text);
             }
         };
         $commands = new Commands([$command]);
@@ -82,7 +82,7 @@ final class SelectionTest extends TestCase
         $commands = new Commands([new ResumeCommand('/return')]);
         $adapter = new FakeCommandAdapter($commands);
         $adapter->configurationStore()->create('global', ['agent' => 'test']);
-        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => new Agent());
+        $adapter->factory = static fn (): Agent => new Agent();
         $stored = $adapter->sessionStore()->create();
         $stored->addMessage(new UserMessage('Stored subject'));
         $active = $adapter->sessionStore()->create();
@@ -114,7 +114,7 @@ final class SelectionTest extends TestCase
         $commands = new Commands([new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
         $adapter->configurationStore()->create('global', ['agent' => 'test']);
-        $adapter->agentFactoryRegistry()->register('test', static fn (): Agent => new Agent());
+        $adapter->factory = static fn (): Agent => new Agent();
         $adapter->sessionStore()->create()->addMessage(new UserMessage('Direct resume'));
         $key = $adapter->sessionStore()->summaries()[0]->key;
 

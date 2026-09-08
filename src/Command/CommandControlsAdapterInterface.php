@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Agent\AgentFactoryRegistry;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Session\SessionStore;
 
@@ -42,7 +41,8 @@ interface CommandControlsAdapterInterface
 
     public function sessionStore(): SessionStore;
 
-    public function agentFactoryRegistry(): AgentFactoryRegistry;
+    /** Construct a fresh Agent using the current application settings. */
+    public function createAgent(): Agent;
 
     public function configurationStore(): ConfigurationStore;
 

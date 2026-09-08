@@ -4,43 +4,39 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Agent;
 
-use Closure;
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Configuration\Configuration;
+use NeuronInteraction\Configuration\ConfigurationStore;
+use ReflectionClass;
 
-/** Application-owned construction; factories must return fresh, unstarted Agents. */
+/** Application-owned construction; registered classes create fresh, unstarted Agents. */
 final class AgentFactoryRegistry
 {
-    /** @var array<string, Closure(Configuration): Agent> */
-    private array $factories = [];
+    /** @var array<string, class-string<Agent&ConfiguredAgentInterface>> */
+    private array $agentClasses = [];
 
-    /** @param Closure(Configuration): Agent $factory */
-    public function register(string $identifier, Closure $factory): void
+    public function register(string $identifier, string $agentClass): void
     {
         if (trim($identifier) === '') {
             throw new InvalidArgumentException('Agent factory identifier must be a non-empty string.');
         }
-        if (isset($this->factories[$identifier])) {
+        if (isset($this->agentClasses[$identifier])) {
             throw new InvalidArgumentException('Agent factory already registered: ' . $identifier);
         }
+        if (!is_a($agentClass, Agent::class, true)
+            || !is_a($agentClass, ConfiguredAgentInterface::class, true)
+            || (new ReflectionClass($agentClass))->isAbstract()) {
+            throw new InvalidArgumentException('Registered class must be a concrete Agent implementing ConfiguredAgentInterface: ' . $agentClass);
+        }
 
-        $this->factories[$identifier] = $factory;
+        $this->agentClasses[$identifier] = $agentClass;
     }
 
-    public function create(Configuration $configuration): Agent
+    public function create(string $identifier, ConfigurationStore $configurationStore): Agent
     {
-        $identifier = $configuration->get('agent');
-        if (!is_string($identifier) || trim($identifier) === '') {
-            throw new InvalidArgumentException('Configuration agent must be a non-empty factory identifier.');
-        }
-        $factory = $this->factories[$identifier]
+        $agentClass = $this->agentClasses[$identifier]
             ?? throw new InvalidArgumentException('Unknown Agent factory: ' . $identifier);
 
-        return $factory(new Configuration(
-            $configuration->getKey(),
-            $configuration->getUserId(),
-            $configuration->all(),
-        ));
+        return $agentClass::createAgent($configurationStore);
     }
 }

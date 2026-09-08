@@ -5,10 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use Generator;
-use InvalidArgumentException;
 use NeuronAI\Chat\Messages\AssistantMessage;
-use NeuronAI\Providers\AIProviderInterface;
-use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Agent\AgentFactoryRegistry;
 use NeuronInteraction\Configuration\Configuration;
 use NeuronInteraction\Configuration\ConfigurationStore;
@@ -41,24 +38,12 @@ final class BackendExampleTest extends TestCase
         $storage = new InMemoryStorage();
         $sessions = new SessionStore($storage, 'backend-user');
         $configurations = new ConfigurationStore($storage, 'backend-user');
-        $configuration = $configurations->create('global', [
-            'agent' => 'configured', 'model' => 'initial-model', 'capability' => 'search',
+        $configuration = $configurations->create('agent', [
+            'model' => 'initial-model', 'capability' => 'search',
         ]);
         $agentFactoryRegistry = new AgentFactoryRegistry();
-        $dependency = static fn (string $model, string $capability): AIProviderInterface =>
-            new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
-        $agentFactoryRegistry->register('configured', static function (Configuration $configuration) use ($dependency): Agent {
-            $model = $configuration->get('model');
-            $capability = $configuration->get('capability');
-            if (!is_string($model) || !is_string($capability)) {
-                throw new InvalidArgumentException('Model and capability must be strings.');
-            }
-            $agent = new ConfiguredAgent($dependency);
-            $agent->configure($model, $capability);
-
-            return $agent;
-        });
-        $original = $agentFactoryRegistry->create($configuration);
+        $agentFactoryRegistry->register('configured', ConfiguredAgent::class);
+        $original = $agentFactoryRegistry->create('configured', $configurations);
         $previous = $sessions->create();
         $original->setChatHistory($previous);
         $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
@@ -67,14 +52,14 @@ final class BackendExampleTest extends TestCase
             static function (Agent $agent, string $prompt): void {
                 $agent->chat(new UserMessage($prompt));
             },
-            $agentFactoryRegistry, $configurations,
+            $agentFactoryRegistry, $configurations, 'configured',
         );
         $adapter->promptAgent('First turn');
         self::assertSame('initial-model:search', $previous->getMessages()[1]->getContent());
 
         $configuration->set('model', 'current-model');
         $configuration->set('capability', 'research');
-        $configurations->save($configuration);
+        $configurations->write($configuration);
         $response = $commands->run('/clear', new CommandArguments(), $adapter);
 
         self::assertNotNull($response);
@@ -83,14 +68,13 @@ final class BackendExampleTest extends TestCase
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
         self::assertNotSame($original->getThreadId(), $adapter->agent()->getThreadId());
         self::assertSame([], $adapter->agent()->getChatHistory()->getMessages());
-        self::assertSame($agentFactoryRegistry, $adapter->agentFactoryRegistry());
         self::assertSame($configurations, $adapter->configurationStore());
 
         $adapter->promptAgent('Second turn');
         self::assertSame('current-model:research', $adapter->agent()->getChatHistory()->getMessages()[1]->getContent());
         self::assertSame('initial-model:search', $sessions->read($previous->getKey())?->getMessages()[1]->getContent());
         self::assertCount(2, $sessions->summaries());
-        self::assertSame($configuration->all(), $configurations->read('global')?->all());
+        self::assertSame($configuration->all(), $configurations->read('agent')?->all());
 
         $clearedAgent = $adapter->agent();
         $clearedHistory = $clearedAgent->getChatHistory();
@@ -111,13 +95,13 @@ final class BackendExampleTest extends TestCase
         // Settings are saved while the client is presenting the selection.
         $configuration->set('model', 'latest-model');
         $configuration->set('capability', 'summarize');
-        $configurations->save($configuration);
+        $configurations->write($configuration);
         $followUp = new BackendAdapter(
             $clearedAgent, $commands, $sessions,
             static function (Agent $agent, string $prompt): void {
                 $agent->chat(new UserMessage($prompt));
             },
-            $agentFactoryRegistry, $configurations,
+            $agentFactoryRegistry, $configurations, 'configured',
         );
         $resumed = $commands->run($request->command, new CommandArguments($chosen), $followUp);
         self::assertNotNull($resumed);
@@ -131,7 +115,7 @@ final class BackendExampleTest extends TestCase
         self::assertSame('latest-model:summarize', $followUp->agent()->getChatHistory()->getMessages()[3]->getContent());
         self::assertSame('current-model:research', $clearedHistory->getMessages()[1]->getContent());
         self::assertCount(2, $sessions->summaries());
-        self::assertSame($configuration->all(), $configurations->read('global')?->all());
+        self::assertSame($configuration->all(), $configurations->read('agent')?->all());
 
     }
 
@@ -142,8 +126,8 @@ final class BackendExampleTest extends TestCase
         try {
             $storage = new FileStorage($directory);
             $savedConfigurations = new ConfigurationStore($storage, 'backend-user');
-            $savedConfigurations->create('global', [
-                'agent' => 'configured', 'model' => 'saved-model', 'capability' => 'research',
+            $savedConfigurations->create('agent', [
+                'model' => 'saved-model', 'capability' => 'research',
             ]);
             $savedSession = (new SessionStore($storage, 'backend-user'))->create();
             $savedSession->addMessage(new UserMessage('Earlier conversation'));
@@ -152,23 +136,13 @@ final class BackendExampleTest extends TestCase
             $reopenedStorage = new FileStorage($directory);
             $configurations = new ConfigurationStore($reopenedStorage, 'backend-user');
             $sessions = new SessionStore($reopenedStorage, 'backend-user');
-            $configuration = $configurations->read('global');
+            $configuration = $configurations->read('agent');
             $session = $sessions->read($savedSession->getKey());
             self::assertNotNull($configuration);
             self::assertNotNull($session);
             $agentFactoryRegistry = new AgentFactoryRegistry();
-            $providerFactory = static fn (string $model, string $capability): AIProviderInterface =>
-                new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
-            $agentFactoryRegistry->register('configured', static function (Configuration $configuration) use ($providerFactory): Agent {
-                $model = $configuration->get('model');
-                $capability = $configuration->get('capability');
-                if (!is_string($model) || !is_string($capability)) {
-                    throw new InvalidArgumentException('Model and capability must be strings.');
-                }
-
-                return (new ConfiguredAgent($providerFactory))->configure($model, $capability);
-            });
-            $initial = $agentFactoryRegistry->create($configuration);
+                $agentFactoryRegistry->register('configured', ConfiguredAgent::class);
+            $initial = $agentFactoryRegistry->create('configured', $configurations);
             $initial->setChatHistory($session);
             $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
             $adapter = new BackendAdapter(
@@ -176,7 +150,7 @@ final class BackendExampleTest extends TestCase
                 static function (Agent $agent, string $prompt): void {
                     $agent->chat(new UserMessage($prompt));
                 },
-                $agentFactoryRegistry, $configurations,
+                $agentFactoryRegistry, $configurations, 'configured',
             );
             $adapter->promptAgent('First turn after restart');
             self::assertSame('saved-model:research', $session->getMessages()[3]->getContent());
@@ -195,7 +169,7 @@ final class BackendExampleTest extends TestCase
             self::assertSame($initial->getThreadId(), $adapter->agent()->getThreadId());
             $adapter->promptAgent('Continue earlier conversation');
             self::assertSame('saved-model:research', $adapter->agent()->getChatHistory()->getMessages()[5]->getContent());
-            self::assertSame($configuration->all(), $savedConfigurations->read('global')?->all());
+            self::assertSame($configuration->all(), $savedConfigurations->read('agent')?->all());
             self::assertSame('saved-model:research', $sessions->read($session->getKey())?->getMessages()[5]->getContent());
         } finally {
             foreach (glob($directory . '/*/*') ?: [] as $path) {
@@ -261,20 +235,20 @@ final class BackendExampleTest extends TestCase
                 return 'Prompt the Agent with a chosen value.';
             }
 
-            /** @param CommandControlsAdapterInterface<mixed> $adapter */
-            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $controls */
+            public function run(CommandControlsAdapterInterface $controls, CommandArguments $arguments): void
             {
                 if ($arguments->text === '') {
-                    $adapter->requestSelection(new SelectionRequest('/choose', 'Choose a value', [
+                    $controls->requestSelection(new SelectionRequest('/choose', 'Choose a value', [
                         new SelectionOption(" 007\n ", 'Visible label'),
                     ]));
-                    $adapter->say('The selection request has returned.');
+                    $controls->say('The selection request has returned.');
 
                     return;
                 }
 
-                $adapter->promptAgent($arguments->text);
-                $adapter->warn('A response may still be pending.');
+                $controls->promptAgent($arguments->text);
+                $controls->warn('A response may still be pending.');
             }
         };
         $commands = new Commands($command);
@@ -335,16 +309,16 @@ final class BackendExampleTest extends TestCase
                 return 'Replace the Agent and choose another History.';
             }
 
-            /** @param CommandControlsAdapterInterface<mixed> $adapter */
-            public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
+            /** @param CommandControlsAdapterInterface<mixed> $controls */
+            public function run(CommandControlsAdapterInterface $controls, CommandArguments $arguments): void
             {
-                $session = $adapter->sessionStore()->create();
+                $session = $controls->sessionStore()->create();
                 $this->replacement->setChatHistory($session);
-                $adapter->useAgent($this->replacement);
-                TestCase::assertSame($this->replacement, $adapter->agent());
-                TestCase::assertSame($session, $adapter->agent()->getChatHistory());
-                $adapter->promptAgent('A generated prompt for the replacement.');
-                $adapter->say($adapter->commands()->all()[0]->name());
+                $controls->useAgent($this->replacement);
+                TestCase::assertSame($this->replacement, $controls->agent());
+                TestCase::assertSame($session, $controls->agent()->getChatHistory());
+                $controls->promptAgent('A generated prompt for the replacement.');
+                $controls->say($controls->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');
             }
         };

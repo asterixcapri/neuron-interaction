@@ -7,95 +7,119 @@ namespace NeuronInteraction\Tests\Agent;
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronInteraction\Agent\AgentFactoryRegistry;
-use NeuronInteraction\Configuration\Configuration;
+use NeuronInteraction\Agent\ConfiguredAgentInterface;
+use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use TypeError;
 
 final class AgentFactoryRegistryTest extends TestCase
 {
-    public function testSelectsExactlyTheRegisteredFactoryAndDetachesConfiguration(): void
+    public function testSelectedClassReadsApplicationDocumentsAndCreatesFreshAgents(): void
     {
         $registry = new AgentFactoryRegistry();
-        $configuration = new Configuration('global', 'owner', ['agent' => 'chosen', 'model' => 'first']);
-        $registry->register('other', static function (): Agent {
-            throw new RuntimeException('Wrong factory');
-        });
-        $registry->register('chosen', static function (Configuration $copy) use ($configuration): Agent {
-            self::assertNotSame($configuration, $copy);
-            self::assertSame('global', $copy->getKey());
-            self::assertSame('owner', $copy->getUserId());
-            $copy->set('model', 'changed');
-            return new Agent();
-        });
+        $store = new ConfigurationStore(new InMemoryStorage(), 'owner');
+        $store->create('preferences', ['language' => 'it']);
+        $store->create('provider', ['model' => 'first']);
+        $registry->register('chosen', RegistryAgent::class);
+        $registry->register('other', BrokenRegistryAgent::class);
 
-        self::assertNotSame($registry->create($configuration), $registry->create($configuration));
-        self::assertSame('first', $configuration->get('model'));
+        $first = $registry->create('chosen', $store);
+        self::assertInstanceOf(RegistryAgent::class, $first);
+        self::assertSame($store, $first->store);
+        self::assertSame('it:first', $first->settings);
+        $configuration = $store->read('provider');
+        self::assertNotNull($configuration);
+        $configuration->set('model', 'second');
+        $store->write($configuration);
+        $second = $registry->create('chosen', $store);
+        self::assertInstanceOf(RegistryAgent::class, $second);
+        self::assertNotSame($first, $second);
+        self::assertSame('it:second', $second->settings);
     }
 
-    public function testRejectsDuplicateRegistrationWithoutReplacingFactory(): void
+    public function testDuplicateDoesNotReplaceRegisteredClass(): void
     {
         $registry = new AgentFactoryRegistry();
-        $agent = new Agent();
-        $registry->register('chosen', static fn (): Agent => $agent);
+        $registry->register('chosen', RegistryAgent::class);
         try {
-            $registry->register('chosen', static fn (): Agent => new Agent());
-            self::fail('Duplicate registration accepted.');
+            $registry->register('chosen', BrokenRegistryAgent::class);
+            self::fail('Duplicate accepted.');
         } catch (InvalidArgumentException $exception) {
             self::assertStringContainsString('already registered', $exception->getMessage());
         }
-        self::assertSame($agent, $registry->create(new Configuration('global', 'owner', ['agent' => 'chosen'])));
+        self::assertInstanceOf(RegistryAgent::class, $registry->create('chosen', new ConfigurationStore(new InMemoryStorage(), 'owner')));
     }
 
-    #[DataProvider('emptyIdentifiers')]
-    public function testRejectsEmptyRegistration(string $identifier): void
+    /** @return iterable<string, array{string, string}> */
+    public static function invalidRegistrations(): iterable
+    {
+        yield 'empty identifier' => ['', RegistryAgent::class];
+        yield 'blank identifier' => ['  ', RegistryAgent::class];
+        yield 'missing class' => ['test', 'MissingAgentClass'];
+        yield 'ordinary agent' => ['test', Agent::class];
+        yield 'only interface' => ['test', OnlyConfigured::class];
+        yield 'abstract agent' => ['test', AbstractConfiguredAgent::class];
+    }
+
+    #[DataProvider('invalidRegistrations')]
+    public function testInvalidRegistrationFailsImmediately(string $identifier, string $agentClass): void
     {
         $this->expectException(InvalidArgumentException::class);
-        (new AgentFactoryRegistry())->register($identifier, static fn (): Agent => new Agent());
+        // Deliberately invalid caller exercises runtime validation.
+        (new AgentFactoryRegistry())->register($identifier, $agentClass);
     }
 
-    /** @return iterable<string, array{string}> */
-    public static function emptyIdentifiers(): iterable
-    {
-        yield 'empty' => [''];
-        yield 'whitespace' => ['  '];
-    }
-
-    #[DataProvider('invalidConfigurations')]
-    public function testRejectsMissingInvalidAndUnknownSelection(Configuration $configuration): void
+    public function testUnknownIdentifierFails(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        (new AgentFactoryRegistry())->create($configuration);
+        (new AgentFactoryRegistry())->create('unknown', new ConfigurationStore(new InMemoryStorage(), 'owner'));
     }
 
-    /** @return iterable<string, array{Configuration}> */
-    public static function invalidConfigurations(): iterable
+    public function testCreationExceptionPropagatesUnchanged(): void
     {
-        yield 'missing' => [new Configuration('global', 'owner')];
-        foreach ([null, '', '  ', 42, false, [], 'unknown', Agent::class] as $index => $identifier) {
-            yield 'value ' . $index => [new Configuration('global', 'owner', ['agent' => $identifier])];
-        }
-    }
-
-    public function testPreservesFactoryException(): void
-    {
-        $failure = new RuntimeException('Application configuration is invalid.');
         $registry = new AgentFactoryRegistry();
-        $registry->register('broken', static function () use ($failure): Agent {
-            throw $failure;
-        });
+        $registry->register('broken', BrokenRegistryAgent::class);
+        $failure = new RuntimeException('Missing provider.');
+        BrokenRegistryAgent::$failure = $failure;
         $this->expectExceptionObject($failure);
-        $registry->create(new Configuration('global', 'owner', ['agent' => 'broken']));
-    }
-
-    public function testEnforcesAgentReturnContract(): void
-    {
-        $registry = new AgentFactoryRegistry();
-        // Deliberately invalid application code exercises the runtime contract.
-        // @phpstan-ignore argument.type
-        $registry->register('broken', static fn (): string => 'not an Agent');
-        $this->expectException(TypeError::class);
-        $registry->create(new Configuration('global', 'owner', ['agent' => 'broken']));
+        $registry->create('broken', new ConfigurationStore(new InMemoryStorage(), 'owner'));
     }
 }
+
+final class RegistryAgent extends Agent implements ConfiguredAgentInterface
+{
+    public ConfigurationStore $store;
+    public string $settings;
+
+    public static function createAgent(ConfigurationStore $configurationStore): static
+    {
+        $agent = new static();
+        $agent->store = $configurationStore;
+        $language = $configurationStore->read('preferences')?->get('language', '');
+        $model = $configurationStore->read('provider')?->get('model', '');
+        $agent->settings = (is_string($language) ? $language : '') . ':' . (is_string($model) ? $model : '');
+        return $agent;
+    }
+}
+
+final class BrokenRegistryAgent extends Agent implements ConfiguredAgentInterface
+{
+    public static RuntimeException $failure;
+
+    public static function createAgent(ConfigurationStore $configurationStore): static
+    {
+        throw self::$failure;
+    }
+}
+
+final class OnlyConfigured implements ConfiguredAgentInterface
+{
+    public static function createAgent(ConfigurationStore $configurationStore): static
+    {
+        return new static();
+    }
+}
+
+abstract class AbstractConfiguredAgent extends Agent implements ConfiguredAgentInterface {}

@@ -22,7 +22,7 @@ $configuration = $configurationStore->read('default')
 
 $configuration->set('model', 'another-model');
 // Related changes stay in memory until this explicit save. Provider and tools remain.
-$configurationStore->save($configuration);
+$configurationStore->write($configuration);
 
 // The host may now use these values to construct its Agent.
 echo json_encode($configuration->all(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;

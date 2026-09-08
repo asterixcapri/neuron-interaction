@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use DateTimeImmutable;
-use RuntimeException;
 use NeuronInteraction\Formatting\RelativeTimeFormatter;
 use NeuronInteraction\Formatting\SizeFormatter;
 use NeuronInteraction\Session\SessionSummary;
@@ -36,31 +35,29 @@ final readonly class ResumeCommand implements CommandInterface
         return 'Lets you choose a stored Session to resume.';
     }
 
-    /** @param CommandControlsAdapterInterface<mixed> $adapter */
-    public function run(CommandControlsAdapterInterface $adapter, CommandArguments $arguments): void
+    /** @param CommandControlsAdapterInterface<mixed> $controls */
+    public function run(CommandControlsAdapterInterface $controls, CommandArguments $arguments): void
     {
         if ($arguments->text !== '') {
-            $session = $adapter->sessionStore()->read($arguments->text);
+            $session = $controls->sessionStore()->read($arguments->text);
 
             if ($session === null) {
-                $adapter->warn('No Session is named by that key.');
+                $controls->warn('No Session is named by that key.');
 
                 return;
             }
 
-            $configuration = $adapter->configurationStore()->read('global')
-                ?? throw new RuntimeException('General configuration "global" is missing.');
-            $agent = $adapter->agentFactoryRegistry()->create($configuration);
+            $agent = $controls->createAgent();
             $agent->setChatHistory($session);
-            $adapter->useAgent($agent);
+            $controls->useAgent($agent);
 
             return;
         }
 
-        $sessions = $adapter->sessionStore()->summaries();
+        $sessions = $controls->sessionStore()->summaries();
 
         if ($sessions === []) {
-            $adapter->warn('There is no earlier Session to return to yet.');
+            $controls->warn('There is no earlier Session to return to yet.');
 
             return;
         }
@@ -76,7 +73,7 @@ final readonly class ResumeCommand implements CommandInterface
             );
         }
 
-        $adapter->requestSelection(new SelectionRequest($this->name(), 'Sessions', $options));
+        $controls->requestSelection(new SelectionRequest($this->name(), 'Sessions', $options));
     }
 
     private function formatDescription(

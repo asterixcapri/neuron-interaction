@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Agent\AgentFactoryRegistry;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Command\CommandControlsAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
@@ -32,13 +31,17 @@ class FakeCommandAdapter implements CommandControlsAdapterInterface
 
     public bool $stopped = false;
 
+    /** @var \Closure(): Agent */
+    public \Closure $factory;
+
+
     public function __construct(
         public Commands $mounted = new Commands(),
         private Agent $answering = new Agent(),
         private SessionStore $collection = new SessionStore(new InMemoryStorage(), 'local-user'),
-        private AgentFactoryRegistry $registry = new AgentFactoryRegistry(),
         private ConfigurationStore $configurations = new ConfigurationStore(new InMemoryStorage(), 'local-user'),
     ) {
+        $this->factory = static fn (): Agent => new Agent();
     }
 
     public function admit(CommandInterface $command): bool
@@ -91,9 +94,9 @@ class FakeCommandAdapter implements CommandControlsAdapterInterface
         return $this->collection;
     }
 
-    public function agentFactoryRegistry(): AgentFactoryRegistry
+    public function createAgent(): Agent
     {
-        return $this->registry;
+        return ($this->factory)();
     }
 
     public function configurationStore(): ConfigurationStore

@@ -19,7 +19,7 @@ $configuration = $store->read('default')
 $configuration->set('model', 'another-model');
 $configuration->set('temperature', 0.5);
 $configuration->remove('obsoleteOption');
-$store->save($configuration);
+$store->write($configuration);
 ```
 
 Creation immediately persists the initial values. Creating an existing key for
@@ -30,9 +30,9 @@ A missing read returns `null`. `delete($key)` removes that user's configuration
 if present. `getKey()` and `getUserId()` expose its key and owner.
 
 `set()` and `remove()` affect memory only. A new read sees the previous values
-until `save($configuration)` persists all changes together. Updating one option
+until `write($configuration)` persists all changes together. Updating one option
 preserves unrelated options. The supported flow is to create or read through a
-Store and save through that same Store.
+Store and write through that same Store.
 
 `has($name)` distinguishes a present null value from an absent value.
 `get($name, $default)` returns the default only when the value is absent.
@@ -48,18 +48,19 @@ Run `php examples/configuration.php` for a file-backed example.
 
 ## Reproducible Agent choices
 
-Shared Clear and Resume Commands read the `global` document and select a registered
-factory using its `agent` field. This convention leaves other ConfigurationStore
-keys available to the Host Application. Create `global` with explicit defaults only
-when absent; restarting should read the existing values.
+Agent creation is owned by application classes implementing
+`ConfiguredAgentInterface::createAgent(ConfigurationStore $configurationStore): static`.
+The registry receives an explicit identifier and forwards the same user-scoped store
+to the selected class. The library imposes no document key or selector field.
 
-The factory receives a detached Configuration and interprets application fields,
-such as `model` or `searchEnabled`. Keep live clients and tools in the factory's
-captured dependencies, outside persisted configuration. Saving a choice makes it
-available to later construction; changing a setter on the live Agent alone does not.
+The method may read several documents and interpret application fields such as
+`model` or `searchEnabled`. Live provider clients and tools are constructed by the
+application code and are never serialized into Configuration. Writing a choice
+makes it available to later construction; changing a setter on the active Agent
+alone does not.
 
-A model-changing Command can read fresh settings, change only `model`, construct
-through AgentFactoryRegistry and assign the current History. Save after successful
-preparation and before activation through `useAgent()`. If preparation or saving
-throws, do not activate the candidate. Storage and activation are not transactional;
-a Storage that writes before throwing cannot promise rollback.
+A model-changing Command reads fresh settings, changes only `model`, writes the
+document, then asks `$controls->createAgent()` for a replacement. It assigns the
+current History before activating through `useAgent()`. If creation or History
+assignment fails, the old Agent stays active and the newly written configuration
+remains saved. There is no automatic rollback.
