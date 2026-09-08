@@ -44,10 +44,10 @@ final class BackendExampleTest extends TestCase
         $configuration = $configurations->create('global', [
             'agent' => 'configured', 'model' => 'initial-model', 'capability' => 'search',
         ]);
-        $factories = new AgentFactoryRegistry();
+        $agentFactoryRegistry = new AgentFactoryRegistry();
         $dependency = static fn (string $model, string $capability): AIProviderInterface =>
             new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
-        $factories->register('configured', static function (Configuration $configuration) use ($dependency): Agent {
+        $agentFactoryRegistry->register('configured', static function (Configuration $configuration) use ($dependency): Agent {
             $model = $configuration->get('model');
             $capability = $configuration->get('capability');
             if (!is_string($model) || !is_string($capability)) {
@@ -58,7 +58,7 @@ final class BackendExampleTest extends TestCase
 
             return $agent;
         });
-        $original = $factories->create($configuration);
+        $original = $agentFactoryRegistry->create($configuration);
         $previous = $sessions->create();
         $original->setChatHistory($previous);
         $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
@@ -67,7 +67,7 @@ final class BackendExampleTest extends TestCase
             static function (Agent $agent, string $prompt): void {
                 $agent->chat(new UserMessage($prompt));
             },
-            $factories, $configurations,
+            $agentFactoryRegistry, $configurations,
         );
         $adapter->promptAgent('First turn');
         self::assertSame('initial-model:search', $previous->getMessages()[1]->getContent());
@@ -83,7 +83,7 @@ final class BackendExampleTest extends TestCase
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
         self::assertNotSame($original->getThreadId(), $adapter->agent()->getThreadId());
         self::assertSame([], $adapter->agent()->getChatHistory()->getMessages());
-        self::assertSame($factories, $adapter->agentFactoryRegistry());
+        self::assertSame($agentFactoryRegistry, $adapter->agentFactoryRegistry());
         self::assertSame($configurations, $adapter->configurationStore());
 
         $adapter->promptAgent('Second turn');
@@ -117,7 +117,7 @@ final class BackendExampleTest extends TestCase
             static function (Agent $agent, string $prompt): void {
                 $agent->chat(new UserMessage($prompt));
             },
-            $factories, $configurations,
+            $agentFactoryRegistry, $configurations,
         );
         $resumed = $commands->run($request->command, new CommandArguments($chosen), $followUp);
         self::assertNotNull($resumed);
@@ -156,10 +156,10 @@ final class BackendExampleTest extends TestCase
             $session = $sessions->read($savedSession->getKey());
             self::assertNotNull($configuration);
             self::assertNotNull($session);
-            $factories = new AgentFactoryRegistry();
+            $agentFactoryRegistry = new AgentFactoryRegistry();
             $providerFactory = static fn (string $model, string $capability): AIProviderInterface =>
                 new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
-            $factories->register('configured', static function (Configuration $configuration) use ($providerFactory): Agent {
+            $agentFactoryRegistry->register('configured', static function (Configuration $configuration) use ($providerFactory): Agent {
                 $model = $configuration->get('model');
                 $capability = $configuration->get('capability');
                 if (!is_string($model) || !is_string($capability)) {
@@ -168,7 +168,7 @@ final class BackendExampleTest extends TestCase
 
                 return (new ConfiguredAgent($providerFactory))->configure($model, $capability);
             });
-            $initial = $factories->create($configuration);
+            $initial = $agentFactoryRegistry->create($configuration);
             $initial->setChatHistory($session);
             $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
             $adapter = new BackendAdapter(
@@ -176,7 +176,7 @@ final class BackendExampleTest extends TestCase
                 static function (Agent $agent, string $prompt): void {
                     $agent->chat(new UserMessage($prompt));
                 },
-                $factories, $configurations,
+                $agentFactoryRegistry, $configurations,
             );
             $adapter->promptAgent('First turn after restart');
             self::assertSame('saved-model:research', $session->getMessages()[3]->getContent());

@@ -31,14 +31,14 @@ final class BackendResumeFailureTest extends TestCase
         $storage = new InMemoryStorage();
         $sessions = new SessionStore($storage, 'owner');
         $configurations = new ConfigurationStore($storage, 'owner');
-        $factories = new AgentFactoryRegistry();
+        $agentFactoryRegistry = new AgentFactoryRegistry();
         $selected = $sessions->create();
         $selected->addMessage(new UserMessage('Saved conversation'));
         $original = $this->answeringAgent();
         $history = $sessions->create();
         $original->setChatHistory($history);
         $commands = new Commands(new ResumeCommand());
-        $adapter = $this->adapter($original, $commands, $sessions, $factories, $configurations);
+        $adapter = $this->adapter($original, $commands, $sessions, $agentFactoryRegistry, $configurations);
         $adapter->promptAgent('Initial turn');
         $thread = $original->getThreadId();
 
@@ -46,12 +46,12 @@ final class BackendResumeFailureTest extends TestCase
             $configurations->create('global', ['agent' => 'configured']);
         }
         if ($failure === 'factory') {
-            $factories->register('configured', static function (): Agent {
+            $agentFactoryRegistry->register('configured', static function (): Agent {
                 throw new RuntimeException('Factory dependency unavailable.');
             });
         }
         if ($failure === 'history') {
-            $factories->register('configured', static fn (): Agent => new class extends Agent {
+            $agentFactoryRegistry->register('configured', static fn (): Agent => new class extends Agent {
                 public function setChatHistory(ChatHistoryInterface $chatHistory): self
                 {
                     throw new RuntimeException('History assignment failed.');
@@ -93,15 +93,15 @@ final class BackendResumeFailureTest extends TestCase
             $configurations->create('global', ['agent' => 'configured']);
         }
         $constructions = 0;
-        $factories = new AgentFactoryRegistry();
-        $factories->register('configured', static function () use (&$constructions): Agent {
+        $agentFactoryRegistry = new AgentFactoryRegistry();
+        $agentFactoryRegistry->register('configured', static function () use (&$constructions): Agent {
             ++$constructions;
             throw new RuntimeException('Factory must not run.');
         });
         $key = $foreign ? (new SessionStore($storage, 'someone-else'))->create()->getKey() : 'missing';
         $original = $this->answeringAgent();
         $commands = new Commands(new ResumeCommand());
-        $adapter = $this->adapter($original, $commands, $sessions, $factories, $configurations);
+        $adapter = $this->adapter($original, $commands, $sessions, $agentFactoryRegistry, $configurations);
 
         $response = $commands->run('/resume', new CommandArguments($key), $adapter);
 
@@ -129,16 +129,16 @@ final class BackendResumeFailureTest extends TestCase
         $selected = $sessions->create();
         $selected->addMessage(new UserMessage('Choice to remove'));
         $configurations = new ConfigurationStore($storage, 'owner');
-        $factories = new AgentFactoryRegistry();
+        $agentFactoryRegistry = new AgentFactoryRegistry();
         $constructions = 0;
-        $factories->register('configured', static function () use (&$constructions): Agent {
+        $agentFactoryRegistry->register('configured', static function () use (&$constructions): Agent {
             ++$constructions;
             throw new RuntimeException('Factory must not run.');
         });
         $original = $this->answeringAgent();
         $commands = new Commands(new ResumeCommand());
         $first = $commands->run('/resume', new CommandArguments(), $this->adapter(
-            $original, $commands, $sessions, $factories, $configurations,
+            $original, $commands, $sessions, $agentFactoryRegistry, $configurations,
         ));
 
         self::assertNotNull($first);
@@ -150,7 +150,7 @@ final class BackendResumeFailureTest extends TestCase
 
         $storage->delete('sessions', $selected->getKey());
         $configurations->create('global', ['agent' => 'configured']);
-        $adapter = $this->adapter($original, $commands, $sessions, $factories, $configurations);
+        $adapter = $this->adapter($original, $commands, $sessions, $agentFactoryRegistry, $configurations);
         $second = $commands->run($first['selection']->command, new CommandArguments($first['selection']->options[0]->value), $adapter);
 
         self::assertNotNull($second);
@@ -175,11 +175,11 @@ final class BackendResumeFailureTest extends TestCase
         Agent $agent,
         Commands $commands,
         SessionStore $sessions,
-        AgentFactoryRegistry $factories,
+        AgentFactoryRegistry $agentFactoryRegistry,
         ConfigurationStore $configurations,
     ): BackendAdapter {
         return new BackendAdapter($agent, $commands, $sessions, static function (Agent $answering, string $prompt): void {
             $answering->chat(new UserMessage($prompt));
-        }, $factories, $configurations);
+        }, $agentFactoryRegistry, $configurations);
     }
 }

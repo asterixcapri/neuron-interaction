@@ -26,12 +26,12 @@ $sessionStore = new SessionStore($storage, 'demo-user');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
 $configuration = $configurationStore->read('global')
     ?? $configurationStore->create('global', ['agent' => 'demo', 'model' => 'local', 'capability' => 'search']);
-$factories = new AgentFactoryRegistry();
+$agentFactoryRegistry = new AgentFactoryRegistry();
 // This local provider makes the example runnable without credentials or network.
 // Production factories can capture the application's provider clients instead.
 $providerFactory = static fn (string $model, string $capability): AIProviderInterface =>
     new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
-$factories->register('demo', static function (Configuration $configuration) use ($providerFactory): Agent {
+$agentFactoryRegistry->register('demo', static function (Configuration $configuration) use ($providerFactory): Agent {
     $model = $configuration->get('model');
     $capability = $configuration->get('capability');
     if (!is_string($model) || !is_string($capability)) {
@@ -48,7 +48,7 @@ $sessionStore->create()->addMessage(new UserMessage('Learning PHP'));
 $commands = new Commands(new ResumeCommand());
 
 // Request 1: /resume without a key returns selection.options for the frontend.
-$firstRequest = new BackendAdapter($factories->create($configuration), $commands, $sessionStore, static function (): void {}, $factories, $configurationStore);
+$firstRequest = new BackendAdapter($agentFactoryRegistry->create($configuration), $commands, $sessionStore, static function (): void {}, $agentFactoryRegistry, $configurationStore);
 $response = $commands->run('/resume', new CommandArguments(), $firstRequest);
 echo json_encode($response, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 
@@ -56,8 +56,8 @@ echo json_encode($response, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 $sessionKey = $firstSession->getKey();
 
 // Request 2: a fresh Agent and Adapter receive /resume with the chosen key.
-$agent = $factories->create($configuration);
-$secondRequest = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {}, $factories, $configurationStore);
+$agent = $agentFactoryRegistry->create($configuration);
+$secondRequest = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {}, $agentFactoryRegistry, $configurationStore);
 $commands->run('/resume', new CommandArguments($sessionKey), $secondRequest);
 
 echo $secondRequest->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;

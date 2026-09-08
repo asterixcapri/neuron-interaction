@@ -25,12 +25,12 @@ $sessionStore = new SessionStore($storage, 'demo-user');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
 $configuration = $configurationStore->read('global')
     ?? $configurationStore->create('global', ['agent' => 'demo', 'model' => 'local', 'capability' => 'search']);
-$factories = new AgentFactoryRegistry();
+$agentFactoryRegistry = new AgentFactoryRegistry();
 // This local provider makes the example runnable without credentials or network.
 // Production factories can capture the application's provider clients instead.
 $providerFactory = static fn (string $model, string $capability): AIProviderInterface =>
     new FakeAIProvider(new AssistantMessage($model . ':' . $capability));
-$factories->register('demo', static function (Configuration $configuration) use ($providerFactory): Agent {
+$agentFactoryRegistry->register('demo', static function (Configuration $configuration) use ($providerFactory): Agent {
     $model = $configuration->get('model');
     $capability = $configuration->get('capability');
     if (!is_string($model) || !is_string($capability)) {
@@ -43,11 +43,11 @@ $factories->register('demo', static function (Configuration $configuration) use 
 $previousSession = $sessionStore->create();
 $previousSession->addMessage(new UserMessage('The previous conversation'));
 
-$agent = $factories->create($configuration);
+$agent = $agentFactoryRegistry->create($configuration);
 $agent->setChatHistory($previousSession);
 
 $commands = new Commands(new ClearCommand());
-$adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {}, $factories, $configurationStore);
+$adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {}, $agentFactoryRegistry, $configurationStore);
 $commands->run('/clear', new CommandArguments(), $adapter);
 
 // The Agent now has an empty Session; the previous conversation is still stored.

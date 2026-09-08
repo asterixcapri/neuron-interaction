@@ -71,11 +71,11 @@ use NeuronInteraction\Configuration\ConfigurationStore;
 $configurationStore = new ConfigurationStore($storage, 'local-user');
 $configuration = $configurationStore->read('global')
     ?? $configurationStore->create('global', ['agent' => 'assistant']);
-$factories = new AgentFactoryRegistry();
-$factories->register('assistant', static function (Configuration $configuration): Agent {
+$agentFactoryRegistry = new AgentFactoryRegistry();
+$agentFactoryRegistry->register('assistant', static function (Configuration $configuration): Agent {
     return new Agent(); // Supply application dependencies and settings here.
 });
-$agent = $factories->create($configuration);
+$agent = $agentFactoryRegistry->create($configuration);
 $agent->setChatHistory($sessionStore->create());
 ```
 
@@ -126,7 +126,7 @@ foreach ($sessionStore->summaries() as $session) {
     // Resume a chosen Session on a fresh, configured Agent:
     // $history = $sessionStore->read($session->key);
     // if ($history !== null) {
-    //     $next = $factories->create($configuration);
+    //     $next = $agentFactoryRegistry->create($configuration);
     //     $next->setChatHistory($history);
     //     $agent = $next;
     // }
