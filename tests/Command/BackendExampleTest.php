@@ -83,13 +83,14 @@ final class BackendExampleTest extends TestCase
                     $adapter->requestSelection(new SelectionRequest('/choose', 'Choose a value', [
                         new SelectionOption(" 007\n ", 'Visible label'),
                     ]));
-                    $adapter->say('The selection request has returned.');
+                    $adapter->notify('The selection request has returned.');
 
                     return;
                 }
 
                 $adapter->promptAgent($arguments->text);
                 $adapter->warn('A response may still be pending.');
+                $adapter->error('An expected failure.');
             }
         };
         $commands = new Commands($command);
@@ -123,6 +124,9 @@ final class BackendExampleTest extends TestCase
         self::assertNull($second['selection']);
         self::assertSame([], $second['notices']);
         self::assertSame(['A response may still be pending.'], $second['warnings']);
+        self::assertSame(['An expected failure.'], $second['errors']);
+        self::assertNull($second['error']);
+        self::assertSame('completed', $second['status']);
         self::assertSame([[$secondAgent, " 007\n "]], $received);
         self::assertSame(['/choose'], $inputs->entries());
     }
@@ -159,7 +163,7 @@ final class BackendExampleTest extends TestCase
                 TestCase::assertSame($previous, $adapter->agent()->getChatHistory());
                 $adapter->useSession($adapter->sessionStore()->create());
                 $adapter->promptAgent('A generated prompt for the replacement.');
-                $adapter->say($adapter->commands()->all()[0]->name());
+                $adapter->notify($adapter->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');
             }
         };

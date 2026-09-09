@@ -42,7 +42,7 @@ final readonly class ResumeCommand implements CommandInterface
             $session = $adapter->sessionStore()->read($arguments->text);
 
             if ($session === null) {
-                $adapter->warn('No Session is named by that key.');
+                $adapter->error('No Session is named by that key.');
 
                 return;
             }

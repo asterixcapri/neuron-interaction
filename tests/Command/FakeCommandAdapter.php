@@ -24,6 +24,9 @@ class FakeCommandAdapter implements CommandAdapterInterface
     public array $warnings = [];
 
     /** @var list<string> */
+    public array $errors = [];
+
+    /** @var list<string> */
     public array $prompts = [];
 
     /** @var list<SelectionRequest> */
@@ -48,7 +51,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
         return $execution;
     }
 
-    public function say(string $text): void
+    public function notify(string $text): void
     {
         $this->notices[] = $text;
     }
@@ -56,6 +59,11 @@ class FakeCommandAdapter implements CommandAdapterInterface
     public function warn(string $text): void
     {
         $this->warnings[] = $text;
+    }
+
+    public function error(string $text): void
+    {
+        $this->errors[] = $text;
     }
 
     public function promptAgent(string $prompt): void

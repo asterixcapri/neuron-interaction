@@ -23,6 +23,7 @@ use NeuronInteraction\Session\SessionStore;
  *     error: ?string,
  *     notices: list<string>,
  *     warnings: list<string>,
+ *     errors: list<string>,
  *     selection: ?SelectionRequest,
  *     stopped: bool,
  * }
@@ -35,6 +36,9 @@ final class BackendAdapter implements CommandAdapterInterface
 
     /** @var list<string> */
     private array $warnings = [];
+
+    /** @var list<string> */
+    private array $errors = [];
 
     private ?SelectionRequest $selection = null;
 
@@ -63,12 +67,13 @@ final class BackendAdapter implements CommandAdapterInterface
             'error' => $execution->exception?->getMessage(),
             'notices' => $this->notices,
             'warnings' => $this->warnings,
+            'errors' => $this->errors,
             'selection' => $this->selection,
             'stopped' => $this->stopped,
         ];
     }
 
-    public function say(string $text): void
+    public function notify(string $text): void
     {
         $this->notices[] = $text;
     }
@@ -76,6 +81,11 @@ final class BackendAdapter implements CommandAdapterInterface
     public function warn(string $text): void
     {
         $this->warnings[] = $text;
+    }
+
+    public function error(string $text): void
+    {
+        $this->errors[] = $text;
     }
 
     public function promptAgent(string $prompt): void

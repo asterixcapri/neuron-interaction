@@ -21,9 +21,17 @@ interface CommandAdapterInterface
     /** @return TOutput */
     public function afterExecution(CommandExecution $execution): mixed;
 
-    public function say(string $text): void;
+    /** Communicate information to the person through this Adapter. */
+    public function notify(string $text): void;
 
+    /** Communicate a warning to the person through this Adapter. */
     public function warn(string $text): void;
+
+    /**
+     * Communicate an expected failure to the person.
+     * This does not interrupt the Command or change CommandExecution status.
+     */
+    public function error(string $text): void;
 
     /** Submit a prompt to the Adapter's Agent flow without receiving its answer. */
     public function promptAgent(string $prompt): void;

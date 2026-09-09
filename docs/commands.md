@@ -87,13 +87,29 @@ The Adapter defines the stop effect. Neither Command depends on a terminal,
 and the shared dispatcher imposes no concurrency policy. Both accept a
 configured identifier in their constructor.
 
+## Messages to the person
+
+Commands use `notify($text)` for information, `warn($text)` for warnings, and
+`error($text)` for expected failures. The Adapter chooses how to present each
+kind of message. For example, Resume reports an unknown Session key with
+`error()`, while an empty collection of earlier Sessions uses `warn()`.
+
+These operations communicate only: they do not interrupt the Command or change
+its technical `CommandExecution` status. A Command that cannot continue must
+return explicitly. Exceptions still produce the existing failed execution.
+
+Adapter implementations must replace `say()` with `notify()` and implement
+`error()` separately from `warn()`; there is no compatibility alias for `say()`.
+
 ## Backend Adapter
 
 [BackendAdapter](../examples/BackendAdapter.php) implements every operation of
-`CommandAdapterInterface`. It admits its Commands and collects notices, warnings,
+`CommandAdapterInterface`. It admits its Commands and collects notices, warnings, expected errors,
 a `SelectionRequest`, and the stop effect for one response. Its `afterExecution()`
 returns response data containing those values, the technical status, identifier,
-and any error message. The caller obtains that response directly from `run()`.
+and any exception message. The `errors` list contains expected failures reported
+by Commands; the singular `error` field contains the execution exception message.
+The caller obtains that response directly from `run()`.
 The example delegates `promptAgent()` to a callback supplied by the Host
 Application. Agent execution, scheduling and response streaming are outside this
 package. No model request is made by these examples.

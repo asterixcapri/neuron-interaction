@@ -216,7 +216,7 @@ final class HelloCommand implements CommandInterface
 
     public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
     {
-        $adapter->say('Hello!');
+        $adapter->notify('Hello!');
     }
 }
 

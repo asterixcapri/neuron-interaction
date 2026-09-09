@@ -145,10 +145,10 @@ final class CommandsTest extends TestCase
         $output = CommandExecution::completed('/adapter-output');
         $commands = new Commands([
             self::command('/healthy', static function (CommandArguments $arguments, CommandAdapterInterface $adapter): void {
-                $adapter->say($arguments->text);
+                $adapter->notify($arguments->text);
             }),
             self::command('/broken', static function (CommandArguments $arguments, CommandAdapterInterface $adapter) use ($failure): void {
-                $adapter->say($arguments->text);
+                $adapter->notify($arguments->text);
                 throw $failure;
             }),
         ]);

@@ -39,13 +39,14 @@ final class CommandAdapterTest extends TestCase
             /** @param CommandAdapterInterface<mixed> $adapter */
             public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
             {
-                $adapter->say($adapter->commands()->all()[0]->name());
+                $adapter->notify($adapter->commands()->all()[0]->name());
                 $adapter->warn($arguments->text);
+                $adapter->error('An expected failure.');
                 $adapter->useSession($adapter->sessionStore()->create());
                 $adapter->useAgent($this->replacement);
                 $adapter->promptAgent('A generated Agent prompt.');
                 $adapter->requestSelection($this->selection);
-                $adapter->say('The request has returned.');
+                $adapter->notify('The request has returned.');
                 $adapter->stop();
             }
         };
@@ -57,6 +58,8 @@ final class CommandAdapterTest extends TestCase
         self::assertSame('completed', $execution->status);
         self::assertSame(['/inspect', 'The request has returned.'], $adapter->notices);
         self::assertSame(['A warning.'], $adapter->warnings);
+        self::assertSame(['An expected failure.'], $adapter->errors);
+        self::assertNull($execution->exception);
         self::assertSame(['A generated Agent prompt.'], $adapter->prompts);
         self::assertSame([$selection], $adapter->selections);
         self::assertSame($commands, $adapter->commands());

@@ -42,12 +42,12 @@ final class SelectionTest extends TestCase
             {
                 if ($arguments->text === '') {
                     $adapter->requestSelection($this->request);
-                    $adapter->say('First invocation finished.');
+                    $adapter->notify('First invocation finished.');
 
                     return;
                 }
 
-                $adapter->say($arguments->text);
+                $adapter->notify($arguments->text);
             }
         };
         $commands = new Commands([$command]);
@@ -120,6 +120,7 @@ final class SelectionTest extends TestCase
         $history = $adapter->agent()->getChatHistory();
         self::assertSame('completed', $commands->run('/resume', new CommandArguments('unknown'), $adapter)?->status);
         self::assertSame($history, $adapter->agent()->getChatHistory());
-        self::assertContains('No Session is named by that key.', $adapter->warnings);
+        self::assertSame(['No Session is named by that key.'], $adapter->errors);
+        self::assertSame([], $adapter->warnings);
     }
 }
