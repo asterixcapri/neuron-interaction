@@ -19,7 +19,7 @@ $configuration = $store->read('default')
 $configuration->set('model', 'another-model');
 $configuration->set('temperature', 0.5);
 $configuration->remove('obsoleteOption');
-$store->save($configuration);
+$store->write($configuration);
 ```
 
 Creation immediately persists the initial values. Creating an existing key for
@@ -30,9 +30,9 @@ A missing read returns `null`. `delete($key)` removes that user's configuration
 if present. `getKey()` and `getUserId()` expose its key and owner.
 
 `set()` and `remove()` affect memory only. A new read sees the previous values
-until `save($configuration)` persists all changes together. Updating one option
+until `write($configuration)` persists all changes together. Updating one option
 preserves unrelated options. The supported flow is to create or read through a
-Store and save through that same Store.
+Store and write through that same Store.
 
 `has($name)` distinguishes a present null value from an absent value.
 `get($name, $default)` returns the default only when the value is absent.
