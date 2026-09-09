@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 /** Requests that the Adapter stop its interaction. */
-final readonly class LeaveCommand implements CommandInterface
+final readonly class LeaveCommand implements ConcurrentCommandInterface
 {
     /**
      * @param string $name the name it answers to, including the leading slash

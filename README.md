@@ -259,3 +259,11 @@ composer install
 composer test
 composer stan
 ```
+
+### Commands during Agent work
+
+`ConcurrentCommandInterface` extends `CommandInterface` without adding methods.
+Implement it when a Command can execute while the Agent is working without
+interfering with state used by that work. Help and Leave implement this marker.
+Adapters decide whether to admit these Commands and still provide the ordinary
+`CommandAdapterInterface`; the marker does not enforce restricted controls.

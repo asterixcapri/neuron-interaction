@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 /** Lists the mounted Commands through the Adapter. */
-final readonly class HelpCommand implements CommandInterface
+final readonly class HelpCommand implements ConcurrentCommandInterface
 {
     /**
      * @param string $name the name it answers to, including the leading slash

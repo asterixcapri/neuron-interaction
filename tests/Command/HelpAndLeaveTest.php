@@ -6,6 +6,7 @@ namespace NeuronInteraction\Tests\Command;
 
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\ConcurrentCommandInterface;
 use NeuronInteraction\Command\HelpCommand;
 use NeuronInteraction\Command\LeaveCommand;
 use PHPUnit\Framework\TestCase;
@@ -14,7 +15,11 @@ final class HelpAndLeaveTest extends TestCase
 {
     public function testSharedCommandsUseTheAdaptersPresentationAndStopEffects(): void
     {
-        $commands = new Commands([new HelpCommand('/guide'), new LeaveCommand('/quit')]);
+        $help = new HelpCommand('/guide');
+        $leave = new LeaveCommand('/quit');
+        self::assertInstanceOf(ConcurrentCommandInterface::class, $help);
+        self::assertInstanceOf(ConcurrentCommandInterface::class, $leave);
+        $commands = new Commands([$help, $leave]);
         $adapter = new FakeCommandAdapter($commands);
 
         self::assertSame('completed', $commands->run('/guide', new CommandArguments(), $adapter)?->status);
