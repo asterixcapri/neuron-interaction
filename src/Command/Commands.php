@@ -14,9 +14,9 @@ final class Commands
     private array $commands = [];
 
     /**
-     * @param CommandInterface|CommandKitInterface<CommandInterface>|array<array-key, mixed> $commands
+     * @param CommandInterface|array<array-key, mixed> $commands
      */
-    public function __construct(CommandInterface|CommandKitInterface|array $commands = [])
+    public function __construct(CommandInterface|array $commands = [])
     {
         $this->addCommand($commands);
     }
@@ -24,19 +24,12 @@ final class Commands
     /**
      * Mount Commands before running the Adapter. Mutates this collection.
      *
-     * @param CommandInterface|CommandKitInterface<CommandInterface>|array<array-key, mixed> $commands
+     * @param CommandInterface|array<array-key, mixed> $commands
      */
-    public function addCommand(CommandInterface|CommandKitInterface|array $commands): self
+    public function addCommand(CommandInterface|array $commands): self
     {
-
         foreach (is_array($commands) ? $commands : [$commands] as $command) {
-            $members = $command instanceof CommandKitInterface
-                ? $command->commands()
-                : [$command];
-
-            foreach ($members as $member) {
-                $this->commands[] = self::requireCommand($member);
-            }
+            $this->commands[] = self::requireCommand($command);
         }
 
         return $this;

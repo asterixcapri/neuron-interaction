@@ -163,18 +163,19 @@ reopening a saved one. The library includes:
 | `/help` | List the available Commands. |
 | `/exit` | Ask the application to end the interaction. |
 
-Choose which Commands your application offers. `SessionCommandKit` groups
-Clear and Resume:
+Choose which Commands your application offers and mount them explicitly:
 
 ```php
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
 use NeuronInteraction\Command\LeaveCommand;
-use NeuronInteraction\Command\SessionCommandKit;
+use NeuronInteraction\Command\ClearCommand;
+use NeuronInteraction\Command\ResumeCommand;
 
 $commands = new Commands([
-    new SessionCommandKit(),
+    new ClearCommand(),
+    new ResumeCommand(),
     new HelpCommand(),
     new LeaveCommand(),
 ]);
@@ -223,7 +224,7 @@ $commands->addCommand(new HelloCommand());
 ```
 
 See the [Command and Adapter reference](docs/commands.md) for custom Adapters,
-kits, execution outcomes and error handling.
+mounting, execution outcomes and error handling.
 
 ## Backend examples
 

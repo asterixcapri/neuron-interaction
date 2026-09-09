@@ -249,7 +249,7 @@ final class CommandsTest extends TestCase
     {
         foreach (['review', ''] as $name) {
             $command = self::command($name, static function (): void {});
-            foreach ([$command, [$command], [new ObjectKit([$command])]] as $mount) {
+            foreach ([$command, [$command]] as $mount) {
                 try {
                     new Commands($mount);
                     self::fail('A slashless identifier must fail at mounting.');

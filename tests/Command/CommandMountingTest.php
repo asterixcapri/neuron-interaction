@@ -6,27 +6,24 @@ namespace NeuronInteraction\Tests\Command;
 
 use InvalidArgumentException;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Command\AbstractCommandKit;
 use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
-use NeuronInteraction\Command\SessionCommandKit;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
-final class CommandKitsTest extends TestCase
+final class CommandMountingTest extends TestCase
 {
     public function testIncrementalMountingMutatesTheOriginalCollectionInOrder(): void
     {
         $first = new ClearCommand('/resume');
         $last = new ClearCommand('/last');
-        $kit = new SessionCommandKit();
         $commands = new Commands();
 
         self::assertSame($commands, $commands->addCommand($first));
-        self::assertSame($commands, $commands->addCommand([$kit, $last]));
+        self::assertSame($commands, $commands->addCommand([new ClearCommand(), new ResumeCommand(), $last]));
         self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(
             static fn (CommandInterface $command): string => $command->name(),
             $commands->all(),
@@ -43,7 +40,7 @@ final class CommandKitsTest extends TestCase
     {
         foreach ([
             [new stdClass()],
-            [new ObjectKit([new stdClass()])],
+            [[new ClearCommand()]],
             new ClearCommand('missing-slash'),
         ] as $invalid) {
             foreach ([false, true] as $incremental) {
@@ -61,9 +58,9 @@ final class CommandKitsTest extends TestCase
         }
     }
 
-    public function testSessionCommandKitMountsInOneOperationAndClearPreservesThePreviousSession(): void
+    public function testSessionCommandsMountTogetherAndClearPreservesThePreviousSession(): void
     {
-        $commands = new Commands(new SessionCommandKit());
+        $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->sessionStore()->create();
         $previous->addMessage(new UserMessage('Keep this conversation'));
@@ -85,11 +82,11 @@ final class CommandKitsTest extends TestCase
         self::assertSame('Keep this conversation', $reopened->getMessages()[0]->getContent());
     }
 
-    public function testMixedMountingPreservesOrderAndTheFirstDuplicateExecutes(): void
+    public function testArrayMountingPreservesOrderAndTheFirstDuplicateExecutes(): void
     {
         $first = new ClearCommand('/resume');
         $last = new ClearCommand('/last');
-        $commands = new Commands([$first, new SessionCommandKit(), $last]);
+        $commands = new Commands([$first, new ClearCommand(), new ResumeCommand(), $last]);
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->sessionStore()->create();
         $adapter->agent()->setChatHistory($previous);
@@ -105,30 +102,6 @@ final class CommandKitsTest extends TestCase
         self::assertSame([], $adapter->warnings);
     }
 
-    public function testKitFiltersAreImmutableAndExclusionWins(): void
-    {
-        $kit = new SessionCommandKit();
-        $resumeOnly = $kit->exclude([ClearCommand::class]);
-        $clearOnly = $kit->only([ClearCommand::class]);
-
-        self::assertInstanceOf(ResumeCommand::class, (new Commands($resumeOnly))->all()[0]);
-        self::assertCount(1, (new Commands($resumeOnly))->all());
-        self::assertInstanceOf(ClearCommand::class, (new Commands($clearOnly))->all()[0]);
-        self::assertCount(1, (new Commands($clearOnly))->all());
-        self::assertCount(2, (new Commands($kit))->all());
-        self::assertSame([], (new Commands($clearOnly->exclude([ClearCommand::class])))->all());
-        self::assertInstanceOf(ResumeCommand::class, (new Commands($clearOnly->only([ResumeCommand::class])))->all()[0]);
-        self::assertSame([], (new Commands($kit->exclude([CommandInterface::class])))->all());
-    }
-
-    public function testInvalidKitMembersAreRejectedAtMounting(): void
-    {
-        $kit = new ObjectKit([new stdClass()]);
-
-        $this->expectException(InvalidArgumentException::class);
-        new Commands([$kit]);
-    }
-
     public function testInvalidArrayMembersAreRejectedAtMounting(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -137,26 +110,11 @@ final class CommandKitsTest extends TestCase
 
     public function testResumeWithNoStoredSessionWarnsWithoutRequestingSelection(): void
     {
-        $commands = new Commands(new SessionCommandKit());
+        $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
 
         self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
         self::assertSame(['There is no earlier Session to return to yet.'], $adapter->warnings);
         self::assertSame([], $adapter->selections);
-    }
-}
-
-/** @extends AbstractCommandKit<object> */
-final class ObjectKit extends AbstractCommandKit
-{
-    /** @param list<object> $members */
-    public function __construct(private array $members)
-    {
-    }
-
-    /** @return list<object> */
-    protected function provide(): array
-    {
-        return $this->members;
     }
 }

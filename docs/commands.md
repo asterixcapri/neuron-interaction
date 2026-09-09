@@ -56,12 +56,6 @@ chosen value in new `CommandArguments`. `/clear` installs a distinct empty
 Session History while preserving the previous Session. Agent prompting,
 presentation and the interaction lifecycle remain Adapter responsibilities.
 
-## Custom kits
-
-Custom kits extend `AbstractCommandKit<TCommand>` and provide their members.
-Adapters may use this shared filtering behavior for their own Command types;
-the shared `Commands` dispatcher accepts only `CommandInterface` members.
-
 ## Mounting Commands
 
 `Commands::addCommand()` mutates the collection and returns that same instance:
@@ -70,15 +64,16 @@ the shared `Commands` dispatcher accepts only `CommandInterface` members.
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
 use NeuronInteraction\Command\LeaveCommand;
-use NeuronInteraction\Command\SessionCommandKit;
+use NeuronInteraction\Command\ClearCommand;
+use NeuronInteraction\Command\ResumeCommand;
 
 $commands = (new Commands())
     ->addCommand(new HelpCommand())
-    ->addCommand([new SessionCommandKit(), new LeaveCommand()]);
+    ->addCommand([new ClearCommand(), new ResumeCommand(), new LeaveCommand()]);
 ```
 
-Constructor mounting and incremental mounting accept individual Commands, kits
-and mixed arrays, preserve order, and reject invalid members or identifiers
+Constructor mounting and incremental mounting accept an individual Command or
+an array of Commands, preserve order, and reject invalid members or identifiers
 immediately. The first matching duplicate receives dispatch. Configure Commands
 before running an Adapter; live reconfiguration is outside this contract.
 
