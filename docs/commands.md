@@ -53,7 +53,9 @@ their parameter as `CommandAdapterInterface<mixed>`; concrete Adapters declare
 `/resume` without arguments emits a `Selection` and returns. The Adapter
 presents its options and invokes the request's target Command again with the
 chosen value as a string. `/clear` installs a distinct empty
-Session History while preserving the previous Session. Agent prompting,
+Session History while preserving the previous Session. Both Commands install
+History directly with `adapter->agent()->setChatHistory()`. Adapters synchronize
+their presentation with the Agent; Commands do not request a view refresh. Agent prompting,
 presentation and the interaction lifecycle remain Adapter responsibilities.
 
 ## Mounting Commands

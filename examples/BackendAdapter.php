@@ -13,7 +13,6 @@ use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\Selection;
-use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 
 /**
@@ -110,11 +109,6 @@ final class BackendAdapter implements CommandAdapterInterface
     {
         $agent->setChatHistory($this->answeringAgent->getChatHistory());
         $this->answeringAgent = $agent;
-    }
-
-    public function useSession(Session $session): void
-    {
-        $this->answeringAgent->setChatHistory($session);
     }
 
     public function commands(): Commands

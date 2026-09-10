@@ -160,7 +160,7 @@ final class BackendExampleTest extends TestCase
                 $adapter->useAgent($this->replacement);
                 TestCase::assertSame($this->replacement, $adapter->agent());
                 TestCase::assertSame($previous, $adapter->agent()->getChatHistory());
-                $adapter->useSession($adapter->sessionStore()->create());
+                $adapter->agent()->setChatHistory($adapter->sessionStore()->create());
                 $adapter->promptAgent('A generated prompt for the replacement.');
                 $adapter->notify($adapter->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');

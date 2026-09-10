@@ -41,7 +41,7 @@ final class CommandAdapterTest extends TestCase
                 $adapter->notify($adapter->commands()->all()[0]->name());
                 $adapter->warn($value);
                 $adapter->error('An expected failure.');
-                $adapter->useSession($adapter->sessionStore()->create());
+                $adapter->agent()->setChatHistory($adapter->sessionStore()->create());
                 $adapter->useAgent($this->replacement);
                 $adapter->promptAgent('A generated Agent prompt.');
                 $adapter->requestSelection($this->selection);
