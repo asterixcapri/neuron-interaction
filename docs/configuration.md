@@ -67,7 +67,7 @@ Commands obtain the Host Application's shared Store through
 `$adapter->configurationStore()`. For example:
 
 ```php
-$adapter->configurationStore()->write('model', $arguments->text);
+$adapter->configurationStore()->write('model', $value);
 ```
 
 Model meanings and provider construction belong to the Host Application.

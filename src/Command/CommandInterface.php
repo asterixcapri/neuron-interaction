@@ -17,6 +17,9 @@ interface CommandInterface
      */
     public function describe(): string;
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void;
+    /**
+     * @param CommandAdapterInterface<mixed> $adapter
+     * @param string $value Raw text supplied by the Adapter, preserved by dispatch.
+     */
+    public function run(CommandAdapterInterface $adapter, string $value): void;
 }

@@ -7,7 +7,6 @@ namespace NeuronInteraction\Tests\Command;
 use InvalidArgumentException;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\ClearCommand;
-use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
@@ -32,7 +31,7 @@ final class CommandMountingTest extends TestCase
         self::assertSame($first, $commands->named('/resume'));
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->agent()->getChatHistory();
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
+        self::assertSame('completed', $commands->run('/resume', '', $adapter)?->status);
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
     }
 
@@ -67,7 +66,7 @@ final class CommandMountingTest extends TestCase
         $adapter->agent()->setChatHistory($previous);
         $key = $adapter->sessionStore()->summaries()[0]->key;
 
-        $execution = $commands->run('/clear', new CommandArguments(), $adapter);
+        $execution = $commands->run('/clear', '', $adapter);
 
         self::assertSame(['/clear', '/resume'], array_map(
             static fn (CommandInterface $command): string => $command->name(),
@@ -97,7 +96,7 @@ final class CommandMountingTest extends TestCase
         ));
         self::assertSame($first, $commands->named('/resume'));
         self::assertSame($last, $commands->named('/last'));
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
+        self::assertSame('completed', $commands->run('/resume', '', $adapter)?->status);
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
         self::assertSame([], $adapter->warnings);
     }
@@ -113,7 +112,7 @@ final class CommandMountingTest extends TestCase
         $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
 
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments(), $adapter)?->status);
+        self::assertSame('completed', $commands->run('/resume', '', $adapter)?->status);
         self::assertSame(['There is no earlier Session to return to yet.'], $adapter->warnings);
         self::assertSame([], $adapter->selections);
     }

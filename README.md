@@ -166,7 +166,6 @@ reopening a saved one. The library includes:
 Choose which Commands your application offers and mount them explicitly:
 
 ```php
-use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
 use NeuronInteraction\Command\LeaveCommand;
@@ -181,7 +180,7 @@ $commands = new Commands([
 ]);
 
 // $adapter connects the Commands to your application.
-$output = $commands->run('/resume', new CommandArguments(), $adapter);
+$output = $commands->run('/resume', '', $adapter);
 ```
 
 The Adapter decides how to display messages, offer choices and end the
@@ -191,7 +190,7 @@ return response data. The Commands work with either.
 To reopen a known Session, pass its key as the arguments:
 
 ```php
-$output = $commands->run('/resume', new CommandArguments($sessionKey), $adapter);
+$output = $commands->run('/resume', $sessionKey, $adapter);
 ```
 
 ### Write a Command
@@ -214,7 +213,7 @@ final class HelloCommand implements CommandInterface
         return 'Say hello.';
     }
 
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+    public function run(CommandAdapterInterface $adapter, string $value): void
     {
         $adapter->notify('Hello!');
     }

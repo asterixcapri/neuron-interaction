@@ -8,13 +8,12 @@ use Generator;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandAdapterInterface;
-use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
 use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\SelectionOption;
-use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Command\Selection;
 use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
@@ -77,10 +76,10 @@ final class BackendExampleTest extends TestCase
             }
 
             /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            public function run(CommandAdapterInterface $adapter, string $value): void
             {
-                if ($arguments->text === '') {
-                    $adapter->requestSelection(new SelectionRequest('/choose', 'Choose a value', [
+                if ($value === '') {
+                    $adapter->requestSelection(new Selection('/choose', 'Choose a value', [
                         new SelectionOption(" 007\n ", 'Visible label'),
                     ]));
                     $adapter->notify('The selection request has returned.');
@@ -88,7 +87,7 @@ final class BackendExampleTest extends TestCase
                     return;
                 }
 
-                $adapter->promptAgent($arguments->text);
+                $adapter->promptAgent($value);
                 $adapter->warn('A response may still be pending.');
                 $adapter->error('An expected failure.');
             }
@@ -98,7 +97,7 @@ final class BackendExampleTest extends TestCase
         $submitPrompt = static function (Agent $answering, string $prompt) use (&$received): void {
             $received[] = [$answering, $prompt];
         };
-        $first = $commands->run('/choose', new CommandArguments(), new BackendAdapter(
+        $first = $commands->run('/choose', '', new BackendAdapter(
             new Agent(), $commands, $sessionStore, $submitPrompt,
         ));
 
@@ -115,7 +114,7 @@ final class BackendExampleTest extends TestCase
         self::assertNotNull($first['selection']);
         $selection = $first['selection'];
         $secondAgent = new Agent();
-        $second = $commands->run($selection->command, new CommandArguments($selection->options[0]->value), new BackendAdapter(
+        $second = $commands->run($selection->command, $selection->options[0]->value, new BackendAdapter(
             $secondAgent, $commands, $sessionStore, $submitPrompt,
         ));
 
@@ -155,7 +154,7 @@ final class BackendExampleTest extends TestCase
             }
 
             /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            public function run(CommandAdapterInterface $adapter, string $value): void
             {
                 $previous = $adapter->agent()->getChatHistory();
                 $adapter->useAgent($this->replacement);
@@ -172,7 +171,7 @@ final class BackendExampleTest extends TestCase
         $adapter = new BackendAdapter($original, $commands, $sessionStore, static function (Agent $answering, string $prompt) use (&$received): void {
             $received[] = [$answering, $prompt];
         });
-        $response = $commands->run('/replace', new CommandArguments(), $adapter);
+        $response = $commands->run('/replace', '', $adapter);
 
         self::assertNotNull($response);
         self::assertSame('failed', $response['status']);
@@ -194,7 +193,7 @@ final class BackendExampleTest extends TestCase
         $responses = [];
 
         foreach (['/guide', '/missing', '/quit'] as $identifier) {
-            $response = $commands->run($identifier, new CommandArguments(), new BackendAdapter(
+            $response = $commands->run($identifier, '', new BackendAdapter(
                 new Agent(), $commands, $sessionStore, static function (): void {},
             ));
             self::assertNotNull($response);

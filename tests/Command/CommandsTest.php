@@ -7,7 +7,6 @@ namespace NeuronInteraction\Tests\Command;
 use Closure;
 use InvalidArgumentException;
 use NeuronInteraction\Command\CommandAdapterInterface;
-use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
@@ -19,8 +18,8 @@ final class CommandsTest extends TestCase
     public function testDispatchPreservesRawArgumentsAndMountingOrderWithFirstDuplicateWinning(): void
     {
         $received = null;
-        $first = self::command('/review', static function (CommandArguments $arguments) use (&$received): void {
-            $received = $arguments;
+        $first = self::command('/review', static function (string $value) use (&$received): void {
+            $received = $value;
         });
         $duplicate = self::command('/review', static function (): void {
             self::fail('The duplicate must not execute.');
@@ -28,13 +27,13 @@ final class CommandsTest extends TestCase
         $last = self::command('/last', static function (): void {
         });
         $commands = new Commands([$first, $duplicate, $last]);
-        $arguments = new CommandArguments(" \tline one\n  line two \t");
+        $value = " \tline one\n  line two \t";
 
-        $execution = $commands->run('/review', $arguments, new FakeCommandAdapter());
+        $execution = $commands->run('/review', $value, new FakeCommandAdapter());
 
         self::assertSame([$first, $duplicate, $last], $commands->all());
         self::assertSame($first, $commands->named('/review'));
-        self::assertSame($arguments, $received);
+        self::assertSame($value, $received);
         self::assertNotNull($execution);
         self::assertSame('completed', $execution->status);
         self::assertSame('/review', $execution->identifier);
@@ -48,7 +47,7 @@ final class CommandsTest extends TestCase
         })]);
 
         foreach (['/missing', 'review', '/Review'] as $identifier) {
-            $execution = $commands->run($identifier, new CommandArguments(), new FakeCommandAdapter());
+            $execution = $commands->run($identifier, '', new FakeCommandAdapter());
             self::assertNotNull($execution);
             self::assertSame('unknown', $execution->status);
             self::assertSame($identifier, $execution->identifier);
@@ -67,13 +66,13 @@ final class CommandsTest extends TestCase
             }),
         ]);
         $adapter = new FakeCommandAdapter();
-        $execution = $commands->run('/broken', new CommandArguments(), $adapter);
+        $execution = $commands->run('/broken', '', $adapter);
 
         self::assertNotNull($execution);
         self::assertSame('failed', $execution->status);
         self::assertSame('/broken', $execution->identifier);
         self::assertSame($failure, $execution->exception);
-        self::assertSame('completed', $commands->run('/healthy', new CommandArguments(), $adapter)?->status);
+        self::assertSame('completed', $commands->run('/healthy', '', $adapter)?->status);
     }
 
     public function testUnknownIdentifierCompletesWithoutAdmissionAndReturnsTheAdaptersOutputUnchanged(): void
@@ -100,7 +99,7 @@ final class CommandsTest extends TestCase
             }
         };
 
-        self::assertSame($output, (new Commands())->run('/missing', new CommandArguments(), $adapter));
+        self::assertSame($output, (new Commands())->run('/missing', '', $adapter));
     }
 
     public function testRefusalUsesTheFirstMatchingCommandWithoutDispatchOrCompletion(): void
@@ -134,7 +133,7 @@ final class CommandsTest extends TestCase
             }
         };
 
-        self::assertNull((new Commands([$first, $duplicate]))->run('/duplicate', new CommandArguments(), $adapter));
+        self::assertNull((new Commands([$first, $duplicate]))->run('/duplicate', '', $adapter));
         self::assertSame(['Refused by this Adapter.'], $adapter->warnings);
         self::assertSame([], $adapter->notices);
     }
@@ -144,11 +143,11 @@ final class CommandsTest extends TestCase
         $failure = new RuntimeException('Command failed after its notice.');
         $output = CommandExecution::completed('/adapter-output');
         $commands = new Commands([
-            self::command('/healthy', static function (CommandArguments $arguments, CommandAdapterInterface $adapter): void {
-                $adapter->notify($arguments->text);
+            self::command('/healthy', static function (string $value, CommandAdapterInterface $adapter): void {
+                $adapter->notify($value);
             }),
-            self::command('/broken', static function (CommandArguments $arguments, CommandAdapterInterface $adapter) use ($failure): void {
-                $adapter->notify($arguments->text);
+            self::command('/broken', static function (string $value, CommandAdapterInterface $adapter) use ($failure): void {
+                $adapter->notify($value);
                 throw $failure;
             }),
         ]);
@@ -174,7 +173,7 @@ final class CommandsTest extends TestCase
                 }
             };
 
-            self::assertSame($output, $commands->run($identifier, new CommandArguments('Effect survives completion.'), $adapter));
+            self::assertSame($output, $commands->run($identifier, 'Effect survives completion.', $adapter));
         }
     }
 
@@ -202,7 +201,7 @@ final class CommandsTest extends TestCase
         }));
 
         try {
-            $commands->run('/review', new CommandArguments(), $adapter);
+            $commands->run('/review', '', $adapter);
             self::fail('The admission failure must reach the caller.');
         } catch (RuntimeException $exception) {
             self::assertSame($failure, $exception);
@@ -237,7 +236,7 @@ final class CommandsTest extends TestCase
             };
 
             try {
-                $commands->run($identifier, new CommandArguments(), $adapter);
+                $commands->run($identifier, '', $adapter);
                 self::fail('The completion failure must reach the caller.');
             } catch (RuntimeException $exception) {
                 self::assertSame($failure, $exception);
@@ -268,11 +267,11 @@ final class CommandsTest extends TestCase
         }
     }
 
-    /** @param Closure(CommandArguments, CommandAdapterInterface<mixed>): void $run */
+    /** @param Closure(string, CommandAdapterInterface<mixed>): void $run */
     private static function command(string $name, Closure $run): CommandInterface
     {
         return new class($name, $run) implements CommandInterface {
-            /** @param Closure(CommandArguments, CommandAdapterInterface<mixed>): void $run */
+            /** @param Closure(string, CommandAdapterInterface<mixed>): void $run */
             public function __construct(private string $name, private Closure $run)
             {
             }
@@ -288,9 +287,9 @@ final class CommandsTest extends TestCase
             }
 
             /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            public function run(CommandAdapterInterface $adapter, string $value): void
             {
-                ($this->run)($arguments, $adapter);
+                ($this->run)($value, $adapter);
             }
         };
     }

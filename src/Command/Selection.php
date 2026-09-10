@@ -7,7 +7,7 @@ namespace NeuronInteraction\Command;
 use InvalidArgumentException;
 
 /** A choice to present before invoking the target Command again. */
-final readonly class SelectionRequest
+final readonly class Selection
 {
     /** @var non-empty-list<SelectionOption> */
     public array $options;

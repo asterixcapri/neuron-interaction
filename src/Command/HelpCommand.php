@@ -25,7 +25,7 @@ final readonly class HelpCommand implements ConcurrentCommandInterface
     }
 
     /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+    public function run(CommandAdapterInterface $adapter, string $value): void
     {
         foreach ($adapter->commands()->all() as $command) {
             $adapter->notify($command->name() . ' — ' . $command->describe());

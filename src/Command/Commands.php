@@ -72,7 +72,7 @@ final class Commands
      */
     public function run(
         string $identifier,
-        CommandArguments $arguments,
+        string $value,
         CommandAdapterInterface $adapter,
     ): mixed {
         $command = $this->named($identifier);
@@ -86,7 +86,7 @@ final class Commands
         }
 
         try {
-            $command->run($adapter, $arguments);
+            $command->run($adapter, $value);
 
             $execution = CommandExecution::completed($identifier);
         } catch (Throwable $exception) {

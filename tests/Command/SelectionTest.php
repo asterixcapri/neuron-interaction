@@ -5,25 +5,24 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Command\SelectionOption;
-use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Command\Selection;
 use PHPUnit\Framework\TestCase;
 
 final class SelectionTest extends TestCase
 {
-    public function testSelectionRequestSerializesOrderedOptionsAndReceivesTheValueInANewInvocation(): void
+    public function testSelectionSerializesOrderedOptionsAndReceivesTheValueInANewInvocation(): void
     {
-        $request = new SelectionRequest('/choose', 'Pick a value', [
+        $request = new Selection('/choose', 'Pick a value', [
             new SelectionOption('007', 'Visible label', 'Detailed description'),
             new SelectionOption(' raw value ', 'Another label'),
         ]);
         $command = new class($request) implements CommandInterface {
-            public function __construct(private SelectionRequest $request)
+            public function __construct(private Selection $request)
             {
             }
 
@@ -38,22 +37,22 @@ final class SelectionTest extends TestCase
             }
 
             /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            public function run(CommandAdapterInterface $adapter, string $value): void
             {
-                if ($arguments->text === '') {
+                if ($value === '') {
                     $adapter->requestSelection($this->request);
                     $adapter->notify('First invocation finished.');
 
                     return;
                 }
 
-                $adapter->notify($arguments->text);
+                $adapter->notify($value);
             }
         };
         $commands = new Commands([$command]);
         $first = new FakeCommandAdapter($commands);
 
-        self::assertSame('completed', $commands->run('/choose', new CommandArguments(), $first)?->status);
+        self::assertSame('completed', $commands->run('/choose', '', $first)?->status);
         self::assertSame(['First invocation finished.'], $first->notices);
         self::assertSame([$request], $first->selections);
         self::assertEquals([
@@ -68,7 +67,7 @@ final class SelectionTest extends TestCase
 
         // A later Adapter invocation has a fresh Adapter, without hidden selection state.
         $second = new FakeCommandAdapter($commands);
-        $execution = $commands->run($request->command, new CommandArguments($request->options[1]->value), $second);
+        $execution = $commands->run($request->command, $request->options[1]->value, $second);
 
         self::assertNotNull($execution);
         self::assertSame('completed', $execution->status);
@@ -86,7 +85,7 @@ final class SelectionTest extends TestCase
         $adapter->agent()->setChatHistory($active);
         $session = $adapter->sessionStore()->summaries()[0];
 
-        $first = $commands->run('/return', new CommandArguments(), $adapter);
+        $first = $commands->run('/return', '', $adapter);
 
         self::assertNotNull($first);
         self::assertSame('completed', $first->status);
@@ -98,7 +97,7 @@ final class SelectionTest extends TestCase
         self::assertSame('Stored subject', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
-        $second = $commands->run('/return', new CommandArguments($request->options[0]->value), $adapter);
+        $second = $commands->run('/return', $request->options[0]->value, $adapter);
 
         self::assertNotNull($second);
         self::assertSame('completed', $second->status);
@@ -113,12 +112,12 @@ final class SelectionTest extends TestCase
         $adapter->sessionStore()->create()->addMessage(new UserMessage('Direct resume'));
         $key = $adapter->sessionStore()->summaries()[0]->key;
 
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments($key), $adapter)?->status);
+        self::assertSame('completed', $commands->run('/resume', $key, $adapter)?->status);
         self::assertSame('Direct resume', $adapter->agent()->getChatHistory()->getMessages()[0]->getContent());
         self::assertSame([], $adapter->selections);
 
         $history = $adapter->agent()->getChatHistory();
-        self::assertSame('completed', $commands->run('/resume', new CommandArguments('unknown'), $adapter)?->status);
+        self::assertSame('completed', $commands->run('/resume', 'unknown', $adapter)?->status);
         self::assertSame($history, $adapter->agent()->getChatHistory());
         self::assertSame(['No Session is named by that key.'], $adapter->errors);
         self::assertSame([], $adapter->warnings);

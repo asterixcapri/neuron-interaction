@@ -6,11 +6,10 @@ namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
 use NeuronInteraction\Command\CommandAdapterInterface;
-use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\SelectionOption;
-use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Command\Selection;
 use PHPUnit\Framework\TestCase;
 
 final class CommandAdapterTest extends TestCase
@@ -18,11 +17,11 @@ final class CommandAdapterTest extends TestCase
     public function testAnOrdinaryCommandUsesTheSharedAdapterWithoutATerminal(): void
     {
         $replacement = new Agent();
-        $selection = new SelectionRequest('/inspect', 'Pick one', [
+        $selection = new Selection('/inspect', 'Pick one', [
             new SelectionOption('chosen-value', 'Visible label', 'Description'),
         ]);
         $command = new class($replacement, $selection) implements CommandInterface {
-            public function __construct(private Agent $replacement, private SelectionRequest $selection)
+            public function __construct(private Agent $replacement, private Selection $selection)
             {
             }
 
@@ -37,10 +36,10 @@ final class CommandAdapterTest extends TestCase
             }
 
             /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+            public function run(CommandAdapterInterface $adapter, string $value): void
             {
                 $adapter->notify($adapter->commands()->all()[0]->name());
-                $adapter->warn($arguments->text);
+                $adapter->warn($value);
                 $adapter->error('An expected failure.');
                 $adapter->useSession($adapter->sessionStore()->create());
                 $adapter->useAgent($this->replacement);
@@ -52,7 +51,7 @@ final class CommandAdapterTest extends TestCase
         };
         $commands = new Commands([$command]);
         $adapter = new FakeCommandAdapter($commands);
-        $execution = $commands->run('/inspect', new CommandArguments('A warning.'), $adapter);
+        $execution = $commands->run('/inspect', 'A warning.', $adapter);
 
         self::assertNotNull($execution);
         self::assertSame('completed', $execution->status);

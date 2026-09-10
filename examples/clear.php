@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Examples\BackendAdapter;
@@ -23,7 +22,7 @@ $agent->setChatHistory($previousSession);
 
 $commands = new Commands(new ClearCommand());
 $adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
-$commands->run('/clear', new CommandArguments(), $adapter);
+$commands->run('/clear', '', $adapter);
 
 // The Agent now has an empty Session; the previous conversation is still stored.
 echo json_encode([

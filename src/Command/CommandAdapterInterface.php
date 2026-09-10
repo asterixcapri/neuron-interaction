@@ -38,7 +38,7 @@ interface CommandAdapterInterface
     public function promptAgent(string $prompt): void;
 
     /** Request a later invocation with the chosen value, then return immediately. */
-    public function requestSelection(SelectionRequest $request): void;
+    public function requestSelection(Selection $request): void;
 
     public function agent(): Agent;
 

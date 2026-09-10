@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use DateTimeImmutable;
-use NeuronInteraction\Command\CommandArguments;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Session\SessionStore;
@@ -33,7 +32,7 @@ final class ResumeCommandTest extends TestCase
         ]);
         $adapter = new FakeCommandAdapter(collection: new SessionStore($storage, 'alice'));
 
-        (new ResumeCommand())->run($adapter, new CommandArguments());
+        (new ResumeCommand())->run($adapter, '');
 
         self::assertCount(1, $adapter->selections);
         self::assertCount(1, $adapter->selections[0]->options);

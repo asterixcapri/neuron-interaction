@@ -10,7 +10,7 @@ use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
-use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Command\Selection;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -30,7 +30,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
     /** @var list<string> */
     public array $prompts = [];
 
-    /** @var list<SelectionRequest> */
+    /** @var list<Selection> */
     public array $selections = [];
 
     public bool $stopped = false;
@@ -73,7 +73,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
         $this->prompts[] = $prompt;
     }
 
-    public function requestSelection(SelectionRequest $request): void
+    public function requestSelection(Selection $request): void
     {
         $this->selections[] = $request;
     }

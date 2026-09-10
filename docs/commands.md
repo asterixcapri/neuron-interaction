@@ -50,9 +50,9 @@ their parameter as `CommandAdapterInterface<mixed>`; concrete Adapters declare
 
 ## Session selection
 
-`/resume` without arguments emits a `SelectionRequest` and returns. The Adapter
+`/resume` without arguments emits a `Selection` and returns. The Adapter
 presents its options and invokes the request's target Command again with the
-chosen value in new `CommandArguments`. `/clear` installs a distinct empty
+chosen value as a string. `/clear` installs a distinct empty
 Session History while preserving the previous Session. Agent prompting,
 presentation and the interaction lifecycle remain Adapter responsibilities.
 
@@ -105,7 +105,7 @@ Adapter implementations must replace `say()` with `notify()` and implement
 
 [BackendAdapter](../examples/BackendAdapter.php) implements every operation of
 `CommandAdapterInterface`. It admits its Commands and collects notices, warnings, expected errors,
-a `SelectionRequest`, and the stop effect for one response. Its `afterExecution()`
+a `Selection`, and the stop effect for one response. Its `afterExecution()`
 returns response data containing those values, the technical status, identifier,
 and any exception message. The `errors` list contains expected failures reported
 by Commands; the singular `error` field contains the execution exception message.

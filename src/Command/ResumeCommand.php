@@ -36,10 +36,10 @@ final readonly class ResumeCommand implements CommandInterface
     }
 
     /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, CommandArguments $arguments): void
+    public function run(CommandAdapterInterface $adapter, string $value): void
     {
-        if ($arguments->text !== '') {
-            $session = $adapter->sessionStore()->read($arguments->text);
+        if ($value !== '') {
+            $session = $adapter->sessionStore()->read($value);
 
             if ($session === null) {
                 $adapter->error('No Session is named by that key.');
@@ -71,7 +71,7 @@ final readonly class ResumeCommand implements CommandInterface
             );
         }
 
-        $adapter->requestSelection(new SelectionRequest($this->name(), 'Sessions', $options));
+        $adapter->requestSelection(new Selection($this->name(), 'Sessions', $options));
     }
 
     private function formatDescription(

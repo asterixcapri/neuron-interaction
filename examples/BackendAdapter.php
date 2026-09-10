@@ -12,7 +12,7 @@ use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
-use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Command\Selection;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 
@@ -26,7 +26,7 @@ use NeuronInteraction\Session\SessionStore;
  *     notices: list<string>,
  *     warnings: list<string>,
  *     errors: list<string>,
- *     selection: ?SelectionRequest,
+ *     selection: ?Selection,
  *     stopped: bool,
  * }
  * @implements CommandAdapterInterface<BackendResponse>
@@ -42,7 +42,7 @@ final class BackendAdapter implements CommandAdapterInterface
     /** @var list<string> */
     private array $errors = [];
 
-    private ?SelectionRequest $selection = null;
+    private ?Selection $selection = null;
 
     private bool $stopped = false;
 
@@ -96,7 +96,7 @@ final class BackendAdapter implements CommandAdapterInterface
         ($this->submitPrompt)($this->answeringAgent, $prompt);
     }
 
-    public function requestSelection(SelectionRequest $request): void
+    public function requestSelection(Selection $request): void
     {
         $this->selection = $request;
     }
