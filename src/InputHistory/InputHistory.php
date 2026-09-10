@@ -18,7 +18,9 @@ final class InputHistory
 
     private string $draft = '';
 
-    public function __construct(private readonly StorageInterface $storage) {}
+    public function __construct(private readonly StorageInterface $storage)
+    {
+    }
 
     /**
      * Records the person's original submission, including Command syntax.

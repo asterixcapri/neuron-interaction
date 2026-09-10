@@ -16,7 +16,8 @@ final class ConfigurationStore
     public function __construct(
         private readonly StorageInterface $storage,
         private readonly string $userId,
-    ) {}
+    ) {
+    }
 
     /**
      * The fallback selects the exact PHP type; strings must also be non-empty.

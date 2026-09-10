@@ -12,8 +12,8 @@ use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
 use NeuronInteraction\Command\LeaveCommand;
-use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Command\Selection;
+use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
@@ -98,7 +98,10 @@ final class BackendExampleTest extends TestCase
             $received[] = [$answering, $prompt];
         };
         $first = $commands->run('/choose', '', new BackendAdapter(
-            new Agent(), $commands, $sessionStore, $submitPrompt,
+            new Agent(),
+            $commands,
+            $sessionStore,
+            $submitPrompt,
         ));
 
         self::assertNotNull($first);
@@ -115,7 +118,10 @@ final class BackendExampleTest extends TestCase
         $selection = $first['selection'];
         $secondAgent = new Agent();
         $second = $commands->run($selection->command, $selection->options[0]->value, new BackendAdapter(
-            $secondAgent, $commands, $sessionStore, $submitPrompt,
+            $secondAgent,
+            $commands,
+            $sessionStore,
+            $submitPrompt,
         ));
 
         self::assertNotNull($second);
@@ -194,7 +200,10 @@ final class BackendExampleTest extends TestCase
 
         foreach (['/guide', '/missing', '/quit'] as $identifier) {
             $response = $commands->run($identifier, '', new BackendAdapter(
-                new Agent(), $commands, $sessionStore, static function (): void {},
+                new Agent(),
+                $commands,
+                $sessionStore,
+                static function (): void {},
             ));
             self::assertNotNull($response);
             $responses[$identifier] = $response;

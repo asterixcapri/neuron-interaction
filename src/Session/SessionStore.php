@@ -19,7 +19,9 @@ final readonly class SessionStore
 {
     private const string NAMESPACE = 'sessions';
 
-    public function __construct(private StorageInterface $storage, private string $userId) {}
+    public function __construct(private StorageInterface $storage, private string $userId)
+    {
+    }
 
     /**
      * Starts a distinct Session with an empty History.

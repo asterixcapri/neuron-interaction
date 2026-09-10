@@ -9,8 +9,8 @@ use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
-use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Command\Selection;
+use NeuronInteraction\Command\SelectionOption;
 use PHPUnit\Framework\TestCase;
 
 final class SelectionTest extends TestCase

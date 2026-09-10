@@ -8,8 +8,8 @@ use NeuronAI\Agent\Agent;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
-use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Command\Selection;
+use NeuronInteraction\Command\SelectionOption;
 use PHPUnit\Framework\TestCase;
 
 final class CommandAdapterTest extends TestCase

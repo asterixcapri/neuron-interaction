@@ -6,8 +6,8 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
-use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 

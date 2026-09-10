@@ -6,14 +6,14 @@ namespace NeuronInteraction\Examples;
 
 use Closure;
 use NeuronAI\Agent\Agent;
-use NeuronInteraction\Configuration\ConfigurationStore;
-use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\Selection;
+use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\InMemoryStorage;
 
 /**
  * Example request-scoped Adapter; the Host Application supplies Agent execution.

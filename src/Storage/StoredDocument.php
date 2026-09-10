@@ -17,7 +17,8 @@ final readonly class StoredDocument
         public string $key,
         public array $data,
         public array $metadata,
-    ) {}
+    ) {
+    }
 
     /**
      * Number of bytes in this document's runtime JSON representation.

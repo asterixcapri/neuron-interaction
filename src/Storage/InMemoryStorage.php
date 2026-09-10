@@ -43,8 +43,7 @@ final class InMemoryStorage extends AbstractStorage
     protected function readDocument(
         string $namespace,
         string $key,
-    ): ?StoredDocument
-    {
+    ): ?StoredDocument {
         $document = $this->documents[$namespace][$key] ?? null;
 
         return $document === null

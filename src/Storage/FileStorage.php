@@ -11,7 +11,9 @@ final class FileStorage extends AbstractStorage
 {
     private const string FILE_EXTENSION = '.json';
 
-    public function __construct(private readonly string $root) {}
+    public function __construct(private readonly string $root)
+    {
+    }
 
     /**
      * @param array<array-key, mixed> $data
@@ -52,8 +54,7 @@ final class FileStorage extends AbstractStorage
     protected function readDocument(
         string $namespace,
         string $key,
-    ): ?StoredDocument
-    {
+    ): ?StoredDocument {
         if (!is_dir($this->root)) {
             return null;
         }

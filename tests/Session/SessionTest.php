@@ -18,8 +18,8 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Tools\Tool;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
-use PHPUnit\Framework\Attributes\DataProvider;
 use NeuronInteraction\Storage\InMemoryStorage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class SessionTest extends TestCase
