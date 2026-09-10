@@ -253,6 +253,20 @@ In `resume-selection.php`, the first request offers saved conversations. The
 second simulates the user's choice and reopens that conversation with a fresh
 Agent and Adapter. The example provides its own sample data in memory.
 
+## Configuration in Commands
+
+Commands access the Host Application's configuration store through
+`CommandAdapterInterface::configurationStore()`, just as they access conversations
+through `sessionStore()`. Adapters must provide the same `ConfigurationStore`
+instance throughout the interaction, including selection continuations.
+
+Read individual preferences with `$store->read('model', 'default-model')`, write
+with `$store->write('model', 'chosen-model')`, remove with `$store->delete('model')`,
+and inspect them with `$store->entries()`. Writes persist through the supplied
+Storage immediately. See [ConfigurationStore](docs/configuration.md) for value
+validation, user isolation and compatibility: old named configurations remain
+untouched and are not automatically imported.
+
 ## Development
 
 ```bash

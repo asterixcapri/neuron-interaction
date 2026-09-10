@@ -1,47 +1,64 @@
-# Configuration
+# ConfigurationStore
 
-A ConfigurationStore binds storage to the user supplied by the host application.
-Each user can create a configuration with the same logical key, such as
-`default`. Keys and user identities need no filesystem encoding from callers.
+ConfigurationStore provides direct access to one user's stored preferences.
+The Host Application supplies Storage and an explicit user identity once.
+Keys such as `model` identify individual preferences; they are literal strings,
+not profile names, filesystem paths or nested-property expressions.
 
 ```php
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Storage\FileStorage;
 
 $store = new ConfigurationStore(new FileStorage($dataDirectory), $userId);
-$configuration = $store->read('default')
-    ?? $store->create('default', [
-        'model' => 'initial-model',
-        'provider' => 'example-provider',
-        'tools' => ['search'],
-    ]);
-
-$configuration->set('model', 'another-model');
-$configuration->set('temperature', 0.5);
-$configuration->remove('obsoleteOption');
-$store->write($configuration);
+$model = $store->read('model', 'initial-model');
+$store->write('model', 'another-model');
+$store->write('temperature', 0.5);
+$store->delete('obsoleteOption');
+$preferences = $store->entries();
 ```
 
-Creation immediately persists the initial values. Creating an existing key for
-the same user throws `RuntimeException` and preserves the existing document,
-including when file-backed creates compete.
+`read($key, $fallback = null)` returns the fallback only for an absent key,
+without changing storage. An explicitly stored `null` remains `null` even with
+a non-null fallback. `entries()` returns an associative PHP array of keys and
+values, or an empty array, with no ordering guarantee.
 
-A missing read returns `null`. `delete($key)` removes that user's configuration
-if present. `getKey()` and `getUserId()` expose its key and owner.
-
-`set()` and `remove()` affect memory only. A new read sees the previous values
-until `write($configuration)` persists all changes together. Updating one option
-preserves unrelated options. The supported flow is to create or read through a
-Store and write through that same Store.
-
-`has($name)` distinguishes a present null value from an absent value.
-`get($name, $default)` returns the default only when the value is absent.
-`all()` returns the complete values map.
+`write($key, $value)` creates or replaces one preference and preserves the
+others. `delete($key)` removes one preference; deleting an absent key is a
+no-op. Both return void and complete through the supplied Storage before
+returning. There is no separate create, load or save operation. FileStorage
+persists to files; InMemoryStorage is transient. This does not promise disk
+synchronization, cross-process transactions or coordinated provider rollback.
 
 Values may be JSON scalars, null, lists and nested PHP arrays. Objects,
-resources, recursive arrays, non-finite numbers and invalid JSON strings are
-rejected with `InvalidArgumentException`. Model, provider and other option
-meanings belong to the host application. It also selects the active
-configuration and constructs or replaces its Agent.
+resources, recursive arrays, non-finite numbers and invalid encodings are
+rejected with `InvalidArgumentException` before changing saved values. Arrays
+supplied to writes or returned by reads and entries are detached data: later
+mutations require an explicit write to affect preferences. Storage failures
+propagate to the caller. Users sharing Storage have independent preferences.
+
+Commands obtain the Host Application's shared Store through
+`$adapter->configurationStore()`. For example:
+
+```php
+$adapter->configurationStore()->write('model', $arguments->text);
+```
+
+Model meanings and provider construction belong to the Host Application.
+Neuron TUI's demo updates the current Agent's provider and preserves its History.
+Opening or cancelling its model selector does not save a choice.
+
+Storage handles namespaced JSON documents. SessionStore creates and finds
+conversations; each Session is a self-persisting Neuron Chat History.
+ConfigurationStore reads and writes individual preferences directly. These
+modules may share Storage without sharing their public protocols.
+
+## Compatibility
+
+This replaces the public Configuration object and named-configuration protocol.
+Direct preferences use a separate storage namespace. Old named configurations
+are neither discovered nor imported, overwritten or deleted by this API. A
+previously saved model in a named configuration therefore does not initialize
+the new preference; the Host Application uses its fallback until a new choice
+is written. Migration is a separate application decision.
 
 Run `php examples/configuration.php` for a file-backed example.

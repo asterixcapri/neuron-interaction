@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 
@@ -48,6 +49,8 @@ interface CommandAdapterInterface
     public function commands(): Commands;
 
     public function sessionStore(): SessionStore;
+
+    public function configurationStore(): ConfigurationStore;
 
     public function stop(): void;
 }

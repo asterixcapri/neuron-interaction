@@ -9,6 +9,7 @@ use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Storage\StorageInterface;
+use NeuronInteraction\Storage\StoredDocument;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -49,127 +50,51 @@ final class ConfigurationStoreTest extends TestCase
     }
 
     #[DataProvider('adapters')]
-    public function testCreateAndReopenJsonValues(bool $file): void
-    {
-        $storage = $this->storage($file);
-        $store = new ConfigurationStore($storage, 'owner@example.com');
-        $values = [
-            'model' => 'first',
-            'temperature' => 1.0,
-            'enabled' => true,
-            'limit' => 12,
-            'nothing' => null,
-            'nested' => ['tools' => ['search', null, ['enabled' => false]]],
-        ];
-        $configuration = $store->create('personal/default', $values);
-        $reopened = (new ConfigurationStore(
-            $file ? new FileStorage($this->directory) : $storage,
-            'owner@example.com',
-        ))->read('personal/default');
-
-        self::assertNotNull($reopened);
-        self::assertSame($values, $reopened->all());
-        self::assertSame('personal/default', $configuration->getKey());
-        self::assertSame('owner@example.com', $reopened->getUserId());
-        self::assertTrue($reopened->has('nothing'));
-        self::assertNull($reopened->get('nothing', 'fallback'));
-        self::assertFalse($reopened->has('absent'));
-        self::assertSame('fallback', $reopened->get('absent', 'fallback'));
-        self::assertNull($reopened->get('absent'));
-        self::assertSame([], $store->create('empty')->all());
-    }
-
-    #[DataProvider('adapters')]
-    public function testChangesRemainInMemoryUntilWrittenTogether(bool $file): void
+    public function testPreferencesAreWrittenImmediatelyAndReopened(bool $file): void
     {
         $storage = $this->storage($file);
         $store = new ConfigurationStore($storage, 'alice');
-        $original = ['model' => 'old', 'provider' => 'one', 'tools' => ['search'], 'obsolete' => true];
-        $store->create('default', $original);
-        $configuration = $store->read('default');
-        self::assertNotNull($configuration);
-        $configuration->set('model', 'new');
-        $configuration->set('provider', 'two');
-        $configuration->set('temperature', 0.5);
-        $configuration->remove('obsolete');
-        $configuration->remove('missing');
-
-        self::assertSame($original, $store->read('default')?->all());
-        $store->write($configuration);
+        self::assertNull($store->read('missing'));
+        self::assertSame('fallback', $store->read('model', 'fallback'));
+        self::assertSame([], $store->entries());
+        $store->write('model', 'first');
+        $store->write('temperature', 1.0);
+        $store->write('model', 'second');
+        $store->write('nothing', null);
         $reopened = new ConfigurationStore($file ? new FileStorage($this->directory) : $storage, 'alice');
-        self::assertSame([
-            'model' => 'new',
-            'provider' => 'two',
-            'tools' => ['search'],
-            'temperature' => 0.5,
-        ], $reopened->read('default')?->all());
+        self::assertSame('second', $reopened->read('model'));
+        self::assertNull($reopened->read('nothing', 'fallback'));
+        self::assertSame(['model' => 'second', 'temperature' => 1.0, 'nothing' => null], $reopened->entries());
     }
 
     #[DataProvider('adapters')]
-    public function testUsersHaveIndependentKeysReadsWritesAndDeletes(bool $file): void
+    public function testDeletingOnePreferencePreservesOtherPreferencesAndUsers(bool $file): void
     {
         $storage = $this->storage($file);
         $alice = new ConfigurationStore($storage, 'alice');
         $bob = new ConfigurationStore($storage, 'bob');
-        $configuration = $alice->create('default', ['model' => 'alice']);
-        self::assertNull($bob->read('default'));
-        $bob->delete('default');
-        $bob->create('default', ['model' => 'bob']);
-        $configuration->set('model', 'alice-updated');
-        $alice->write($configuration);
-        self::assertSame('bob', $bob->read('default')?->get('model'));
-        $alice->delete('default');
-        $alice->delete('default');
-        self::assertNull($alice->read('default'));
-        self::assertSame('bob', $bob->read('default')->get('model'));
-    }
-
-    #[DataProvider('adapters')]
-    public function testDuplicateCreationFailsWithoutOverwriting(bool $file): void
-    {
-        $store = new ConfigurationStore($this->storage($file), 'alice');
-        $store->create('default', ['model' => 'first']);
-        try {
-            $store->create('default', ['model' => 'replacement']);
-            self::fail('Duplicate creation must fail.');
-        } catch (RuntimeException) {
-            self::assertSame('first', $store->read('default')?->get('model'));
-        }
-    }
-
-    #[DataProvider('adapters')]
-    public function testAcceptedValuesAreDetachedFromExternalReferences(bool $file): void
-    {
-        $storage = $this->storage($file);
-        $store = new ConfigurationStore($storage, 'alice');
-        $initial = ['temperature' => 1.0, 'nested' => [null, 'original']];
-        $initialSnapshot = $initial;
-        $configuration = $store->create('references', ['value' => &$initial]);
-        $replacement = 'accepted';
-        $configuration->set('options', ['nested' => [&$replacement]]);
-        $object = new class implements \JsonSerializable {
-            public function jsonSerialize(): mixed
-            {
-                throw new RuntimeException('An external object must never reach serialization.');
-            }
-        };
-        $initial = $object;
-        $replacement = $object;
-
-        $expected = ['value' => $initialSnapshot, 'options' => ['nested' => ['accepted']]];
-        self::assertSame($expected, $configuration->all());
-        self::assertSame($initialSnapshot, $configuration->get('value'));
-        self::assertSame(['value' => $initialSnapshot], $store->read('references')?->all());
-        $store->write($configuration);
-        $fresh = new ConfigurationStore($file ? new FileStorage($this->directory) : $storage, 'alice');
-        self::assertSame($expected, $fresh->read('references')?->all());
+        $bob->delete('model');
+        self::assertSame([], $bob->entries());
+        $alice->write('model', 'alice');
+        self::assertNull($bob->read('model'));
+        $bob->write('model', 'bob');
+        $alice->write('tools', ['search']);
+        $alice->delete('missing');
+        self::assertSame('alice', $alice->read('model'));
+        $alice->delete('model');
+        $alice->delete('model');
+        self::assertSame('fallback', $alice->read('model', 'fallback'));
+        self::assertSame(['tools' => ['search']], $alice->entries());
+        self::assertSame(['model' => 'bob'], $bob->entries());
+        $alice->delete('tools');
+        self::assertSame([], $alice->entries());
     }
 
     #[DataProvider('adapters')]
     public function testInvalidValuesAreRejectedWithoutChangingConfiguration(bool $file): void
     {
         $store = new ConfigurationStore($this->storage($file), 'alice');
-        $configuration = $store->create('default', ['valid' => 'original']);
+        $store->write('valid', 'original');
         $recursive = [];
         $recursive['self'] = &$recursive;
         $resource = fopen('php://memory', 'r');
@@ -183,13 +108,13 @@ final class ConfigurationStoreTest extends TestCase
         try {
             foreach ([new \stdClass(), ['nested' => $object], INF, NAN, "\xB1", $resource, $recursive] as $value) {
                 try {
-                    $configuration->set('valid', $value);
+                    $store->write('valid', $value);
                     self::fail('Invalid values must be rejected.');
                 } catch (InvalidArgumentException) {
-                    self::assertSame('original', $configuration->get('valid'));
+                    self::assertSame('original', $store->read('valid'));
                 }
                 try {
-                    $store->create('invalid', ['value' => $value]);
+                    $store->write('invalid', $value);
                     self::fail('Invalid initial values must be rejected.');
                 } catch (InvalidArgumentException) {
                     self::assertNull($store->read('invalid'));
@@ -199,6 +124,96 @@ final class ConfigurationStoreTest extends TestCase
             if (is_resource($resource)) {
                 fclose($resource);
             }
+        }
+    }
+
+    #[DataProvider('adapters')]
+    public function testValuesAndReturnedArraysAreDetached(bool $file): void
+    {
+        $store = new ConfigurationStore($this->storage($file), 'alice');
+        $nested = ['enabled' => true, 'limit' => 12, 'list' => [null, 'original']];
+        $store->write('options', ['nested' => &$nested]);
+        $nested['list'][1] = 'external mutation';
+        $read = $store->read('options');
+        self::assertIsArray($read);
+        $read['nested'] = 'changed';
+        $entries = $store->entries();
+        $entries['options'] = 'changed';
+        self::assertSame([
+            'nested' => ['enabled' => true, 'limit' => 12, 'list' => [null, 'original']],
+        ], $store->read('options'));
+    }
+
+    public function testIndependentMemoryAdaptersDoNotSharePreferences(): void
+    {
+        $first = new ConfigurationStore(new InMemoryStorage(), 'alice');
+        $second = new ConfigurationStore(new InMemoryStorage(), 'alice');
+        $first->write('model', 'first');
+        self::assertSame([], $second->entries());
+    }
+
+    #[DataProvider('adapters')]
+    public function testPreferenceKeysAreLiteral(bool $file): void
+    {
+        $store = new ConfigurationStore($this->storage($file), 'owner/with spaces');
+        foreach (['', 'a.b', '../model', '0'] as $key) {
+            $store->write($key, $key);
+            self::assertSame($key, $store->read($key));
+        }
+        self::assertSame(['' => '', 'a.b' => 'a.b', '../model' => '../model', 0 => '0'], $store->entries());
+    }
+
+    public function testMissingReadsAndDeletesDoNotRequireWritableStorage(): void
+    {
+        $storage = $this->createStub(StorageInterface::class);
+        $storage->method('read')->willReturn(null);
+        $storage->method('write')->willThrowException(new RuntimeException('Storage is read-only'));
+        $storage->method('create')->willThrowException(new RuntimeException('Storage is read-only'));
+        $storage->method('delete')->willThrowException(new RuntimeException('Storage is read-only'));
+        $store = new ConfigurationStore($storage, 'alice');
+        self::assertSame('fallback', $store->read('model', 'fallback'));
+        $store->delete('model');
+        self::assertSame([], $store->entries());
+    }
+
+    public function testWriteFailuresRemainObservable(): void
+    {
+        $storage = $this->createStub(StorageInterface::class);
+        $storage->method('write')->willThrowException(new RuntimeException('Storage unavailable'));
+        $store = new ConfigurationStore($storage, 'alice');
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Storage unavailable');
+        $store->write('model', 'new');
+    }
+
+    #[DataProvider('adapters')]
+    public function testLegacyDocumentsAreNeitherImportedNorChanged(bool $file): void
+    {
+        $storage = $this->storage($file);
+        // Fixture written by the previous named-Configuration protocol.
+        $legacyKey = hash('sha256', '5:alicedemo');
+        $legacy = $storage->create('configurations', ['model' => 'legacy'], ['userId' => 'alice'], $legacyKey);
+        $store = new ConfigurationStore($storage, 'alice');
+        self::assertSame([], $store->entries());
+        $store->write('model', 'new');
+        $store->delete('demo');
+        $store->delete('model');
+        self::assertEquals($legacy, $storage->read('configurations', $legacyKey));
+    }
+
+    public function testDeletionFailureRemainsObservableAndPreservesTheValue(): void
+    {
+        $storage = $this->createStub(StorageInterface::class);
+        $storage->method('read')->willReturn(new StoredDocument('stored', ['model' => 'previous'], ['userId' => 'alice']));
+        $storage->method('write')->willThrowException(new RuntimeException('Storage unavailable'));
+        $storage->method('delete')->willThrowException(new RuntimeException('Storage unavailable'));
+        $store = new ConfigurationStore($storage, 'alice');
+        try {
+            $store->delete('model');
+            self::fail('Failed persistence must remain observable.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('Storage unavailable', $exception->getMessage());
+            self::assertSame('previous', $store->read('model'));
         }
     }
 }

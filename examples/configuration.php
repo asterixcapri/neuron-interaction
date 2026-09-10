@@ -7,22 +7,19 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Storage\FileStorage;
 
-// The host supplies the identity and decides which configuration is active.
+// The host supplies the identity once; keys identify individual preferences.
 $configurationStore = new ConfigurationStore(
     new FileStorage(sys_get_temp_dir() . '/neuron-interaction-example'),
     'local-demo',
 );
 
-$configuration = $configurationStore->read('default')
-    ?? $configurationStore->create('default', [
-        'model' => 'initial-model',
-        'provider' => 'example-provider',
-        'tools' => ['search'],
-    ]);
+// A fallback does not create a saved preference.
+$model = $configurationStore->read('model', 'initial-model');
+echo 'Current model: ' . json_encode($model, JSON_THROW_ON_ERROR) . PHP_EOL;
 
-$configuration->set('model', 'another-model');
-// Related changes stay in memory until this explicit write. Provider and tools remain.
-$configurationStore->write($configuration);
+$configurationStore->write('model', 'another-model');
+$configurationStore->write('tools', ['search']);
+$configurationStore->delete('obsoleteOption');
 
-// The host may now use these values to construct its Agent.
-echo json_encode($configuration->all(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
+// Each write has already completed through Storage. No save step is needed.
+echo json_encode($configurationStore->entries(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;

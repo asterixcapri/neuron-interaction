@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
@@ -38,6 +39,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
         public Commands $mounted = new Commands(),
         private Agent $answering = new Agent(),
         private SessionStore $collection = new SessionStore(new InMemoryStorage(), 'local-user'),
+        private ConfigurationStore $configurations = new ConfigurationStore(new InMemoryStorage(), 'local-user'),
     ) {
     }
 
@@ -100,6 +102,11 @@ class FakeCommandAdapter implements CommandAdapterInterface
     public function sessionStore(): SessionStore
     {
         return $this->collection;
+    }
+
+    public function configurationStore(): ConfigurationStore
+    {
+        return $this->configurations;
     }
 
     public function stop(): void
