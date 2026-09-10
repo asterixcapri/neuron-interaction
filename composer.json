@@ -1,6 +1,6 @@
 {
     "name": "asterixcapri/neuron-interaction",
-    "description": "Presentation-independent interaction modules for Neuron AI Agents.",
+    "description": "Sessions, commands, selections and user preferences for applications built with Neuron AI.",
     "type": "library",
     "license": "MIT",
     "authors": [

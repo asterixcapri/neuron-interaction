@@ -1,14 +1,14 @@
 # Neuron Interaction
 
-Neuron Interaction is a small PHP library for building reusable interaction
-flows around [Neuron AI](https://github.com/neuron-core/neuron-ai) Agents. It
-provides the state and application-level behavior common to conversational
-interfaces while leaving presentation, Agent execution and response streaming
-to the Host Application.
+Neuron Interaction is a PHP library providing sessions, commands, selections
+and user preferences for applications built with
+[Neuron AI](https://github.com/neuron-core/neuron-ai).
 
-The same interaction logic can therefore serve a terminal, web backend or
-another delivery mechanism. Each Host Application supplies an Adapter that
-translates the library's operations into its own UI and response model.
+Use it to save and resume conversations, offer reusable commands, ask users
+to choose an option, recall previous inputs and persist their preferences.
+The same modules work with a terminal, web backend or another delivery mechanism.
+Each Host Application supplies an Adapter for its UI and response model,
+and controls presentation, Agent execution and response streaming.
 
 ## Installation
 
