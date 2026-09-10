@@ -262,8 +262,11 @@ instance throughout the interaction, including selection continuations.
 
 Read individual preferences with `$store->read('model', 'default-model')`, write
 with `$store->write('model', 'chosen-model')`, remove with `$store->delete('model')`,
-and inspect them with `$store->entries()`. Writes persist through the supplied
-Storage immediately. See [ConfigurationStore](docs/configuration.md) for value
+and inspect original values with `$store->entries()`. The fallback selects the
+read type: `read('retries', 3)` accepts integers, while `read('model', 'default-model')`
+accepts non-empty strings. Missing or incompatible values return the fallback;
+reads without one return a non-empty string or null. Writes persist through the
+supplied Storage immediately. See [ConfigurationStore](docs/configuration.md) for value
 validation, user isolation and compatibility: old named configurations remain
 untouched and are not automatically imported.
 

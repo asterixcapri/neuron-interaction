@@ -18,11 +18,36 @@ final class ConfigurationStore
         private readonly string $userId,
     ) {}
 
+    /**
+     * The fallback selects the exact PHP type; strings must also be non-empty.
+     * A null fallback requests a non-empty string or null.
+     *
+     * @return ($fallback is null ? non-empty-string|null :
+     *     ($fallback is string ? non-empty-string :
+     *     ($fallback is int ? int :
+     *     ($fallback is float ? float :
+     *     ($fallback is bool ? bool : array<array-key, mixed>)))))
+     */
     public function read(string $key, mixed $fallback = null): mixed
     {
+        self::guardJson($fallback);
+        if ($fallback === '') {
+            throw new InvalidArgumentException('A string fallback must be non-empty.');
+        }
+
         $values = $this->entries();
 
-        return array_key_exists($key, $values) ? $values[$key] : $fallback;
+        $value = $values[$key] ?? null;
+
+        return match (true) {
+            $fallback === null => is_string($value) && $value !== '' ? $value : null,
+            is_string($fallback) => is_string($value) && $value !== '' ? $value : $fallback,
+            is_int($fallback) => is_int($value) ? $value : $fallback,
+            is_float($fallback) => is_float($value) ? $value : $fallback,
+            is_bool($fallback) => is_bool($value) ? $value : $fallback,
+            is_array($fallback) => is_array($value) ? $value : self::snapshotArray($fallback),
+            default => throw new InvalidArgumentException('Unsupported configuration fallback type.'),
+        };
     }
 
     public function write(string $key, mixed $value): void

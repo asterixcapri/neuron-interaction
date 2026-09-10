@@ -49,6 +49,61 @@ final class ConfigurationStoreTest extends TestCase
         return $file ? new FileStorage($this->directory) : new InMemoryStorage();
     }
 
+    public function testInvalidFallbackIsRejectedEvenWhenTheStoredValueIsUsable(): void
+    {
+        $store = new ConfigurationStore(new InMemoryStorage(), 'alice');
+        $store->write('model', 'chosen-model');
+        foreach (['', INF, NAN, "\xB1", new \stdClass(), [new \stdClass()]] as $fallback) {
+            try {
+                $store->read('model', $fallback);
+                self::fail('Fallbacks must be usable JSON data.');
+            } catch (InvalidArgumentException) {
+                self::assertSame('chosen-model', $store->read('model'));
+            }
+        }
+    }
+
+    #[DataProvider('adapters')]
+    public function testFallbackDeterminesTheExactTypeWithoutCoercion(bool $file): void
+    {
+        $store = new ConfigurationStore($this->storage($file), 'alice');
+        foreach ([
+            [3, 0, '3'],
+            [0, 12, 0.0],
+            [1.5, 0.0, 1],
+            [0.0, 2.5, '2.5'],
+            [true, false, 0],
+            [false, true, 'false'],
+            [['default'], [], 'tools'],
+            [[], ['nested' => [true, null, 12]], false],
+        ] as [$fallback, $valid, $invalid]) {
+            self::assertSame($fallback, $store->read('missing', $fallback));
+            $store->write('preference', $valid);
+            self::assertSame($valid, $store->read('preference', $fallback));
+            $store->write('preference', $invalid);
+            self::assertSame($fallback, $store->read('preference', $fallback));
+            $store->write('preference', null);
+            self::assertSame($fallback, $store->read('preference', $fallback));
+        }
+    }
+
+    #[DataProvider('adapters')]
+    public function testStringFallbackResolvesUnusablePreferencesWithoutChangingThem(bool $file): void
+    {
+        $store = new ConfigurationStore($this->storage($file), 'alice');
+        foreach ([null, '', 0, false, []] as $value) {
+            $store->write('model', $value);
+            self::assertSame('default-model', $store->read('model', 'default-model'));
+            self::assertNull($store->read('model'));
+            self::assertSame(['model' => $value], $store->entries());
+        }
+        foreach (['chosen-model', '0', ' '] as $value) {
+            $store->write('model', $value);
+            self::assertSame($value, $store->read('model', 'default-model'));
+            self::assertSame($value, $store->read('model'));
+        }
+    }
+
     #[DataProvider('adapters')]
     public function testPreferencesAreWrittenImmediatelyAndReopened(bool $file): void
     {
@@ -63,7 +118,7 @@ final class ConfigurationStoreTest extends TestCase
         $store->write('nothing', null);
         $reopened = new ConfigurationStore($file ? new FileStorage($this->directory) : $storage, 'alice');
         self::assertSame('second', $reopened->read('model'));
-        self::assertNull($reopened->read('nothing', 'fallback'));
+        self::assertSame('fallback', $reopened->read('nothing', 'fallback'));
         self::assertSame(['model' => 'second', 'temperature' => 1.0, 'nothing' => null], $reopened->entries());
     }
 
@@ -134,14 +189,13 @@ final class ConfigurationStoreTest extends TestCase
         $nested = ['enabled' => true, 'limit' => 12, 'list' => [null, 'original']];
         $store->write('options', ['nested' => &$nested]);
         $nested['list'][1] = 'external mutation';
-        $read = $store->read('options');
-        self::assertIsArray($read);
+        $read = $store->read('options', []);
         $read['nested'] = 'changed';
         $entries = $store->entries();
         $entries['options'] = 'changed';
         self::assertSame([
             'nested' => ['enabled' => true, 'limit' => 12, 'list' => [null, 'original']],
-        ], $store->read('options'));
+        ], $store->read('options', []));
     }
 
     public function testIndependentMemoryAdaptersDoNotSharePreferences(): void
@@ -157,10 +211,10 @@ final class ConfigurationStoreTest extends TestCase
     {
         $store = new ConfigurationStore($this->storage($file), 'owner/with spaces');
         foreach (['', 'a.b', '../model', '0'] as $key) {
-            $store->write($key, $key);
-            self::assertSame($key, $store->read($key));
+            $store->write($key, 'value:' . $key);
+            self::assertSame('value:' . $key, $store->read($key));
         }
-        self::assertSame(['' => '', 'a.b' => 'a.b', '../model' => '../model', 0 => '0'], $store->entries());
+        self::assertSame(['' => 'value:', 'a.b' => 'value:a.b', '../model' => 'value:../model', 0 => 'value:0'], $store->entries());
     }
 
     public function testMissingReadsAndDeletesDoNotRequireWritableStorage(): void

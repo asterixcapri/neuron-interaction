@@ -17,10 +17,37 @@ $store->delete('obsoleteOption');
 $preferences = $store->entries();
 ```
 
-`read($key, $fallback = null)` returns the fallback only for an absent key,
-without changing storage. An explicitly stored `null` remains `null` even with
-a non-null fallback. `entries()` returns an associative PHP array of keys and
-values, or an empty array, with no ordering guarantee.
+`read($key, $fallback = null)` uses the fallback to select the expected PHP type.
+A missing or incompatible value returns the fallback, without changing storage
+or converting the stored value. Strings must also be non-empty (`!== ''`).
+
+```php
+$model = $store->read('model', 'initial-model'); // non-empty-string
+$retries = $store->read('retries', 3);           // int
+$temperature = $store->read('temperature', 0.5); // float
+$enabled = $store->read('enabled', false);      // bool
+$tools = $store->read('tools', []);             // array
+$optional = $store->read('model');              // non-empty-string|null
+```
+
+Without a fallback, or with an explicit `null`, a read accepts only a non-empty
+string and returns `null` otherwise. A stored `null` therefore returns a non-null
+fallback when one is supplied. Integer and float are distinct: a stored integer
+is incompatible with a float fallback, and numeric strings are not converted.
+`'0'`, `0`, `0.0`, `false` and `[]` remain valid for their respective types.
+Whitespace-only strings are non-empty; model syntax remains the application's
+responsibility.
+
+Array fallbacks select only the PHP array type, not an element type, list shape
+or required keys. PHPStan return types follow these runtime guarantees and do
+not promise the fallback's literal value or array structure. An empty string
+fallback or non-JSON-compatible fallback throws `InvalidArgumentException`, even
+when a stored value exists. `null` is the supported no-fallback sentinel.
+
+`entries()` returns the original associative PHP array of keys and values,
+including nulls, empty strings and mixed value types. An empty Store returns an
+empty array, with no ordering guarantee. Resolution on read never repairs or
+rewrites stored data, and Storage failures propagate rather than using a fallback.
 
 `write($key, $value)` creates or replaces one preference and preserves the
 others. `delete($key)` removes one preference; deleting an absent key is a
@@ -53,6 +80,13 @@ ConfigurationStore reads and writes individual preferences directly. These
 modules may share Storage without sharing their public protocols.
 
 ## Compatibility
+
+Fallback-selected reads replace the earlier raw-value `read()` contract.
+Callers reading numbers, booleans or arrays must now supply an appropriate
+fallback. Callers needing the original values, including an explicit null or
+empty string, can use `entries()`. Writes, deletion and the on-disk format are
+unchanged by this read-contract revision.
+
 
 This replaces the public Configuration object and named-configuration protocol.
 Direct preferences use a separate storage namespace. Old named configurations

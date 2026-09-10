@@ -13,7 +13,7 @@ $configurationStore = new ConfigurationStore(
     'local-demo',
 );
 
-// A fallback does not create a saved preference.
+// The fallback selects non-empty strings and does not create a saved preference.
 $model = $configurationStore->read('model', 'initial-model');
 echo 'Current model: ' . json_encode($model, JSON_THROW_ON_ERROR) . PHP_EOL;
 
