@@ -71,7 +71,18 @@ final class FileStorage extends AbstractStorage
             return null;
         }
 
-        return $this->storedDocument($path, $key);
+        try {
+            return $this->storedDocument($path, $key);
+        } catch (RuntimeException $exception) {
+            // Another request may delete the document between the existence
+            // check and the read. Missing documents still mean null.
+            clearstatcache(true, $path);
+            if (!file_exists($path) && !is_link($path)) {
+                return null;
+            }
+
+            throw $exception;
+        }
     }
 
     /**
@@ -98,11 +109,14 @@ final class FileStorage extends AbstractStorage
         $temporary = $this->prepareTemporaryDocument($directory, $data, $metadata);
 
         try {
+            // Return our own snapshot even if a concurrent request removes or
+            // replaces the published file immediately after rename().
+            $document = $this->storedDocument($temporary, $key);
             if (!rename($temporary, $path)) {
                 throw new RuntimeException('The stored document could not be replaced.');
             }
 
-            return $this->storedDocument($path, $key);
+            return $document;
         } finally {
             if (file_exists($temporary)) {
                 unlink($temporary);
@@ -159,15 +173,23 @@ final class FileStorage extends AbstractStorage
         }
 
         if (is_link($path) || !is_file($path)) {
+            clearstatcache(true, $path);
+            if (!file_exists($path) && !is_link($path)) {
+                return;
+            }
+
             throw new RuntimeException(
                 'A stored document must be a regular file.',
             );
         }
 
-        if (!unlink($path)) {
-            throw new RuntimeException(
-                'The stored document could not be deleted.',
-            );
+        if (!@unlink($path)) {
+            clearstatcache(true, $path);
+            if (file_exists($path) || is_link($path)) {
+                throw new RuntimeException(
+                    'The stored document could not be deleted.',
+                );
+            }
         }
     }
 
@@ -195,7 +217,10 @@ final class FileStorage extends AbstractStorage
                 0,
                 -strlen(self::FILE_EXTENSION),
             );
-            $entries[] = $this->storedDocument($path, $key);
+            $document = $this->readDocument($namespace, $key);
+            if ($document !== null) {
+                $entries[] = $document;
+            }
         }
 
         return $entries;
@@ -221,7 +246,7 @@ final class FileStorage extends AbstractStorage
             throw new RuntimeException('The stored document is not a regular file.');
         }
 
-        $encoded = file_get_contents($path);
+        $encoded = @file_get_contents($path);
 
         if ($encoded === false) {
             throw new RuntimeException('The stored document could not be read.');

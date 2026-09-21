@@ -120,6 +120,52 @@ PHP;
         self::assertEquals($storage->read('demo', '123'), $entries[0]);
     }
 
+    public function testConcurrentReadersAndDeletersTreatDisappearingDocumentsAsMissing(): void
+    {
+        $script = <<<'PHP'
+require $argv[1];
+$storage = new \NeuronInteraction\Storage\FileStorage($argv[2]);
+while (fgets(STDIN) !== false) {
+    try {
+        $storage->read('race', 'shared');
+        iterator_to_array($storage->entries('race'));
+        $storage->write('race', 'shared', ['value' => 'from reader']);
+        $storage->delete('race', 'shared');
+        echo "ok\n";
+    } catch (Throwable $exception) {
+        echo $exception->getMessage() . "\n";
+    }
+}
+PHP;
+        $process = proc_open(
+            [PHP_BINARY, '-r', $script, dirname(__DIR__, 2) . '/vendor/autoload.php', $this->directory],
+            [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+        );
+        self::assertIsResource($process);
+        $storage = new FileStorage($this->directory);
+
+        try {
+            for ($index = 0; $index < 300; ++$index) {
+                $storage->write('race', 'shared', ['value' => $index]);
+                fwrite($pipes[0], "read\n");
+                usleep(30);
+                $storage->delete('race', 'shared');
+                self::assertSame("ok\n", fgets($pipes[1]));
+            }
+        } finally {
+            fclose($pipes[0]);
+            fclose($pipes[1]);
+            $error = stream_get_contents($pipes[2]);
+            fclose($pipes[2]);
+            $status = proc_close($process);
+        }
+
+        self::assertSame(0, $status, $error);
+        self::assertSame('', $error);
+        self::assertNull($storage->read('race', 'shared'));
+    }
+
     private string $directory;
 
     protected function setUp(): void

@@ -36,6 +36,9 @@ TUI, Neuron Interaction is already included as its dependency.
   descriptions, so multi-step interactions can cross backend request boundaries.
 - **Storage** offers in-memory and JSON-file implementations behind a small
   interface that applications can replace with their own persistence.
+- **StoppableHttpClient** stops a provider's HTTP response through ordinary EOF so
+  Neuron can finalize its partial message. Stop requests can cross processes
+  through shared Storage.
 
 ## Design strengths
 
@@ -114,6 +117,16 @@ keys do not match; extra metadata are ignored. Results always belong to the
 Store's user and retain the same title, empty-conversation and ordering rules.
 Metadata edits preserve the last History-use time; adding or clearing messages
 updates it and retains application metadata.
+
+## HTTP response stop
+
+`StoppableHttpClient` and `StoppableStream` use a `StopSignal` configured with
+Storage and a key chosen by the Host. Its `request()`, `isRequested()` and
+`clear()` methods hide the document format and namespace. Use `InMemoryStorage`
+within one process, or shared
+Storage to request a stop from a separate HTTP endpoint. The Agent's event generator
+continues to completion so Neuron can save its partial response normally.
+See [HTTP response stop](docs/response-stop.md) for setup, lifecycle and limits.
 
 ## Input history
 
