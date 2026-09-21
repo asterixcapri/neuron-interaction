@@ -133,3 +133,11 @@ Commands, SessionStore, Input history and Storage are composed directly. There i
 no required application facade, HTTP framework, authentication subsystem,
 worker topology or subagent orchestration. Help and Leave are shared Commands;
 permission to run them during a Turn and Picker presentation belong to Neuron TUI.
+
+## Commands during Agent work
+
+`ConcurrentCommandInterface` extends `CommandInterface` without adding methods.
+Implement it when a Command can execute while the Agent is working without
+interfering with state used by that work. Help and Leave implement this marker.
+Adapters decide whether to admit these Commands and still provide the ordinary
+`CommandAdapterInterface`; the marker does not enforce restricted controls.

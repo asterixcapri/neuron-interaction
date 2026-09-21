@@ -1,14 +1,14 @@
 # Neuron Interaction
 
-Neuron Interaction is a PHP library providing sessions, commands, selections
-and user preferences for applications built with
+Neuron Interaction provides conversation sessions, commands, input history,
+user preferences and response stopping for applications built with
 [Neuron AI](https://github.com/neuron-core/neuron-ai).
 
 Use it to save and resume conversations, offer reusable commands, ask users
 to choose an option, recall previous inputs and persist their preferences.
-The same modules work with a terminal, web backend or another delivery mechanism.
-Each Host Application supplies an Adapter for its UI and response model,
-and controls presentation, Agent execution and response streaming.
+Use the modules independently in a terminal or web application. Your application
+controls the UI, Agent execution and streaming; commands use an Adapter to
+connect to its input and output.
 
 ## Installation
 
@@ -25,39 +25,18 @@ TUI, Neuron Interaction is already included as its dependency.
 
 ## What it provides
 
-- **SessionStore** persists Neuron AI chat Histories and make conversations
-  discoverable, resumable and replaceable without discarding earlier ones.
-- **Input history** records original submissions across Sessions and optionally
-  provides shell-style recall navigation with independent cursor state per UI.
-- **Commands** provide presentation-independent dispatch, admission and
-  completion, together with reusable `/clear`, `/resume`, `/help` and `/exit`
-  behavior.
-- **Selections** describe choices as serializable values, labels and
-  descriptions, so multi-step interactions can cross backend request boundaries.
-- **Storage** offers in-memory and JSON-file implementations behind a small
-  interface that applications can replace with their own persistence.
-- **StoppableHttpClient** stops a provider's HTTP response through ordinary EOF so
-  Neuron can finalize its partial message. Stop requests can cross processes
-  through shared Storage.
-
-## Design strengths
-
-- **Presentation independence.** Commands express interaction effects through
-  an Adapter instead of printing to a terminal or returning a fixed HTTP shape.
-- **Explicit application ownership.** The Host Application controls the active
-  Agent, turn execution, authorization, scheduling, streaming and lifecycle.
-- **Composable modules.** SessionStore, Commands, Input history and Storage can be
-  adopted together or independently; no application facade is required.
-- **Native Neuron AI integration.** Persisted Sessions expose Neuron AI's own
-  `ChatHistoryInterface`, so they can be installed directly on an Agent.
-- **Request-safe workflows.** Selection state is carried as data and resumed by
-  a later Command invocation; an Adapter does not need to survive between
-  requests.
-- **Replaceable boundaries.** Both presentation and persistence sit behind
-  focused interfaces, keeping framework and infrastructure choices outside the
-  shared interaction model.
+- **Sessions** save, list and resume Neuron AI conversations.
+- **Input history** records submissions and supports recalling previous inputs.
+- **Commands** provide `/clear`, `/resume`, `/help`, `/exit` and custom behavior.
+- **Selections** let commands ask users to choose an option, including across HTTP requests.
+- **Configuration** stores user preferences such as the selected model.
+- **Response stop** interrupts HTTP streaming while letting Neuron finalize its partial response.
+- **Storage** provides memory and JSON-file implementations, with an interface for your own storage.
 
 ## SessionStore and Storage
+
+Install a stored conversation as the Agent's chat history. Subsequent history
+updates are persisted automatically:
 
 ```php
 use NeuronAI\Agent\Agent;
@@ -68,55 +47,15 @@ $storage = new FileStorage(__DIR__ . '/interaction-state');
 $sessionStore = new SessionStore($storage, 'local-user');
 $agent = new Agent();
 $agent->setChatHistory($sessionStore->create());
-
-// After the Agent has exchanged messages, list recognizable Sessions.
-foreach ($sessionStore->summaries() as $session) {
-    // Render $session->title according to your Adapter's rules.
-    // Resume a chosen Session by installing its History on the Agent:
-    // $history = $sessionStore->read($session->key);
-    // if ($history !== null) { $agent->setChatHistory($history); }
-}
 ```
 
-Host Applications explicitly install a History from `create()` or `read($key)`
-on the Agent when they want that conversation managed by this SessionStore.
-SessionStore does not import arbitrary Agent Histories or automatically select the
-latest conversation. Only Histories managed through this Store appear in
-its listing, subject to the existing title rules.
+Use `summaries()` to list conversations and `read($key)` to reopen one, then
+install it with `$agent->setChatHistory($history)`. Supply the current user's
+identity instead of `local-user`; reads and listings are scoped to that user.
 
 Use `InMemoryStorage` for transient state, or implement `StorageInterface`
-for application-specific persistence. Storage holds namespaced JSON documents
-identified by logical keys. It preserves string metadata together with data;
-`StoredDocument::size()` reports the JSON size of its data.
-
-`SessionStore::create()` creates a distinct empty History. `SessionStore::summaries()`
-returns Sessions with user-authored text, ordered by most recent use and then
-key. Titles preserve the first non-blank user-authored textual content without
-terminal placeholders, escaping or truncation. `SessionStore::read($key)`
-reopens its stored History or returns null for absent or other-user keys.
-`SessionStore::delete($key)` deletes only the current user’s Session and is a
-no-op when absent. Sessions expose `getKey()` and `getUserId()`; History updates
-persist automatically. Supply a stable local or authenticated identity when
-constructing the Store. Ownerless documents are never assigned implicitly.
-
-Application metadata use camelCase names and string values. Pass initial values
-when creating a Session, then update individual values; these changes persist
-immediately and preserve its messages. Application fields named `userId` or
-`lastUsedAt` remain ordinary metadata and cannot change ownership or ordering.
-
-```php
-$session = $sessionStore->create(['projectId' => 'alpha', 'branchName' => 'main']);
-$session->setMetadata('branchName', 'release');
-$metadata = $session->getMetadata(); // The complete application metadata map.
-$session->removeMetadata('branchName');
-$matches = $sessionStore->summaries(['projectId' => 'alpha']);
-```
-
-Multiple filters are combined with AND using exact string equality. Missing
-keys do not match; extra metadata are ignored. Results always belong to the
-Store's user and retain the same title, empty-conversation and ordering rules.
-Metadata edits preserve the last History-use time; adding or clearing messages
-updates it and retains application metadata.
+for your application's persistence. See [Sessions and Storage](docs/sessions.md)
+for listing, deletion, metadata and filtering.
 
 ## Stop a response
 
@@ -177,39 +116,23 @@ for polling, terminal integration and lifecycle details.
 
 ## Input history
 
+Record user submissions and recall them later:
+
 ```php
 use NeuronInteraction\InputHistory\InputHistory;
 
 $inputs = new InputHistory($storage);
 $inputs->record('/resume session-key');
 $inputs->record('A message exactly as submitted');
-$submitted = $inputs->entries(); // Oldest first, across all Sessions.
-```
+$submitted = $inputs->entries(); // Oldest first, across sessions.
 
-Adapters record original submissions, including their Command invocation
-syntax, and exclude prompts generated by Commands. Blank inputs are ignored;
-only consecutive exact duplicates collapse. Each read and append uses the
-current Storage sequence, so existing instances see one another's submissions.
-Simultaneous writes are not coordinated by this module; Adapters must serialize
-them when sharing Storage across concurrent writers.
-
-The same `InputHistory` instance optionally provides recall navigation:
-
-```php
 $recalled = $inputs->older('Unsubmitted draft');
 $newer = $inputs->newer(); // Restores the draft past the newest input.
-$navigating = $inputs->isNavigating();
-$inputs->leave(); // Discards the navigation position and saved draft.
 ```
 
-Each instance keeps its own position and draft in memory; only the input
-sequence is persisted and shared. Adapters own keyboard handling and decide
-when to leave navigation, such as on editing or submitting input. A web
-frontend can use only `entries()` and navigate locally in JavaScript, without
-a backend call for each arrow key.
-
-No Neuron TUI dependency, legacy reader, format fallback or automatic
-migration is supplied. Existing legacy files are left untouched.
+Your application decides when to record input and handles keyboard events.
+A web frontend can use `entries()` and navigate locally. See
+[Input history](docs/input-history.md) for navigation state and storage behavior.
 
 ## Commands
 
@@ -296,7 +219,7 @@ Each backend example is self-contained and demonstrates one flow:
 | Example | What it shows |
 | --- | --- |
 | [help.php](examples/help.php) | Execute Help and print the response. |
-| [exit.php](examples/exit.php) | Return the stop effect to the Host Application. |
+| [exit.php](examples/exit.php) | Ask the application to end the interaction. |
 | [clear.php](examples/clear.php) | Start an empty Session while keeping the previous conversation. |
 | [resume-by-key.php](examples/resume-by-key.php) | Reopen a conversation whose key is already known. |
 | [resume-selection.php](examples/resume-selection.php) | Offer conversations, then receive the user's choice in a second request. |
@@ -312,22 +235,21 @@ In `resume-selection.php`, the first request offers saved conversations. The
 second simulates the user's choice and reopens that conversation with a fresh
 Agent and Adapter. The example provides its own sample data in memory.
 
-## Configuration in Commands
+## Configuration
 
-Commands access the Host Application's configuration store through
-`CommandAdapterInterface::configurationStore()`, just as they access conversations
-through `sessionStore()`. Adapters must provide the same `ConfigurationStore`
-instance throughout the interaction, including selection continuations.
+Store preferences for the current user:
 
-Read individual preferences with `$store->read('model', 'default-model')`, write
-with `$store->write('model', 'chosen-model')`, remove with `$store->delete('model')`,
-and inspect original values with `$store->entries()`. The fallback selects the
-read type: `read('retries', 3)` accepts integers, while `read('model', 'default-model')`
-accepts non-empty strings. Missing or incompatible values return the fallback;
-reads without one return a non-empty string or null. Writes persist through the
-supplied Storage immediately. See [ConfigurationStore](docs/configuration.md) for value
-validation, user isolation and compatibility: old named configurations remain
-untouched and are not automatically imported.
+```php
+use NeuronInteraction\Configuration\ConfigurationStore;
+
+$settings = new ConfigurationStore($storage, 'local-user');
+$settings->write('model', 'chosen-model');
+$model = $settings->read('model', 'default-model');
+```
+
+The fallback determines the expected value type. Commands access the same store
+through `$adapter->configurationStore()`. See
+[ConfigurationStore](docs/configuration.md) for validation and the full API.
 
 ## Development
 
@@ -335,12 +257,5 @@ untouched and are not automatically imported.
 composer install
 composer test
 composer stan
+composer cs
 ```
-
-### Commands during Agent work
-
-`ConcurrentCommandInterface` extends `CommandInterface` without adding methods.
-Implement it when a Command can execute while the Agent is working without
-interfering with state used by that work. Help and Leave implement this marker.
-Adapters decide whether to admit these Commands and still provide the ordinary
-`CommandAdapterInterface`; the marker does not enforce restricted controls.
