@@ -118,15 +118,62 @@ Store's user and retain the same title, empty-conversation and ordering rules.
 Metadata edits preserve the last History-use time; adding or clearing messages
 updates it and retains application metadata.
 
-## HTTP response stop
+## Stop a response
 
-`StoppableHttpClient` and `StoppableStream` use a `StopSignal` configured with
-Storage and a key chosen by the Host. Its `request()`, `isRequested()` and
-`clear()` methods hide the document format and namespace. Use `InMemoryStorage`
-within one process, or shared
-Storage to request a stop from a separate HTTP endpoint. The Agent's event generator
-continues to completion so Neuron can save its partial response normally.
-See [HTTP response stop](docs/response-stop.md) for setup, lifecycle and limits.
+Share a `StopSignal` between the provider's HTTP client and the code handling
+stop requests. The application chooses the key identifying the response:
+
+```php
+use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Chat\Messages\UserMessage;
+use NeuronAI\HttpClient\GuzzleHttpClient;
+use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
+use NeuronInteraction\Http\StoppableHttpClient;
+use NeuronInteraction\Http\StopSignal;
+use NeuronInteraction\Storage\FileStorage;
+
+$storage = new FileStorage(__DIR__ . '/interaction-state');
+$stopSignal = new StopSignal(storage: $storage, key: $chatId);
+$client = new StoppableHttpClient(
+    inner: new GuzzleHttpClient(),
+    stopSignal: $stopSignal,
+);
+
+$agent = new Agent();
+$agent->setAiProvider(new OpenAIResponses(
+    key: $apiKey,
+    model: $model,
+    httpClient: $client,
+));
+
+$stopSignal->clear();
+foreach ($agent->stream(new UserMessage($prompt))->events() as $event) {
+    if ($event instanceof TextChunk) {
+        echo $event->content;
+    }
+}
+```
+
+In a separate stop endpoint, use the same storage location and authorized key:
+
+```php
+$stopSignal = new StopSignal(
+    storage: new FileStorage(__DIR__ . '/interaction-state'),
+    key: $chatId,
+);
+$stopSignal->request();
+```
+
+The stream detects and consumes the signal, allowing Neuron to finalize the
+partial response. No stop check is needed in the consumer loop. Only `request()`
+writes a stop document; `clear()` removes it and `isRequested()` reads its state.
+Use the same `InMemoryStorage` instance when both handlers run in one process.
+
+Concurrent responses need distinct keys, and separate HTTP requests need workers
+that can run concurrently. Stopping does not cancel local tools or guarantee
+remote generation has stopped. See the [response stop guide](docs/response-stop.md)
+for polling, terminal integration and lifecycle details.
 
 ## Input history
 
