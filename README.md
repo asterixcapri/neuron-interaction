@@ -119,14 +119,15 @@ for polling, terminal integration and lifecycle details.
 Record user submissions and recall them later:
 
 ```php
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\InputHistory\InputHistory;
 
 $inputs = new InputHistory($storage);
-$inputs->record('/resume session-key');
-$inputs->record('A message exactly as submitted');
+$inputs->record(new UserMessage('/resume session-key'));
+$inputs->record(new UserMessage('A message exactly as submitted'));
 $submitted = $inputs->entries(); // Oldest first, across sessions.
 
-$recalled = $inputs->older('Unsubmitted draft');
+$recalled = $inputs->older(new UserMessage('Unsubmitted draft'));
 $newer = $inputs->newer(); // Restores the draft past the newest input.
 ```
 

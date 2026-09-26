@@ -6,6 +6,7 @@ namespace NeuronInteraction\Examples;
 
 use Closure;
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
@@ -45,7 +46,7 @@ final class BackendAdapter implements CommandAdapterInterface
 
     private bool $stopped = false;
 
-    /** @param Closure(Agent, string): void $submitPrompt */
+    /** @param Closure(Agent, UserMessage): void $submitPrompt */
     public function __construct(
         private Agent $answeringAgent,
         private readonly Commands $mountedCommands,
@@ -90,7 +91,7 @@ final class BackendAdapter implements CommandAdapterInterface
         $this->errors[] = $text;
     }
 
-    public function promptAgent(string $prompt): void
+    public function promptAgent(UserMessage $prompt): void
     {
         ($this->submitPrompt)($this->answeringAgent, $prompt);
     }

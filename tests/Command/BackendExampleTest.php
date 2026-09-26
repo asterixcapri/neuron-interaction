@@ -6,6 +6,8 @@ namespace NeuronInteraction\Tests\Command;
 
 use Generator;
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
@@ -62,7 +64,7 @@ final class BackendExampleTest extends TestCase
     {
         $storage = new InMemoryStorage();
         $inputs = new InputHistory($storage);
-        $inputs->record('/choose');
+        $inputs->record(new UserMessage('/choose'));
         $sessionStore = new SessionStore($storage, 'local-user');
         $command = new class implements CommandInterface {
             public function name(): string
@@ -87,15 +89,15 @@ final class BackendExampleTest extends TestCase
                     return;
                 }
 
-                $adapter->promptAgent($value);
+                $adapter->promptAgent(new UserMessage($value));
                 $adapter->warn('A response may still be pending.');
                 $adapter->error('An expected failure.');
             }
         };
         $commands = new Commands($command);
         $received = [];
-        $submitPrompt = static function (Agent $answering, string $prompt) use (&$received): void {
-            $received[] = [$answering, $prompt];
+        $submitPrompt = static function (Agent $answering, UserMessage $prompt) use (&$received): void {
+            $received[] = [$answering, $prompt->getContent()];
         };
         $first = $commands->run('/choose', '', new BackendAdapter(
             new Agent(),
@@ -133,7 +135,7 @@ final class BackendExampleTest extends TestCase
         self::assertNull($second['error']);
         self::assertSame('completed', $second['status']);
         self::assertSame([[$secondAgent, " 007\n "]], $received);
-        self::assertSame(['/choose'], $inputs->entries());
+        self::assertSame(['/choose'], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $inputs->entries()));
     }
 
     public function testAgentReplacementTransfersHistoryAndImmediatelyUsesTheReplacementForFurtherEffects(): void
@@ -167,15 +169,15 @@ final class BackendExampleTest extends TestCase
                 TestCase::assertSame($this->replacement, $adapter->agent());
                 TestCase::assertSame($previous, $adapter->agent()->getChatHistory());
                 $adapter->agent()->setChatHistory($adapter->sessionStore()->create());
-                $adapter->promptAgent('A generated prompt for the replacement.');
+                $adapter->promptAgent(new UserMessage('A generated prompt for the replacement.'));
                 $adapter->notify($adapter->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');
             }
         };
         $commands = new Commands($command);
         $received = [];
-        $adapter = new BackendAdapter($original, $commands, $sessionStore, static function (Agent $answering, string $prompt) use (&$received): void {
-            $received[] = [$answering, $prompt];
+        $adapter = new BackendAdapter($original, $commands, $sessionStore, static function (Agent $answering, UserMessage $prompt) use (&$received): void {
+            $received[] = [$answering, $prompt->getContent()];
         });
         $response = $commands->run('/replace', '', $adapter);
 
@@ -190,6 +192,20 @@ final class BackendExampleTest extends TestCase
         self::assertSame($commands, $adapter->commands());
         self::assertSame($sessionStore, $adapter->sessionStore());
         self::assertSame([[$replacement, 'A generated prompt for the replacement.']], $received);
+    }
+
+    public function testBackendSubmitsTheCompleteMessageWithoutReconstructingIt(): void
+    {
+        $agent = new Agent();
+        $received = null;
+        $adapter = new BackendAdapter($agent, new Commands(), new SessionStore(new InMemoryStorage(), 'local'), static function (Agent $answering, UserMessage $message) use (&$received, $agent): void {
+            self::assertSame($agent, $answering);
+            $received = $message;
+        });
+        $message = new UserMessage(new ImageContent('https://example.com/photo.png', SourceType::URL));
+        $adapter->promptAgent($message);
+
+        self::assertSame($message, $received);
     }
 
     public function testBackendReturnsHelpLeaveAndUnknownResponsesFromRunAlone(): void

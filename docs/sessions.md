@@ -31,9 +31,11 @@ identified by logical keys. It preserves string metadata together with data;
 `StoredDocument::size()` reports the JSON size of its data.
 
 `SessionStore::create()` creates a distinct empty History. `SessionStore::summaries()`
-returns Sessions with user-authored text, ordered by most recent use and then
-key. Titles preserve the first non-blank user-authored textual content without
-terminal placeholders, escaping or truncation. `SessionStore::read($key)`
+returns Sessions with user-authored text or attachments, ordered by most recent
+use and then key. Titles preserve the first non-blank user-authored textual
+content without escaping or truncation. If no such text exists, an attachment
+supplies a filename or a placeholder such as `[Image]`, `[File]`, `[Audio]` or
+`[Video]`. Empty sessions remain excluded. `SessionStore::read($key)`
 reopens its stored History or returns null for absent or other-user keys.
 `SessionStore::delete($key)` deletes only the current user’s Session and is a
 no-op when absent. Sessions expose `getKey()` and `getUserId()`; History updates

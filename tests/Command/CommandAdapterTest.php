@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
@@ -43,7 +44,7 @@ final class CommandAdapterTest extends TestCase
                 $adapter->error('An expected failure.');
                 $adapter->agent()->setChatHistory($adapter->sessionStore()->create());
                 $adapter->useAgent($this->replacement);
-                $adapter->promptAgent('A generated Agent prompt.');
+                $adapter->promptAgent(new UserMessage('A generated Agent prompt.'));
                 $adapter->requestSelection($this->selection);
                 $adapter->notify('The request has returned.');
                 $adapter->stop();
@@ -59,7 +60,7 @@ final class CommandAdapterTest extends TestCase
         self::assertSame(['A warning.'], $adapter->warnings);
         self::assertSame(['An expected failure.'], $adapter->errors);
         self::assertNull($execution->exception);
-        self::assertSame(['A generated Agent prompt.'], $adapter->prompts);
+        self::assertSame(['A generated Agent prompt.'], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $adapter->prompts));
         self::assertSame([$selection], $adapter->selections);
         self::assertSame($commands, $adapter->commands());
         self::assertSame($replacement, $adapter->agent());

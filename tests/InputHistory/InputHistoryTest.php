@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\InputHistory;
 
+use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
+use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
@@ -11,6 +14,7 @@ use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use UnexpectedValueException;
 
 final class InputHistoryTest extends TestCase
 {
@@ -42,22 +46,22 @@ final class InputHistoryTest extends TestCase
         self::assertSame([], $first->entries());
         self::assertSame([], $second->entries());
 
-        $first->record('  Message exactly as submitted  ');
-        self::assertSame(['  Message exactly as submitted  '], $second->entries());
+        $first->record(new UserMessage('  Message exactly as submitted  '));
+        self::assertSame(['  Message exactly as submitted  '], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $second->entries()));
 
-        $second->record('/resume session-key');
-        $first->record("Another\nmessage");
+        $second->record(new UserMessage('/resume session-key'));
+        $first->record(new UserMessage("Another\nmessage"));
         $expected = [
             '  Message exactly as submitted  ',
             '/resume session-key',
             "Another\nmessage",
         ];
 
-        self::assertSame($expected, $first->entries());
-        self::assertSame($expected, $second->entries());
-        self::assertSame($expected, (new InputHistory($files
+        self::assertSame($expected, array_map(static fn (UserMessage $message): ?string => $message->getContent(), $first->entries()));
+        self::assertSame($expected, array_map(static fn (UserMessage $message): ?string => $message->getContent(), $second->entries()));
+        self::assertSame($expected, array_map(static fn (UserMessage $message): ?string => $message->getContent(), (new InputHistory($files
             ? new FileStorage($this->directory)
-            : $storage))->entries());
+            : $storage))->entries()));
     }
 
     #[DataProvider('storageKinds')]
@@ -71,19 +75,19 @@ final class InputHistoryTest extends TestCase
             ? new FileStorage($this->directory)
             : $storage);
 
-        $first->record(" \n\t ");
+        $first->record(new UserMessage(" \n\t "));
         self::assertSame([], $second->entries());
 
-        $first->record('same');
-        $second->record('same');
-        $first->record('');
-        $second->record('different');
-        $first->record('same');
-        $second->record(' same ');
+        $first->record(new UserMessage('same'));
+        $second->record(new UserMessage('same'));
+        $first->record(new UserMessage(''));
+        $second->record(new UserMessage('different'));
+        $first->record(new UserMessage('same'));
+        $second->record(new UserMessage(' same '));
 
         self::assertSame(
             ['same', 'different', 'same', ' same '],
-            $first->entries(),
+            array_map(static fn (UserMessage $message): ?string => $message->getContent(), $first->entries()),
         );
     }
 
@@ -97,18 +101,64 @@ final class InputHistoryTest extends TestCase
         $sessionStore = new SessionStore($storage, 'local-user');
         $history = $sessionStore->create();
 
-        $inputs->record('/summarize');
+        $inputs->record(new UserMessage('/summarize'));
         $history->addMessage(new UserMessage('A generated prompt for the Agent'));
         $key = $sessionStore->summaries()[0]->key;
         $sessionStore->create()->addMessage(new UserMessage('Another conversation'));
-        $inputs->record('A submitted message');
+        $inputs->record(new UserMessage('A submitted message'));
         $sessionStore->read($key);
 
         self::assertSame(
             ['/summarize', 'A submitted message'],
-            (new InputHistory($storage))->entries(),
+            array_map(static fn (UserMessage $message): ?string => $message->getContent(), (new InputHistory($storage))->entries()),
         );
         self::assertCount(2, $sessionStore->summaries());
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testAttachmentsAndMetadataSurviveStorageRecallAndDraftRestoration(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $inputs = new InputHistory($storage);
+        $inputs->record(new UserMessage('/resume original-key'));
+        $message = new UserMessage([
+            new ImageContent('https://example.com/photo.png', SourceType::URL, 'image/png'),
+            new FileContent('https://example.com/report.pdf', SourceType::URL, 'application/pdf', 'report.pdf'),
+        ]);
+        $message->addMetadata('original', 'submission');
+        $snapshot = json_decode(json_encode($message, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+        $inputs->record($message);
+        $inputs->record($message);
+        $message->setContents('Changed after submission');
+
+        $reopened = new InputHistory($files ? new FileStorage($this->directory) : $storage);
+        self::assertCount(2, $reopened->entries());
+        $draft = new UserMessage(new ImageContent('https://example.com/draft.png', SourceType::URL));
+        $recalled = $reopened->older($draft);
+        self::assertInstanceOf(UserMessage::class, $recalled);
+        self::assertSame($snapshot, json_decode(json_encode($recalled, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR));
+        self::assertNull($recalled->getContent());
+        self::assertSame('/resume original-key', $reopened->older()?->getContent());
+        self::assertInstanceOf(UserMessage::class, $reopened->newer());
+        self::assertSame($draft, $reopened->newer());
+    }
+
+    public function testStoredStringsAreRejected(): void
+    {
+        $storage = new InMemoryStorage();
+        $storage->write('input-history', 'entries', ['old text entry']);
+
+        $this->expectException(UnexpectedValueException::class);
+        (new InputHistory($storage))->entries();
+    }
+
+    public function testStoredAssistantMessagesAreRejectedAsInput(): void
+    {
+        $storage = new InMemoryStorage();
+        $storage->write('input-history', 'entries', [['role' => 'assistant', 'content' => 'invalid']]);
+
+        $this->expectException(UnexpectedValueException::class);
+        (new InputHistory($storage))->entries();
     }
 
     /** @return array<string, array{bool}> */

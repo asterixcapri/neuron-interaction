@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Session\SessionStore;
 
@@ -34,7 +35,7 @@ interface CommandAdapterInterface
     public function error(string $text): void;
 
     /** Submit a prompt to the Adapter's Agent flow without receiving its answer. */
-    public function promptAgent(string $prompt): void;
+    public function promptAgent(UserMessage $prompt): void;
 
     /** Request a later invocation with the chosen value, then return immediately. */
     public function requestSelection(Selection $request): void;

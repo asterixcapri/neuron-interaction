@@ -7,6 +7,8 @@ namespace NeuronInteraction\Session;
 use DateTimeImmutable;
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\History\ChatHistoryInterface;
+use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
+use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronInteraction\Storage\StorageInterface;
 use NeuronInteraction\Storage\StoredDocument;
@@ -112,12 +114,22 @@ final readonly class SessionStore
 
     private function title(ChatHistoryInterface $history): ?string
     {
+        $fallback = null;
+
         foreach ($history->getMessages() as $message) {
             // Neuron represents tool results with the user role, but their
             // content was not authored by the person.
             if ($message->getRole() !== MessageRole::USER->value
                 || $message instanceof ToolResultMessage) {
                 continue;
+            }
+
+            foreach ($message->getContentBlocks() as $block) {
+                if (!$block instanceof TextContent) {
+                    $fallback ??= $block instanceof FileContent && $block->filename !== null
+                        ? $block->filename
+                        : '[' . ucfirst($block->getType()->value) . ']';
+                }
             }
 
             $content = $message->getContent();
@@ -127,7 +139,7 @@ final readonly class SessionStore
             }
         }
 
-        return null;
+        return $fallback;
     }
 
     private function lastUsedAt(StoredDocument $document): DateTimeImmutable

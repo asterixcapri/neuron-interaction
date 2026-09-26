@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
@@ -26,7 +27,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
     /** @var list<string> */
     public array $errors = [];
 
-    /** @var list<string> */
+    /** @var list<UserMessage> */
     public array $prompts = [];
 
     /** @var list<Selection> */
@@ -67,7 +68,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
         $this->errors[] = $text;
     }
 
-    public function promptAgent(string $prompt): void
+    public function promptAgent(UserMessage $prompt): void
     {
         $this->prompts[] = $prompt;
     }

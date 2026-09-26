@@ -6,6 +6,7 @@ namespace NeuronInteraction\Tests\Session;
 
 use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
@@ -144,7 +145,8 @@ final class SessionStoreTest extends TestCase
         ]));
 
         $withoutText = $sessionStore->summaries();
-        self::assertSame([], $withoutText);
+        self::assertCount(1, $withoutText);
+        self::assertSame('[Image]', $withoutText[0]->title);
 
         $history->addMessage(new AssistantMessage('Image received'));
         $title = "  A\x00 title\nwith \x1b[31mcolor\x1b[0m "
@@ -157,6 +159,22 @@ final class SessionStoreTest extends TestCase
         $history->addMessage(new UserMessage('Another subject'));
 
         self::assertSame($title, $sessionStore->summaries()[0]->title);
+    }
+
+    public function testFileOnlySessionUsesItsFilenameAndCanBeResumed(): void
+    {
+        $storage = new FileStorage($this->directory);
+        $store = new SessionStore($storage, 'local-user');
+        $session = $store->create();
+        $session->addMessage(new UserMessage(new FileContent('https://example.com/report.pdf', SourceType::URL, 'application/pdf', 'report.pdf')));
+        $reopened = new SessionStore(new FileStorage($this->directory), 'local-user');
+        $listed = $reopened->summaries();
+
+        self::assertCount(1, $listed);
+        self::assertSame('report.pdf', $listed[0]->title);
+        $resumed = $reopened->read($listed[0]->key);
+        self::assertNotNull($resumed);
+        self::assertInstanceOf(FileContent::class, $resumed->getMessages()[0]->getContentBlocks()[0]);
     }
 
     public function testEqualLastUseTimesAreOrderedByKey(): void

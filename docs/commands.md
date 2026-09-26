@@ -112,8 +112,13 @@ returns response data containing those values, the technical status, identifier,
 and any exception message. The `errors` list contains expected failures reported
 by Commands; the singular `error` field contains the execution exception message.
 The caller obtains that response directly from `run()`.
+`promptAgent(UserMessage $prompt)` submits the complete Neuron user message,
+including content blocks and metadata. Commands that only generate text wrap it
+in `new UserMessage($text)`. Adapters must retain attachments when scheduling
+or executing the message.
+
 The example delegates `promptAgent()` to a callback supplied by the Host
-Application. Agent execution, scheduling and response streaming are outside this
+Application, with the Agent and complete UserMessage as arguments. Agent execution, scheduling and response streaming are outside this
 package. No model request is made by these examples.
 
 In [resume-selection.php](../examples/resume-selection.php), the first response contains `selection.options` for a
