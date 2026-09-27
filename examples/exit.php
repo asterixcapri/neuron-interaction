@@ -11,7 +11,7 @@ use NeuronInteraction\Storage\InMemoryStorage;
 
 require_once dirname(__DIR__) . '/vendor/autoload.php';
 
-$commands = new Commands(new LeaveCommand());
+$commands = (new Commands())->addCommand(new LeaveCommand());
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
 $adapter = new BackendAdapter(new Agent(), $commands, $sessionStore, static function (): void {});
 

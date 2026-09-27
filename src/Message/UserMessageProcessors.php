@@ -8,19 +8,29 @@ use InvalidArgumentException;
 use NeuronAI\Chat\Messages\UserMessage;
 
 /** Compose preparation in registration order and display in reverse order. */
-final readonly class UserMessageProcessors implements UserMessageProcessorInterface
+final class UserMessageProcessors implements UserMessageProcessorInterface
 {
     /** @var list<UserMessageProcessorInterface> */
-    private array $processors;
+    private array $processors = [];
 
-    /** @param UserMessageProcessorInterface|list<UserMessageProcessorInterface> $processors */
-    public function __construct(UserMessageProcessorInterface|array $processors = [])
+    /**
+     * Register processors before running the host. Mutates this collection.
+     *
+     * @param UserMessageProcessorInterface|list<UserMessageProcessorInterface> $processors
+     */
+    public function addProcessor(UserMessageProcessorInterface|array $processors): self
     {
-        $validated = [];
         foreach (is_array($processors) ? $processors : [$processors] as $processor) {
-            $validated[] = self::requireProcessor($processor);
+            $this->processors[] = self::requireProcessor($processor);
         }
-        $this->processors = $validated;
+
+        return $this;
+    }
+
+    /** @return list<UserMessageProcessorInterface> */
+    public function all(): array
+    {
+        return $this->processors;
     }
 
     private static function requireProcessor(mixed $processor): UserMessageProcessorInterface

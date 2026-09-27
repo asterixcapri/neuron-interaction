@@ -94,7 +94,7 @@ final class BackendExampleTest extends TestCase
                 $adapter->error('An expected failure.');
             }
         };
-        $commands = new Commands($command);
+        $commands = (new Commands())->addCommand($command);
         $received = [];
         $submitPrompt = static function (Agent $answering, UserMessage $prompt) use (&$received): void {
             $received[] = [$answering, $prompt->getContent()];
@@ -174,7 +174,7 @@ final class BackendExampleTest extends TestCase
                 throw new RuntimeException('Failed after replacement.');
             }
         };
-        $commands = new Commands($command);
+        $commands = (new Commands())->addCommand($command);
         $received = [];
         $adapter = new BackendAdapter($original, $commands, $sessionStore, static function (Agent $answering, UserMessage $prompt) use (&$received): void {
             $received[] = [$answering, $prompt->getContent()];
@@ -210,7 +210,7 @@ final class BackendExampleTest extends TestCase
 
     public function testBackendReturnsHelpLeaveAndUnknownResponsesFromRunAlone(): void
     {
-        $commands = new Commands([new HelpCommand('/guide'), new LeaveCommand('/quit')]);
+        $commands = (new Commands())->addCommand([new HelpCommand('/guide'), new LeaveCommand('/quit')]);
         $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
         $responses = [];
 

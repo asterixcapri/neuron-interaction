@@ -18,7 +18,7 @@ final class HelpAndLeaveTest extends TestCase
         $leave = new LeaveCommand('/quit');
         self::assertInstanceOf(ConcurrentCommandInterface::class, $help);
         self::assertInstanceOf(ConcurrentCommandInterface::class, $leave);
-        $commands = new Commands([$help, $leave]);
+        $commands = (new Commands())->addCommand([$help, $leave]);
         $adapter = new FakeCommandAdapter($commands);
 
         self::assertSame('completed', $commands->run('/guide', '', $adapter)?->status);

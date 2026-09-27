@@ -20,7 +20,7 @@ $previousSession->addMessage(new UserMessage('The previous conversation'));
 $agent = new Agent();
 $agent->setChatHistory($previousSession);
 
-$commands = new Commands(new ClearCommand());
+$commands = (new Commands())->addCommand(new ClearCommand());
 $adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
 $commands->run('/clear', '', $adapter);
 

@@ -26,7 +26,7 @@ final class CommandsTest extends TestCase
         });
         $last = self::command('/last', static function (): void {
         });
-        $commands = new Commands([$first, $duplicate, $last]);
+        $commands = (new Commands())->addCommand([$first, $duplicate, $last]);
         $value = " \tline one\n  line two \t";
 
         $execution = $commands->run('/review', $value, new FakeCommandAdapter());
@@ -42,7 +42,7 @@ final class CommandsTest extends TestCase
 
     public function testLookupIsExactWithoutPrefixOrCaseNormalization(): void
     {
-        $commands = new Commands([self::command('/review', static function (): void {
+        $commands = (new Commands())->addCommand([self::command('/review', static function (): void {
             self::fail('An unknown identifier must not execute.');
         })]);
 
@@ -58,7 +58,7 @@ final class CommandsTest extends TestCase
     public function testFailureKeepsOriginalExceptionAndDispatcherRemainsUsable(): void
     {
         $failure = new RuntimeException('Command failed');
-        $commands = new Commands([
+        $commands = (new Commands())->addCommand([
             self::command('/broken', static function () use ($failure): void {
                 throw $failure;
             }),
@@ -133,7 +133,7 @@ final class CommandsTest extends TestCase
             }
         };
 
-        self::assertNull((new Commands([$first, $duplicate]))->run('/duplicate', '', $adapter));
+        self::assertNull(((new Commands())->addCommand([$first, $duplicate]))->run('/duplicate', '', $adapter));
         self::assertSame(['Refused by this Adapter.'], $adapter->warnings);
         self::assertSame([], $adapter->notices);
     }
@@ -142,7 +142,7 @@ final class CommandsTest extends TestCase
     {
         $failure = new RuntimeException('Command failed after its notice.');
         $output = CommandExecution::completed('/adapter-output');
-        $commands = new Commands([
+        $commands = (new Commands())->addCommand([
             self::command('/healthy', static function (string $value, CommandAdapterInterface $adapter): void {
                 $adapter->notify($value);
             }),
@@ -196,7 +196,7 @@ final class CommandsTest extends TestCase
                 throw new RuntimeException('Admission failures do not complete.');
             }
         };
-        $commands = new Commands(self::command('/review', static function (): void {
+        $commands = (new Commands())->addCommand(self::command('/review', static function (): void {
             self::fail('The Command cannot run after an admission failure.');
         }));
 
@@ -211,7 +211,7 @@ final class CommandsTest extends TestCase
     public function testCompletionExceptionsPropagateWithoutBeingRetriedAsCommandFailures(): void
     {
         $failure = new RuntimeException('Completion failed.');
-        $commands = new Commands([
+        $commands = (new Commands())->addCommand([
             self::command('/healthy', static function (): void {}),
             self::command('/broken', static function (): void {
                 throw new RuntimeException('A Command failure.');
@@ -244,13 +244,13 @@ final class CommandsTest extends TestCase
         }
     }
 
-    public function testSlashlessIdentifiersAreRejectedInEveryConstructorMountingForm(): void
+    public function testSlashlessIdentifiersAreRejectedInEveryMountingForm(): void
     {
         foreach (['review', ''] as $name) {
             $command = self::command($name, static function (): void {});
             foreach ([$command, [$command]] as $mount) {
                 try {
-                    new Commands($mount);
+                    (new Commands())->addCommand($mount);
                     self::fail('A slashless identifier must fail at mounting.');
                 } catch (InvalidArgumentException $exception) {
                     self::assertStringContainsString('slash', $exception->getMessage());
@@ -263,7 +263,7 @@ final class CommandsTest extends TestCase
     {
         foreach (['/', '//review', '/Review', '/two words'] as $name) {
             $command = self::command($name, static function (): void {});
-            self::assertSame($command, (new Commands($command))->named($name));
+            self::assertSame($command, ((new Commands())->addCommand($command))->named($name));
         }
     }
 

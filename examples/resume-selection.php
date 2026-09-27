@@ -25,7 +25,7 @@ $firstSession->setTitle('Planning a trip');
 $secondSession = $sessionStore->create();
 $secondSession->addMessage(new UserMessage('Learning PHP'));
 $secondSession->setTitle('Learning PHP');
-$commands = new Commands(new ResumeCommand());
+$commands = (new Commands())->addCommand(new ResumeCommand());
 
 // Request 1: /resume without a key returns selection.options for the frontend.
 $firstRequest = new BackendAdapter(new Agent(), $commands, $sessionStore, static function (): void {}, configurationStore: $configurationStore);

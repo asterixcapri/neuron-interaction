@@ -35,31 +35,25 @@ final class CommandMountingTest extends TestCase
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
     }
 
-    public function testConstructorAndIncrementalMountingApplyTheSameValidation(): void
+    public function testIncrementalMountingRejectsInvalidCommands(): void
     {
         foreach ([
             [new stdClass()],
             [[new ClearCommand()]],
             new ClearCommand('missing-slash'),
         ] as $invalid) {
-            foreach ([false, true] as $incremental) {
-                try {
-                    if ($incremental) {
-                        (new Commands())->addCommand($invalid);
-                    } else {
-                        new Commands($invalid);
-                    }
-                    self::fail('Invalid Commands must fail when mounted.');
-                } catch (InvalidArgumentException $exception) {
-                    self::assertStringContainsString('mounted Command', $exception->getMessage());
-                }
+            try {
+                (new Commands())->addCommand($invalid);
+                self::fail('Invalid Commands must fail when mounted.');
+            } catch (InvalidArgumentException $exception) {
+                self::assertStringContainsString('mounted Command', $exception->getMessage());
             }
         }
     }
 
     public function testSessionCommandsMountTogetherAndClearPreservesThePreviousSession(): void
     {
-        $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
+        $commands = (new Commands())->addCommand([new ClearCommand(), new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->sessionStore()->create();
         $previous->addMessage(new UserMessage('Keep this conversation'));
@@ -85,7 +79,7 @@ final class CommandMountingTest extends TestCase
     {
         $first = new ClearCommand('/resume');
         $last = new ClearCommand('/last');
-        $commands = new Commands([$first, new ClearCommand(), new ResumeCommand(), $last]);
+        $commands = (new Commands())->addCommand([$first, new ClearCommand(), new ResumeCommand(), $last]);
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->sessionStore()->create();
         $adapter->agent()->setChatHistory($previous);
@@ -104,12 +98,12 @@ final class CommandMountingTest extends TestCase
     public function testInvalidArrayMembersAreRejectedAtMounting(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        new Commands([new stdClass()]);
+        (new Commands())->addCommand([new stdClass()]);
     }
 
     public function testResumeWithNoStoredSessionWarnsWithoutRequestingSelection(): void
     {
-        $commands = new Commands([new ClearCommand(), new ResumeCommand()]);
+        $commands = (new Commands())->addCommand([new ClearCommand(), new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
 
         self::assertSame('completed', $commands->run('/resume', '', $adapter)?->status);

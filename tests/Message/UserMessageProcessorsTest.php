@@ -19,7 +19,7 @@ final class UserMessageProcessorsTest extends TestCase
         $original->addMetadata('source', 'original input');
         $first = $this->processor('A');
         $second = $this->processor('B');
-        $processing = new UserMessageProcessors([$first, $second]);
+        $processing = (new UserMessageProcessors())->addProcessor([$first, $second]);
 
         $prepared = $processing->forAgent($original);
         $displayed = $processing->forDisplay($prepared);
@@ -44,6 +44,28 @@ final class UserMessageProcessorsTest extends TestCase
         self::assertEquals($original, $processing->forDisplay($original));
         self::assertNotSame($original, $processing->forAgent($original));
         self::assertNotSame($original, $processing->forDisplay($original));
+    }
+
+    public function testIncrementalRegistrationJoinsTheSameOrderedPipeline(): void
+    {
+        $first = $this->processor('A');
+        $second = $this->processor('B');
+        $third = $this->processor('C');
+        $fourth = $this->processor('D');
+        $processing = (new UserMessageProcessors())->addProcessor($first);
+
+        self::assertSame($processing, $processing->addProcessor($second));
+        self::assertSame($processing, $processing->addProcessor([$third, $fourth]));
+        self::assertSame([$first, $second, $third, $fourth], $processing->all());
+
+        $original = new UserMessage('Original text');
+        $prepared = $processing->forAgent($original);
+        $displayed = $processing->forDisplay($prepared);
+
+        self::assertSame('ABCD', $prepared->getMetadata('prepared'));
+        self::assertSame('DCBA', $displayed->getMetadata('displayed'));
+        self::assertNull($original->getMetadata('prepared'));
+        self::assertNull($prepared->getMetadata('displayed'));
     }
 
     private function processor(string $label): UserMessageProcessorInterface

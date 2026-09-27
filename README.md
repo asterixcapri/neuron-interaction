@@ -156,7 +156,7 @@ use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\ResumeCommand;
 
-$commands = new Commands([
+$commands = (new Commands())->addCommand([
     new ClearCommand(),
     new ResumeCommand(),
     new HelpCommand(),
@@ -256,6 +256,17 @@ through `$adapter->configurationStore()`. See
 
 Implement `NeuronInteraction\Message\UserMessageProcessorInterface` to prepare
 complete `UserMessage` objects for the Agent and project them for display.
+`UserMessageProcessors` can be populated like `Commands`:
+
+```php
+$processors = (new UserMessageProcessors())
+    ->addProcessor($first)
+    ->addProcessor([$second, $third]);
+```
+
+`addProcessor()` mutates the collection and returns the same instance. Register
+processors before running the host; `all()` returns them in registration order.
+
 `UserMessageProcessors` composes preparation in registration order and display
 in reverse order. Processors return new messages without modifying the originals;
 text, attachments and metadata can be handled together. See

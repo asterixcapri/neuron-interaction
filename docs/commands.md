@@ -74,9 +74,9 @@ $commands = (new Commands())
     ->addCommand([new ClearCommand(), new ResumeCommand(), new LeaveCommand()]);
 ```
 
-Constructor mounting and incremental mounting accept an individual Command or
-an array of Commands, preserve order, and reject invalid members or identifiers
-immediately. The first matching duplicate receives dispatch. Configure Commands
+Create an empty collection with `new Commands()`. `addCommand()` accepts an
+individual Command or an array of Commands, preserves order, and rejects invalid
+members or identifiers immediately. The first matching duplicate receives dispatch. Configure Commands
 before running an Adapter; live reconfiguration is outside this contract.
 
 ## Help and Leave

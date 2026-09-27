@@ -30,7 +30,9 @@ Compose processors with `UserMessageProcessors`:
 ```php
 use NeuronInteraction\Message\UserMessageProcessors;
 
-$processing = new UserMessageProcessors([$first, $second]);
+$processing = (new UserMessageProcessors())
+    ->addProcessor($first)
+    ->addProcessor([$second]);
 $prepared = $processing->forAgent($submitted);
 $display = $processing->forDisplay($prepared);
 ```
@@ -38,3 +40,9 @@ $display = $processing->forDisplay($prepared);
 Preparation applies `$first`, then `$second`. Display applies `$second`, then
 `$first`. An empty pipeline returns an unchanged copy. Rendering, persistence,
 command dispatch and error presentation belong to the caller.
+
+Like `Commands::addCommand()`, `addProcessor()` accepts a single processor or an
+array, mutates the collection and returns the same instance for chaining. Register
+processors before running the host. `all()` returns them in registration order.
+Create an empty collection with `new UserMessageProcessors()` and register all
+processors through `addProcessor()`.

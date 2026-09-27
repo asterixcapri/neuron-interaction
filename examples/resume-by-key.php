@@ -18,7 +18,7 @@ $session = $sessionStore->create();
 $session->addMessage(new UserMessage('A conversation to reopen'));
 
 $agent = new Agent();
-$commands = new Commands(new ResumeCommand());
+$commands = (new Commands())->addCommand(new ResumeCommand());
 $adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
 
 // A real route receives this key from the client.

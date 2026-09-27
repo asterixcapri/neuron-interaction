@@ -14,14 +14,6 @@ final class Commands
     private array $commands = [];
 
     /**
-     * @param CommandInterface|array<array-key, mixed> $commands
-     */
-    public function __construct(CommandInterface|array $commands = [])
-    {
-        $this->addCommand($commands);
-    }
-
-    /**
      * Mount Commands before running the Adapter. Mutates this collection.
      *
      * @param CommandInterface|array<array-key, mixed> $commands

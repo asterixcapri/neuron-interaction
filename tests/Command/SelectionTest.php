@@ -49,7 +49,7 @@ final class SelectionTest extends TestCase
                 $adapter->notify($value);
             }
         };
-        $commands = new Commands([$command]);
+        $commands = (new Commands())->addCommand([$command]);
         $first = new FakeCommandAdapter($commands);
 
         self::assertSame('completed', $commands->run('/choose', '', $first)?->status);
@@ -77,7 +77,7 @@ final class SelectionTest extends TestCase
 
     public function testResumeRequestsSelectionThenInstallsTheChosenHistoryOnlyOnTheSecondInvocation(): void
     {
-        $commands = new Commands([new ResumeCommand('/return')]);
+        $commands = (new Commands())->addCommand([new ResumeCommand('/return')]);
         $adapter = new FakeCommandAdapter($commands);
         $stored = $adapter->sessionStore()->create();
         $stored->addMessage(new UserMessage('Stored subject'));
@@ -107,7 +107,7 @@ final class SelectionTest extends TestCase
 
     public function testResumeWithAKeyNeedsNoPriorSelectionAndUnknownKeysFailNormally(): void
     {
-        $commands = new Commands([new ResumeCommand()]);
+        $commands = (new Commands())->addCommand([new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
         $adapter->sessionStore()->create()->addMessage(new UserMessage('Direct resume'));
         $key = $adapter->sessionStore()->summaries()[0]->key;

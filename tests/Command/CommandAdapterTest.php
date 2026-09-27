@@ -50,7 +50,7 @@ final class CommandAdapterTest extends TestCase
                 $adapter->stop();
             }
         };
-        $commands = new Commands([$command]);
+        $commands = (new Commands())->addCommand([$command]);
         $adapter = new FakeCommandAdapter($commands);
         $execution = $commands->run('/inspect', 'A warning.', $adapter);
 

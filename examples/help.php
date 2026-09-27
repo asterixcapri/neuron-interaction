@@ -12,7 +12,7 @@ use NeuronInteraction\Storage\InMemoryStorage;
 require_once dirname(__DIR__) . '/vendor/autoload.php';
 
 // Mount one Command and return its help text as response data.
-$commands = new Commands(new HelpCommand());
+$commands = (new Commands())->addCommand(new HelpCommand());
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
 $adapter = new BackendAdapter(new Agent(), $commands, $sessionStore, static function (): void {});
 
