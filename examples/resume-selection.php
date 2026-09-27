@@ -20,8 +20,11 @@ $configurationStore = new ConfigurationStore($storage, 'demo-user');
 
 $firstSession = $sessionStore->create();
 $firstSession->addMessage(new UserMessage('Planning a trip'));
+$firstSession->setTitle('Planning a trip');
 
-$sessionStore->create()->addMessage(new UserMessage('Learning PHP'));
+$secondSession = $sessionStore->create();
+$secondSession->addMessage(new UserMessage('Learning PHP'));
+$secondSession->setTitle('Learning PHP');
 $commands = new Commands(new ResumeCommand());
 
 // Request 1: /resume without a key returns selection.options for the frontend.

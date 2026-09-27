@@ -94,7 +94,7 @@ final class SelectionTest extends TestCase
         $request = $adapter->selections[0];
         self::assertSame('/return', $request->command);
         self::assertSame($session->key, $request->options[0]->value);
-        self::assertSame('Stored subject', $request->options[0]->label);
+        self::assertSame('New session', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
         $second = $commands->run('/return', $request->options[0]->value, $adapter);

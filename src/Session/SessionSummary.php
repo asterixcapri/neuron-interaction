@@ -13,7 +13,7 @@ final readonly class SessionSummary
     public function __construct(
         public string $key,
         public DateTimeImmutable $lastUsedAt,
-        public string $title,
+        public ?string $title,
         public ?int $size = null,
     ) {
         if ($this->size !== null && $this->size < 0) {

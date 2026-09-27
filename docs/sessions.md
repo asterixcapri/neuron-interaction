@@ -3,6 +3,7 @@
 ```php
 use NeuronAI\Agent\Agent;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\FileStorage;
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');
@@ -12,7 +13,7 @@ $agent->setChatHistory($sessionStore->create());
 
 // After the Agent has exchanged messages, list recognizable Sessions.
 foreach ($sessionStore->summaries() as $session) {
-    // Render $session->title according to your Adapter's rules.
+    // Render $session->title ?? 'New session'.
     // Resume a chosen Session by installing its History on the Agent:
     // $history = $sessionStore->read($session->key);
     // if ($history !== null) { $agent->setChatHistory($history); }
@@ -32,10 +33,11 @@ identified by logical keys. It preserves string metadata together with data;
 
 `SessionStore::create()` creates a distinct empty History. `SessionStore::summaries()`
 returns Sessions with user-authored text or attachments, ordered by most recent
-use and then key. Titles preserve the first non-blank user-authored textual
-content without escaping or truncation. If no such text exists, an attachment
-supplies a filename or a placeholder such as `[Image]`, `[File]`, `[Audio]` or
-`[Video]`. Empty sessions remain excluded. `SessionStore::read($key)`
+use and then key. Titles are independent metadata: `Session::title()` returns
+the saved title or null, and `Session::setTitle()` saves a non-blank title without
+changing messages or the last-used time. Summaries expose that same nullable
+title. The Store does not infer titles from messages or generate them.
+Empty sessions remain excluded. `SessionStore::read($key)`
 reopens its stored History or returns null for absent or other-user keys.
 `SessionStore::delete($key)` deletes only the current user’s Session and is a
 no-op when absent. Sessions expose `getKey()` and `getUserId()`; History updates
@@ -60,3 +62,20 @@ keys do not match; extra metadata are ignored. Results always belong to the
 Store's user and retain the same title, empty-conversation and ordering rules.
 Metadata edits preserve the last History-use time; adding or clearing messages
 updates it and retains application metadata.
+
+## Generating titles
+
+`SessionTitleGenerator` generates a title from a Session using an injected `AIProviderInterface`.
+It reads the history messages directly, ignores reasoning and tool activity, and calls `structured()` on a dedicated `SessionTitleAgent` that owns the title instructions. It returns null when no topic has emerged; provider errors
+propagate to the host. It never modifies the supplied messages or Session.
+
+```php
+$generator = new SessionTitleGenerator($provider, $session);
+$title = $generator->generate();
+if ($title !== null && $session->title() === null) {
+    $session->setTitle($title);
+}
+```
+
+The host decides when to run this operation and how to report errors.
+Neuron TUI runs it automatically in the background after successful turns.

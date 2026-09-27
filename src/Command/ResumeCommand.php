@@ -66,7 +66,7 @@ final readonly class ResumeCommand implements CommandInterface
         foreach ($sessions as $session) {
             $options[] = new SelectionOption(
                 $session->key,
-                $session->title,
+                $session->title ?? 'New session',
                 $this->formatDescription($session, $now),
             );
         }

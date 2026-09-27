@@ -7,6 +7,7 @@ namespace NeuronInteraction\InputHistory;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronInteraction\Message\UserMessageFactory;
 use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
@@ -125,7 +126,6 @@ final class InputHistory
         }
 
         $decoded = [];
-        $deserializer = new UserMessageDeserializer();
 
         foreach ($entries as $entry) {
             if (!is_array($entry)) {
@@ -140,7 +140,7 @@ final class InputHistory
                 $data[$key] = $value;
             }
 
-            $decoded[] = $deserializer->deserialize($data);
+            $decoded[] = UserMessageFactory::fromArray($data);
         }
 
         return $decoded;

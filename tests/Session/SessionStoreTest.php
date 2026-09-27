@@ -79,6 +79,7 @@ final class SessionStoreTest extends TestCase
             : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
         $history->addMessage(new UserMessage('Written earlier'));
+        $history->setTitle('Written earlier');
         $reopened = new SessionStore($files
             ? new FileStorage($this->directory)
             : $storage, 'local-user');
@@ -102,14 +103,16 @@ final class SessionStoreTest extends TestCase
         $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
         $first = $sessionStore->create();
         $first->addMessage(new UserMessage('The older subject'));
+        $first->setTitle('The older subject');
         $first->addMessage(new AssistantMessage('An answer'));
         $second = $sessionStore->create();
         $second->addMessage(new UserMessage('The newer subject'));
+        $second->setTitle('The newer subject');
 
         self::assertSame(
             ['The newer subject', 'The older subject'],
             array_map(
-                static fn (SessionSummary $session): string => $session->title,
+                static fn (SessionSummary $session): ?string => $session->title,
                 $sessionStore->summaries(),
             ),
         );
@@ -133,7 +136,7 @@ final class SessionStoreTest extends TestCase
         self::assertSame([], iterator_to_array($storage->entries('sessions')));
     }
 
-    public function testTitleUsesTheFirstNonBlankUserAuthoredTextUnchanged(): void
+    public function testUserContentIsListedWithoutDerivingATitle(): void
     {
         $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
         $history = $sessionStore->create();
@@ -146,7 +149,7 @@ final class SessionStoreTest extends TestCase
 
         $withoutText = $sessionStore->summaries();
         self::assertCount(1, $withoutText);
-        self::assertSame('[Image]', $withoutText[0]->title);
+        self::assertNull($withoutText[0]->title);
 
         $history->addMessage(new AssistantMessage('Image received'));
         $title = "  A\x00 title\nwith \x1b[31mcolor\x1b[0m "
@@ -158,7 +161,7 @@ final class SessionStoreTest extends TestCase
         $history->addMessage(new AssistantMessage('An answer'));
         $history->addMessage(new UserMessage('Another subject'));
 
-        self::assertSame($title, $sessionStore->summaries()[0]->title);
+        self::assertNull($sessionStore->summaries()[0]->title);
     }
 
     public function testFileOnlySessionUsesItsFilenameAndCanBeResumed(): void
@@ -171,7 +174,7 @@ final class SessionStoreTest extends TestCase
         $listed = $reopened->summaries();
 
         self::assertCount(1, $listed);
-        self::assertSame('report.pdf', $listed[0]->title);
+        self::assertNull($listed[0]->title);
         $resumed = $reopened->read($listed[0]->key);
         self::assertNotNull($resumed);
         self::assertInstanceOf(FileContent::class, $resumed->getMessages()[0]->getContentBlocks()[0]);
@@ -206,6 +209,7 @@ final class SessionStoreTest extends TestCase
         $sessionStore = new SessionStore(new FileStorage($this->directory), 'local-user');
         $history = $sessionStore->create();
         $history->addMessage(new UserMessage('Stored in a file'));
+        $history->setTitle('Stored in a file');
         $reopened = new SessionStore(new FileStorage($this->directory), 'local-user');
         $listed = $reopened->summaries();
 
@@ -272,6 +276,26 @@ final class SessionStoreTest extends TestCase
         self::assertSame([], $sessionStore->summaries());
         $sessionStore->delete($document->key);
         self::assertNotNull($storage->read('sessions', $document->key));
+    }
+
+    public function testTitlesPersistIndependentlyFromMessagesAndLastUseTime(): void
+    {
+        $storage = new InMemoryStorage();
+        $store = new SessionStore($storage, 'local-user');
+        $session = $store->create();
+        self::assertNull($session->title());
+        $session->addMessage(new UserMessage('ciao'));
+        $before = $session->jsonSerialize();
+        $lastUsed = $store->summaries()[0]->lastUsedAt;
+        $reopened = $store->read($session->getKey());
+        self::assertNotNull($reopened);
+
+        $reopened->setTitle('  Configurazione Redis  ');
+
+        self::assertSame('Configurazione Redis', $session->title());
+        self::assertSame('Configurazione Redis', $store->summaries()[0]->title);
+        self::assertEquals($lastUsed, $store->summaries()[0]->lastUsedAt);
+        self::assertSame($before, $session->jsonSerialize());
     }
 
     private function removeDirectory(string $directory): void

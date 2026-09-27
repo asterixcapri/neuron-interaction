@@ -6,6 +6,7 @@ namespace NeuronInteraction\Session;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use InvalidArgumentException;
 use NeuronAI\Chat\History\AbstractChatHistory;
 use NeuronAI\Chat\History\HistoryTrimmer;
 use NeuronAI\Chat\History\HistoryTrimmerInterface;
@@ -42,6 +43,30 @@ final class Session extends AbstractChatHistory
     public function getUserId(): string
     {
         return $this->userId;
+    }
+
+    /**
+     * Reads metadata that other Session instances can update.
+     *
+     * @phpstan-impure
+     */
+    public function title(): ?string
+    {
+        return $this->getMetadata()['title'] ?? null;
+    }
+
+    public function setTitle(string $title): void
+    {
+        $title = trim($title);
+        if ($title === '') {
+            throw new InvalidArgumentException('A Session title cannot be blank.');
+        }
+
+        if ($this->storage->read($this->namespace, $this->key) === null) {
+            throw new InvalidArgumentException('The Session no longer exists.');
+        }
+
+        $this->setMetadata('title', $title);
     }
 
     /** @return array<string, string> */

@@ -17,7 +17,7 @@ final class ResumeCommandTest extends TestCase
     {
         $option = $this->selectionOption(new DateTimeImmutable('-90 seconds'), 'Topic');
 
-        self::assertSame('Topic', $option->label);
+        self::assertSame('New session', $option->label);
         self::assertSame('1 minute ago · 35B', $option->description);
     }
 

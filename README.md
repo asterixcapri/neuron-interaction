@@ -252,6 +252,15 @@ The fallback determines the expected value type. Commands access the same store
 through `$adapter->configurationStore()`. See
 [ConfigurationStore](docs/configuration.md) for validation and the full API.
 
+## User message processing
+
+Implement `NeuronInteraction\Message\UserMessageProcessorInterface` to prepare
+complete `UserMessage` objects for the Agent and project them for display.
+`UserMessageProcessors` composes preparation in registration order and display
+in reverse order. Processors return new messages without modifying the originals;
+text, attachments and metadata can be handled together. See
+[User message processing](docs/messages.md) for the contract.
+
 ## Development
 
 ```bash

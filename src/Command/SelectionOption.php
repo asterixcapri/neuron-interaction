@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Command;
 
-/** A stable value and the text an Adapter may present for it. */
+/** A stable value and a textual label ready for presentation. */
 final readonly class SelectionOption
 {
     public function __construct(

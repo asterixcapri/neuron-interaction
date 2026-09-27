@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace NeuronInteraction\Session;
 
 use DateTimeImmutable;
-use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\History\ChatHistoryInterface;
-use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\ToolResultMessage;
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Storage\StorageInterface;
 use NeuronInteraction\Storage\StoredDocument;
 use UnexpectedValueException;
@@ -58,16 +57,15 @@ final readonly class SessionStore
                 continue;
             }
 
-            $title = $this->title($this->session($document));
-
-            if ($title === null) {
+            $session = $this->session($document);
+            if (!$this->hasUserContent($session)) {
                 continue;
             }
 
             $sessions[] = new SessionSummary(
                 $document->key,
                 $this->lastUsedAt($document),
-                $title,
+                $session->title(),
                 $document->size(),
             );
         }
@@ -112,34 +110,25 @@ final readonly class SessionStore
         );
     }
 
-    private function title(ChatHistoryInterface $history): ?string
+    private function hasUserContent(ChatHistoryInterface $history): bool
     {
-        $fallback = null;
-
         foreach ($history->getMessages() as $message) {
-            // Neuron represents tool results with the user role, but their
-            // content was not authored by the person.
-            if ($message->getRole() !== MessageRole::USER->value
-                || $message instanceof ToolResultMessage) {
+            if (!$message instanceof UserMessage || $message instanceof ToolResultMessage) {
                 continue;
+            }
+
+            if (trim($message->getContent() ?? '') !== '') {
+                return true;
             }
 
             foreach ($message->getContentBlocks() as $block) {
                 if (!$block instanceof TextContent) {
-                    $fallback ??= $block instanceof FileContent && $block->filename !== null
-                        ? $block->filename
-                        : '[' . ucfirst($block->getType()->value) . ']';
+                    return true;
                 }
-            }
-
-            $content = $message->getContent();
-
-            if ($content !== null && trim($content) !== '') {
-                return $content;
             }
         }
 
-        return $fallback;
+        return false;
     }
 
     private function lastUsedAt(StoredDocument $document): DateTimeImmutable

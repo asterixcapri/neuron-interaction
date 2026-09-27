@@ -108,8 +108,10 @@ final class SessionMetadataTest extends TestCase
         $store = new SessionStore($storage, 'alice');
         $first = $store->create(['projectId' => 'alpha', 'branchName' => 'main', 'extra' => 'allowed', 'userId' => 'bob']);
         $first->addMessage(new UserMessage('First title'));
+        $first->setTitle('First title');
         $second = $store->create(['projectId' => 'alpha', 'branchName' => 'main']);
         $second->addMessage(new UserMessage('Second title'));
+        $second->setTitle('Second title');
         $store->create(['projectId' => 'alpha', 'branchName' => 'main']);
         $store->create(['projectId' => 'alpha'])->addMessage(new UserMessage('Missing branch'));
         $store->create(['projectId' => 'alpha', 'branchName' => 'Main'])->addMessage(new UserMessage('Different case'));
@@ -118,7 +120,7 @@ final class SessionMetadataTest extends TestCase
         $first->addMessage(new AssistantMessage('Latest answer'));
         $filter = ['projectId' => 'alpha', 'branchName' => 'main'];
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
-        self::assertSame(['First title', 'Second title'], array_map(static fn (SessionSummary $summary): string => $summary->title, $fresh->summaries($filter)));
+        self::assertSame(['First title', 'Second title'], array_map(static fn (SessionSummary $summary): ?string => $summary->title, $fresh->summaries($filter)));
         self::assertSame([], $fresh->summaries(['missingKey' => 'value']));
         self::assertCount(1, $fresh->summaries(['userId' => 'bob']));
         self::assertCount(5, $fresh->summaries([]));
