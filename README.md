@@ -59,8 +59,12 @@ for listing, deletion, metadata and filtering.
 
 ## Stop a response
 
-Share a `StopSignal` between the provider's HTTP client and the code handling
-stop requests. The application chooses the key identifying the response:
+Pass `StoppableHttpClient` to the AI provider, then configure the Agent with
+that provider. Share a `StopSignal` between the HTTP client and the code handling
+stop requests. Creating the signal alone does not enable stopping: the provider
+must use the stoppable client.
+
+The application chooses the key identifying the response:
 
 ```php
 use NeuronAI\Agent\Agent;
@@ -86,15 +90,20 @@ $agent->setAiProvider(new OpenAIResponses(
     httpClient: $client,
 ));
 
+// Clear any previous stop request before starting a new response.
 $stopSignal->clear();
-foreach ($agent->stream(new UserMessage($prompt))->events() as $event) {
+$handler = $agent->stream(new UserMessage($prompt));
+foreach ($handler->events() as $event) {
     if ($event instanceof TextChunk) {
         echo $event->content;
     }
 }
+
+$response = $handler->getMessage();
 ```
 
-In a separate stop endpoint, use the same storage location and authorized key:
+While the Agent is streaming, a separate stop endpoint or process can request
+that it stop. Use the same storage location and authorized key:
 
 ```php
 $stopSignal = new StopSignal(
@@ -104,9 +113,10 @@ $stopSignal = new StopSignal(
 $stopSignal->request();
 ```
 
-The stream detects and consumes the signal, allowing Neuron to finalize the
-partial response. No stop check is needed in the consumer loop. Only `request()`
-writes a stop document; `clear()` removes it and `isRequested()` reads its state.
+Connect `request()` to your application's stop button, endpoint or keyboard
+action. The stream detects and consumes the signal, allowing Neuron to finalize
+the partial response, which you can retrieve with `$handler->getMessage()`.
+No stop check is needed in the consumer loop. Only `request()` writes a stop document; `clear()` removes it and `isRequested()` reads its state.
 Use the same `InMemoryStorage` instance when both handlers run in one process.
 
 Concurrent responses need distinct keys, and separate HTTP requests need workers
