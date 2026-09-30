@@ -17,6 +17,7 @@ use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 
 final class SessionTitleGeneratorTest extends TestCase
@@ -37,7 +38,7 @@ final class SessionTitleGeneratorTest extends TestCase
                 parent::__construct(new AssistantMessage('{"title":"Report review"}'));
             }
 
-            public function structured(array|Message $messages, string $class, array $response_schema): Message
+            public function structured(array|Message $messages, string $class, array $response_schema): \NeuronAI\Providers\ProviderResponse
             {
                 $messages = is_array($messages) ? $messages : [$messages];
                 $this->capture->text = $messages[0]->getContent() ?? '';
@@ -53,7 +54,7 @@ final class SessionTitleGeneratorTest extends TestCase
             new ToolCallMessage('Technical tool instructions', []),
             new ToolResultMessage([]),
         ] as $message) {
-            $session->addMessage($message);
+            SessionHistory::of($session)->addMessage($message);
         }
         $title = (new SessionTitleGenerator($provider, $session))->generate();
 
@@ -75,7 +76,7 @@ final class SessionTitleGeneratorTest extends TestCase
 
 
         $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
-        $session->addMessage($message);
+        SessionHistory::of($session)->addMessage($message);
 
         self::assertNull((new SessionTitleGenerator($provider, $session))->generate());
         self::assertSame($original, $message->jsonSerialize());

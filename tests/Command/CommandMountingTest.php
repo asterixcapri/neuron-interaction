@@ -10,6 +10,7 @@ use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
+use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
@@ -56,8 +57,8 @@ final class CommandMountingTest extends TestCase
         $commands = (new Commands())->addCommand([new ClearCommand(), new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->sessionStore()->create();
-        $previous->addMessage(new UserMessage('Keep this conversation'));
-        $adapter->agent()->setChatHistory($previous);
+        SessionHistory::of($previous)->addMessage(new UserMessage('Keep this conversation'));
+        $adapter->useAgent(($previous)->bindTo($adapter->agent()), preserveConversation: false);
         $key = $adapter->sessionStore()->summaries()[0]->key;
 
         $execution = $commands->run('/clear', '', $adapter);
@@ -82,7 +83,7 @@ final class CommandMountingTest extends TestCase
         $commands = (new Commands())->addCommand([$first, new ClearCommand(), new ResumeCommand(), $last]);
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->sessionStore()->create();
-        $adapter->agent()->setChatHistory($previous);
+        $adapter->useAgent(($previous)->bindTo($adapter->agent()), preserveConversation: false);
 
         self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(
             static fn (CommandInterface $command): string => $command->name(),

@@ -17,7 +17,7 @@ final class CommandAdapterTest extends TestCase
 {
     public function testAnOrdinaryCommandUsesTheSharedAdapterWithoutATerminal(): void
     {
-        $replacement = new Agent();
+        $replacement = (new Agent())->setThreadId('test-thread');
         $selection = new Selection('/inspect', 'Pick one', [
             new SelectionOption('chosen-value', 'Visible label', 'Description'),
         ]);
@@ -42,7 +42,7 @@ final class CommandAdapterTest extends TestCase
                 $adapter->notify($adapter->commands()->all()[0]->name());
                 $adapter->warn($value);
                 $adapter->error('An expected failure.');
-                $adapter->agent()->setChatHistory($adapter->sessionStore()->create());
+                $adapter->useAgent(($adapter->sessionStore()->create())->bindTo($adapter->agent()), preserveConversation: false);
                 $adapter->useAgent($this->replacement);
                 $adapter->promptAgent(new UserMessage('A generated Agent prompt.'));
                 $adapter->requestSelection($this->selection);
@@ -63,7 +63,8 @@ final class CommandAdapterTest extends TestCase
         self::assertSame(['A generated Agent prompt.'], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $adapter->prompts));
         self::assertSame([$selection], $adapter->selections);
         self::assertSame($commands, $adapter->commands());
-        self::assertSame($replacement, $adapter->agent());
+        self::assertNotSame($replacement, $adapter->agent());
+        self::assertSame($replacement::class, $adapter->agent()::class);
         self::assertTrue($adapter->stopped);
     }
 }

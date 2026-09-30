@@ -19,16 +19,16 @@ $sessionStore = new SessionStore($storage, 'demo-user');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
 
 $firstSession = $sessionStore->create();
-$firstSession->addMessage(new UserMessage('Planning a trip'));
+$firstSession->bindTo(new Agent())->getChatHistory()->addMessage(new UserMessage('Planning a trip'));
 $firstSession->setTitle('Planning a trip');
 
 $secondSession = $sessionStore->create();
-$secondSession->addMessage(new UserMessage('Learning PHP'));
+$secondSession->bindTo(new Agent())->getChatHistory()->addMessage(new UserMessage('Learning PHP'));
 $secondSession->setTitle('Learning PHP');
 $commands = (new Commands())->addCommand(new ResumeCommand());
 
 // Request 1: /resume without a key returns selection.options for the frontend.
-$firstRequest = new BackendAdapter(new Agent(), $commands, $sessionStore, static function (): void {}, configurationStore: $configurationStore);
+$firstRequest = new BackendAdapter((new Agent())->setThreadId('test-thread'), $commands, $sessionStore, static function (): void {}, configurationStore: $configurationStore);
 $response = $commands->run('/resume', '', $firstRequest);
 echo json_encode($response, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 
@@ -36,8 +36,8 @@ echo json_encode($response, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 $sessionKey = $firstSession->getKey();
 
 // Request 2: a fresh Agent and Adapter receive /resume with the chosen key.
-$agent = new Agent();
+$agent = (new Agent())->setThreadId('test-thread');
 $secondRequest = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {}, configurationStore: $configurationStore);
 $commands->run('/resume', $sessionKey, $secondRequest);
 
-echo $agent->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;
+echo $secondRequest->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;

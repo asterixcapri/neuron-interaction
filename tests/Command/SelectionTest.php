@@ -11,6 +11,7 @@ use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Command\Selection;
 use NeuronInteraction\Command\SelectionOption;
+use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 
 final class SelectionTest extends TestCase
@@ -80,16 +81,16 @@ final class SelectionTest extends TestCase
         $commands = (new Commands())->addCommand([new ResumeCommand('/return')]);
         $adapter = new FakeCommandAdapter($commands);
         $stored = $adapter->sessionStore()->create();
-        $stored->addMessage(new UserMessage('Stored subject'));
+        SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
         $active = $adapter->sessionStore()->create();
-        $adapter->agent()->setChatHistory($active);
+        $adapter->useAgent(($active)->bindTo($adapter->agent()), preserveConversation: false);
         $session = $adapter->sessionStore()->summaries()[0];
 
         $first = $commands->run('/return', '', $adapter);
 
         self::assertNotNull($first);
         self::assertSame('completed', $first->status);
-        self::assertSame($active, $adapter->agent()->getChatHistory());
+        self::assertSame($active->getKey(), $adapter->agent()->getChatHistory()->getThreadId());
         self::assertCount(1, $adapter->selections);
         $request = $adapter->selections[0];
         self::assertSame('/return', $request->command);
@@ -109,7 +110,7 @@ final class SelectionTest extends TestCase
     {
         $commands = (new Commands())->addCommand([new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
-        $adapter->sessionStore()->create()->addMessage(new UserMessage('Direct resume'));
+        SessionHistory::of($adapter->sessionStore()->create())->addMessage(new UserMessage('Direct resume'));
         $key = $adapter->sessionStore()->summaries()[0]->key;
 
         self::assertSame('completed', $commands->run('/resume', $key, $adapter)?->status);
@@ -118,7 +119,7 @@ final class SelectionTest extends TestCase
 
         $history = $adapter->agent()->getChatHistory();
         self::assertSame('completed', $commands->run('/resume', 'unknown', $adapter)?->status);
-        self::assertSame($history, $adapter->agent()->getChatHistory());
+        self::assertSame($history->getThreadId(), $adapter->agent()->getChatHistory()->getThreadId());
         self::assertSame(['No Session is named by that key.'], $adapter->errors);
         self::assertSame([], $adapter->warnings);
     }

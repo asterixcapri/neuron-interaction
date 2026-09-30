@@ -9,8 +9,8 @@ namespace NeuronInteraction\Command;
  *
  * A Host Application mounts it under `clear` or a name of its own.
  *
- * Starting a Session returns the empty History the Agent needs together with
- * its key, and nothing here ever deletes what the new Session replaced.
+ * Starting a Session binds an Agent copy to a new conversation.
+ * Nothing here deletes the conversation the new Session replaced.
  */
 final readonly class ClearCommand implements CommandInterface
 {
@@ -32,6 +32,6 @@ final readonly class ClearCommand implements CommandInterface
     /** @param CommandAdapterInterface<mixed> $adapter */
     public function run(CommandAdapterInterface $adapter, string $value): void
     {
-        $adapter->agent()->setChatHistory($adapter->sessionStore()->create());
+        $adapter->useAgent($adapter->sessionStore()->create()->bindTo($adapter->agent()), preserveConversation: false);
     }
 }

@@ -15,10 +15,10 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
 
 $previousSession = $sessionStore->create();
-$previousSession->addMessage(new UserMessage('The previous conversation'));
+$previousSession->bindTo(new Agent())->getChatHistory()->addMessage(new UserMessage('The previous conversation'));
 
-$agent = new Agent();
-$agent->setChatHistory($previousSession);
+$agent = (new Agent())->setThreadId('test-thread');
+$agent = ($previousSession)->bindTo($agent);
 
 $commands = (new Commands())->addCommand(new ClearCommand());
 $adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
@@ -26,6 +26,6 @@ $commands->run('/clear', '', $adapter);
 
 // The Agent now has an empty Session; the previous conversation is still stored.
 echo json_encode([
-    'currentMessages' => $agent->getChatHistory()->getMessages(),
+    'currentMessages' => $adapter->agent()->getChatHistory()->getMessages(),
     'storedConversations' => count($sessionStore->summaries()),
 ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;

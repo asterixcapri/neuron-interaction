@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Message;
 
-use NeuronAI\Chat\History\InMemoryChatHistory;
 use NeuronAI\Chat\Messages\Message;
+use NeuronAI\Chat\Messages\MessageDeserializer;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use Throwable;
 use UnexpectedValueException;
 
 /** Reuses Neuron's content-block and metadata deserialization. */
-final class UserMessageFactory extends InMemoryChatHistory
+final class UserMessageFactory
 {
     public static function fromMessage(Message $message): UserMessage
     {
@@ -53,7 +53,7 @@ final class UserMessageFactory extends InMemoryChatHistory
         }
 
         try {
-            $message = (new self())->deserializeMessage($data);
+            $message = (new MessageDeserializer())->deserialize($data);
         } catch (Throwable $exception) {
             throw new UnexpectedValueException('Invalid user message.', previous: $exception);
         }

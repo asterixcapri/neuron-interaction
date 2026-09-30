@@ -29,13 +29,13 @@ final class StoppableHttpClientStorageTest extends TestCase
         $stopSignal = new StopSignal($storage, $key);
         $stopSignal->clear();
         $stream = new FixtureStream(StoppableHttpClientTest::openaiText());
-        $agent = new Agent();
+        $agent = (new Agent())->setThreadId('test-thread');
         $agent->setAiProvider(new OpenAI('fixture-key', 'fixture-model', httpClient: new StoppableHttpClient(new FixtureHttpClient([$stream]), $stopSignal, pollInterval: 0)));
 
         try {
             $handler = $agent->stream(new UserMessage('Question'));
             $text = '';
-            foreach ($handler->events() as $event) {
+            foreach ($handler as $event) {
                 if ($event instanceof TextChunk) {
                     $text .= $event->content;
                     $this->requestFromAnotherProcess($directory, $key);
@@ -43,7 +43,7 @@ final class StoppableHttpClientStorageTest extends TestCase
             }
 
             self::assertSame('Partial', $text);
-            self::assertSame('Partial', $handler->getMessage()->getContent());
+            self::assertSame('Partial', $handler->getReturn()->getMessage()?->getContent());
             self::assertCount(2, $agent->getChatHistory()->getMessages());
             self::assertSame(1, $stream->closes);
             self::assertFalse((new StopSignal(new FileStorage($directory), $key))->isRequested());
@@ -126,7 +126,7 @@ final class StoppableHttpClientStorageTest extends TestCase
                 $stopSignal->request();
             },
         );
-        $stream = $client->withBaseUri('https://fixture.invalid')->withHeaders(['X-Test' => 'kept'])->withTimeout(12.5)->stream(HttpRequest::post('response'));
+        $stream = $client->stream(HttpRequest::post('https://fixture.invalid/response', headers: ['X-Test' => 'kept']));
 
         self::assertTrue($stream->eof());
         self::assertTrue($stream->eof());

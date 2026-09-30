@@ -1,12 +1,14 @@
 # HTTP response stop
 
-`StoppableHttpClient` and `StoppableStream` implement the HTTP composition
-pattern described in [the Neuron article](https://inspector.dev/how-to-stop-a-streamed-ai-response-mid-flight-in-neuron-ai-v3/).
+`StoppableHttpClient` wraps Neuron AI 4 HTTP clients. `StoppableStream` extends
+Neuron's native stoppable stream so providers can distinguish intentional stops
+from transport failures.
 The Host creates a `StopSignal` with its Storage and application-selected key.
 It calls `clear()` before streaming and `request()` when the user requests a
 stop. Namespace and document format are private to `StopSignal`. `StoppableStream::eof()` reads and consumes
-that flag, closes its inner stream, and reports ordinary EOF. Neuron can then
-finalize the partial Assistant message and save History and Agent steps itself.
+that flag, marks the stream as intentionally stopped and closes its inner stream.
+Neuron can then finalize a partial Assistant message with the `stopped` finish
+reason and persist it. Stopping before any text raises `ProviderException`.
 
 ## Configure the provider
 
@@ -14,7 +16,7 @@ finalize the partial Assistant message and save History and Agent steps itself.
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronAI\HttpClient\GuzzleHttpClient;
+use NeuronAI\HttpClient\Curl\CurlHttpClient;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronInteraction\Http\StoppableHttpClient;
 use NeuronInteraction\Http\StopSignal;
@@ -23,12 +25,12 @@ use NeuronInteraction\Storage\FileStorage;
 $storage = new FileStorage('/app/interaction-state');
 $chatId = 'chat-42'; // Chosen and authorized by the Host.
 $stopSignal = new StopSignal(storage: $storage, key: $chatId);
-$agent = new Agent();
+$agent = Agent::make(workflowId: $chatId);
 $agent->setAiProvider(new OpenAI(
     key: $apiKey,
     model: $model,
     httpClient: new StoppableHttpClient(
-        inner: new GuzzleHttpClient(),
+        inner: new CurlHttpClient(),
         stopSignal: $stopSignal,
     ),
 ));
@@ -44,7 +46,7 @@ shared implementation of `StorageInterface`.
 ```php
 $stopSignal->clear();
 
-foreach ($agent->stream(new UserMessage($prompt))->events() as $event) {
+foreach ($agent->stream(new UserMessage($prompt)) as $event) {
     if ($event instanceof TextChunk) {
         echo $event->content; // Or send an SSE event to the frontend.
     }
@@ -108,8 +110,9 @@ allows terminal input to run. The module has no Amp or terminal dependency.
 
 This stops an HTTP response, not an entire tool-using Turn. Local tools continue;
 follow-up inference can start, and consumes no stop unless another flag is
-written. Partial tool calls retain the provider's own EOF semantics. Neuron
-saves its own final message; no interruption metadata or History repair is added.
+written. Neuron discards incomplete tool calls on an intentional stop. A stream that
+ends without its provider's closing event and without an intentional stop is an
+error. Neuron owns response metadata and message persistence.
 
 A stop cannot abort a blocked read or an HTTP request still waiting to return
 its stream. Actual resource closure depends on the inner transport; remote

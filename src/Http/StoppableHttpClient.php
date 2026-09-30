@@ -36,18 +36,4 @@ final readonly class StoppableHttpClient implements HttpClientInterface
         return new StoppableStream($this->inner->stream($request), $this->stopSignal, $this->onPoll, $this->pollInterval);
     }
 
-    public function withBaseUri(string $baseUri): HttpClientInterface
-    {
-        return new self($this->inner->withBaseUri($baseUri), $this->stopSignal, $this->onPoll, $this->pollInterval);
-    }
-
-    public function withHeaders(array $headers): HttpClientInterface
-    {
-        return new self($this->inner->withHeaders($headers), $this->stopSignal, $this->onPoll, $this->pollInterval);
-    }
-
-    public function withTimeout(float $timeout): HttpClientInterface
-    {
-        return new self($this->inner->withTimeout($timeout), $this->stopSignal, $this->onPoll, $this->pollInterval);
-    }
 }

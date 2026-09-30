@@ -106,9 +106,11 @@ final class BackendAdapter implements CommandAdapterInterface
         return $this->answeringAgent;
     }
 
-    public function useAgent(Agent $agent): void
+    public function useAgent(Agent $agent, bool $preserveConversation = true): void
     {
-        $agent->setChatHistory($this->answeringAgent->getChatHistory());
+        if ($preserveConversation) {
+            $agent = $this->sessionStore->transfer($this->answeringAgent, $agent);
+        }
         $this->answeringAgent = $agent;
     }
 
