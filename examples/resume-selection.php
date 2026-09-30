@@ -19,11 +19,13 @@ $sessionStore = new SessionStore($storage, 'demo-user');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
 
 $firstSession = $sessionStore->create();
-$firstSession->bindTo(new Agent())->getChatHistory()->addMessage(new UserMessage('Planning a trip'));
+$agent = $firstSession->bindTo(new Agent());
+$agent->getChatHistory()->addMessage(new UserMessage('Planning a trip'));
 $firstSession->setTitle('Planning a trip');
 
 $secondSession = $sessionStore->create();
-$secondSession->bindTo(new Agent())->getChatHistory()->addMessage(new UserMessage('Learning PHP'));
+$agent = $secondSession->bindTo(new Agent());
+$agent->getChatHistory()->addMessage(new UserMessage('Learning PHP'));
 $secondSession->setTitle('Learning PHP');
 $commands = (new Commands())->addCommand(new ResumeCommand());
 

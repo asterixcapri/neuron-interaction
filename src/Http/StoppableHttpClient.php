@@ -33,7 +33,8 @@ final readonly class StoppableHttpClient implements HttpClientInterface
 
     public function stream(HttpRequest $request): StreamInterface
     {
-        return new StoppableStream($this->inner->stream($request), $this->stopSignal, $this->onPoll, $this->pollInterval);
+        $stream = $this->inner->stream($request);
+        return new StoppableStream($stream, $this->stopSignal, $this->onPoll, $this->pollInterval);
     }
 
 }

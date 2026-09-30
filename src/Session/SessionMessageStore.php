@@ -35,7 +35,8 @@ final readonly class SessionMessageStore implements MessageStoreInterface
 
     public function loadAll(string $threadId, ?int $limit = null, ?string $before = null): array
     {
-        return $this->paginate($this->deserialize($this->read($threadId)), $limit, $before);
+        $messages = $this->deserialize($this->read($threadId));
+        return $this->paginate($messages, $limit, $before);
     }
 
     public function append(string $threadId, Message $message): void

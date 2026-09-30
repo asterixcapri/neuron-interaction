@@ -45,7 +45,8 @@ final class InputHistory
         }
 
         $entries[] = $input;
-        $this->storage->write(self::NAMESPACE, self::KEY, array_map(static fn (UserMessage $message): array => $message->jsonSerialize(), $entries));
+        $data = array_map(static fn (UserMessage $message): array => $message->jsonSerialize(), $entries);
+        $this->storage->write(self::NAMESPACE, self::KEY, $data);
     }
 
     /**

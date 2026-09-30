@@ -15,7 +15,8 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 // Seed a stored conversation so this example can run on its own.
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
 $session = $sessionStore->create();
-$session->bindTo(new Agent())->getChatHistory()->addMessage(new UserMessage('A conversation to reopen'));
+$agent = $session->bindTo(new Agent());
+$agent->getChatHistory()->addMessage(new UserMessage('A conversation to reopen'));
 
 $agent = (new Agent())->setThreadId('test-thread');
 $commands = (new Commands())->addCommand(new ResumeCommand());
