@@ -60,10 +60,10 @@ the full conversation, including archived messages.
 
 ## Stop a response
 
-Pass `StoppableHttpClient` to the AI provider, then configure the Agent with
-that provider. Share a `StopSignal` between the HTTP client and the code handling
+Pass Neuron AI's native `StoppableHttpClient` to the AI provider, then configure
+the Agent with that provider. Share a `StopSignal` between the HTTP client and the code handling
 stop requests. Creating the signal alone does not enable stopping: the provider
-must use the stoppable client.
+must use the stoppable client with `shouldStop: $stopSignal->stopCallback()`.
 
 The application chooses the key identifying the response:
 
@@ -73,15 +73,15 @@ use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\HttpClient\Curl\CurlHttpClient;
 use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
-use NeuronInteraction\Http\StoppableHttpClient;
+use NeuronAI\HttpClient\StoppableHttpClient;
 use NeuronInteraction\Http\StopSignal;
 use NeuronInteraction\Storage\FileStorage;
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');
 $stopSignal = new StopSignal(storage: $storage, key: $chatId);
 $client = new StoppableHttpClient(
-    inner: new CurlHttpClient(),
-    stopSignal: $stopSignal,
+    client: new CurlHttpClient(),
+    shouldStop: $stopSignal->stopCallback(),
 );
 
 $agent = Agent::make(workflowId: $chatId);

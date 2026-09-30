@@ -8,9 +8,9 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\HttpClient\HttpRequest;
+use NeuronAI\HttpClient\StoppableHttpClient;
 use NeuronAI\HttpClient\StreamInterface;
 use NeuronAI\Providers\OpenAI\OpenAI;
-use NeuronInteraction\Http\StoppableHttpClient;
 use NeuronInteraction\Http\StopSignal;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -30,7 +30,7 @@ final class StoppableHttpClientStorageTest extends TestCase
         $stopSignal->clear();
         $stream = new FixtureStream(StoppableHttpClientTest::openaiText());
         $agent = (new Agent())->setThreadId('test-thread');
-        $agent->setAiProvider(new OpenAI('fixture-key', 'fixture-model', httpClient: new StoppableHttpClient(new FixtureHttpClient([$stream]), $stopSignal, pollInterval: 0)));
+        $agent->setAiProvider(new OpenAI('fixture-key', 'fixture-model', httpClient: new StoppableHttpClient(new FixtureHttpClient([$stream]), $stopSignal->stopCallback(pollInterval: 0))));
 
         try {
             $handler = $agent->stream(new UserMessage('Question'));
@@ -85,9 +85,10 @@ final class StoppableHttpClientStorageTest extends TestCase
         $polls = 0;
         $client = new StoppableHttpClient(
             new FixtureHttpClient([new FixtureStream(str_repeat('x', 1000))]),
-            new StopSignal($storage, 'chat'),
-            onPoll: static function () use (&$polls): void { ++$polls; },
-            pollInterval: 3600,
+            (new StopSignal($storage, 'chat'))->stopCallback(
+                onPoll: static function () use (&$polls): void { ++$polls; },
+                pollInterval: 3600,
+            ),
         );
         $stream = $client->stream(HttpRequest::post('response'));
         $text = '';
@@ -103,7 +104,7 @@ final class StoppableHttpClientStorageTest extends TestCase
     {
         $storage = new InMemoryStorage();
         $stopSignal = new StopSignal($storage, 'chat');
-        $client = new StoppableHttpClient(new FixtureHttpClient([new FixtureStream('response')]), $stopSignal);
+        $client = new StoppableHttpClient(new FixtureHttpClient([new FixtureStream('response')]), $stopSignal->stopCallback());
         $stream = $client->stream(HttpRequest::post('response'));
         self::assertFalse($stream->eof());
         $stopSignal->request();
@@ -121,10 +122,11 @@ final class StoppableHttpClientStorageTest extends TestCase
         $inner = new FixtureStream('response');
         $client = new StoppableHttpClient(
             new FixtureHttpClient([$inner]),
-            $stopSignal,
-            onPoll: static function () use ($stopSignal): void {
-                $stopSignal->request();
-            },
+            $stopSignal->stopCallback(
+                onPoll: static function () use ($stopSignal): void {
+                    $stopSignal->request();
+                },
+            ),
         );
         $stream = $client->stream(HttpRequest::post('https://fixture.invalid/response', headers: ['X-Test' => 'kept']));
 
@@ -157,7 +159,7 @@ final class StoppableHttpClientStorageTest extends TestCase
 
     private function stream(StopSignal $stopSignal): StreamInterface
     {
-        return (new StoppableHttpClient(new FixtureHttpClient([new FixtureStream('response')]), $stopSignal, pollInterval: 0))->stream(HttpRequest::post('response'));
+        return (new StoppableHttpClient(new FixtureHttpClient([new FixtureStream('response')]), $stopSignal->stopCallback(pollInterval: 0)))->stream(HttpRequest::post('response'));
     }
 
     private function requestFromAnotherProcess(string $directory, string $key): void
