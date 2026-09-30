@@ -15,7 +15,8 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
 
 $previousSession = $sessionStore->create();
-$previousSession->bindTo(new Agent())->getChatHistory()->addMessage(new UserMessage('The previous conversation'));
+$agent = $previousSession->bindTo(new Agent());
+$agent->getChatHistory()->addMessage(new UserMessage('The previous conversation'));
 
 $agent = (new Agent())->setThreadId('test-thread');
 $agent = ($previousSession)->bindTo($agent);

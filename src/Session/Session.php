@@ -79,7 +79,8 @@ final readonly class Session
     /** @return array<string, string> */
     public function getMetadata(): array
     {
-        return SessionMetadata::decode($this->storage->read($this->namespace, $this->key)->metadata ?? []);
+        $document = $this->storage->read($this->namespace, $this->key);
+        return SessionMetadata::decode($document->metadata ?? []);
     }
 
     public function setMetadata(string $key, string $value): void
