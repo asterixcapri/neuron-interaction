@@ -12,12 +12,12 @@ connect to its input and output.
 
 ## Installation
 
-Requires PHP 8.4.1+. The `0.8.x` branch supports Neuron AI 3.
+Requires PHP 8.4.1+. The `0.9.x` branch supports Neuron AI 4; `0.8.x` supports Neuron AI 3.
 
 Run this command in your application's directory:
 
 ```bash
-composer require asterixcapri/neuron-interaction
+composer require asterixcapri/neuron-interaction:^0.9@dev
 ```
 
 Composer also installs Neuron AI as a required dependency. If you install Neuron
@@ -35,7 +35,7 @@ TUI, Neuron Interaction is already included as its dependency.
 
 ## SessionStore and Storage
 
-Install a stored conversation as the Agent's chat history. Subsequent history
+Bind the Agent to a stored conversation. Subsequent history
 updates are persisted automatically:
 
 ```php
@@ -46,16 +46,17 @@ use NeuronInteraction\Storage\FileStorage;
 $storage = new FileStorage(__DIR__ . '/interaction-state');
 $sessionStore = new SessionStore($storage, 'local-user');
 $agent = new Agent();
-$agent->setChatHistory($sessionStore->create());
+$agent = $sessionStore->create()->bindTo($agent);
 ```
 
 Use `summaries()` to list conversations and `read($key)` to reopen one, then
-install it with `$agent->setChatHistory($history)`. Supply the current user's
+bind it with `$agent = $session->bindTo($agent)`. Always keep the returned Agent: binding returns a copy. Supply the current user's
 identity instead of `local-user`; reads and listings are scoped to that user.
 
 Use `InMemoryStorage` for transient state, or implement `StorageInterface`
 for your application's persistence. See [Sessions and Storage](docs/sessions.md)
-for listing, deletion, metadata and filtering.
+for listing, deletion, metadata and filtering. Use `$session->getMessages()` to read
+the full conversation, including archived messages.
 
 ## Stop a response
 
@@ -70,7 +71,7 @@ The application chooses the key identifying the response:
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronAI\HttpClient\GuzzleHttpClient;
+use NeuronAI\HttpClient\Curl\CurlHttpClient;
 use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
 use NeuronInteraction\Http\StoppableHttpClient;
 use NeuronInteraction\Http\StopSignal;
@@ -79,11 +80,11 @@ use NeuronInteraction\Storage\FileStorage;
 $storage = new FileStorage(__DIR__ . '/interaction-state');
 $stopSignal = new StopSignal(storage: $storage, key: $chatId);
 $client = new StoppableHttpClient(
-    inner: new GuzzleHttpClient(),
+    inner: new CurlHttpClient(),
     stopSignal: $stopSignal,
 );
 
-$agent = new Agent();
+$agent = Agent::make(workflowId: $chatId);
 $agent->setAiProvider(new OpenAIResponses(
     key: $apiKey,
     model: $model,
@@ -92,14 +93,14 @@ $agent->setAiProvider(new OpenAIResponses(
 
 // Clear any previous stop request before starting a new response.
 $stopSignal->clear();
-$handler = $agent->stream(new UserMessage($prompt));
-foreach ($handler->events() as $event) {
+$stream = $agent->stream(new UserMessage($prompt));
+foreach ($stream as $event) {
     if ($event instanceof TextChunk) {
         echo $event->content;
     }
 }
 
-$response = $handler->getMessage();
+$response = $stream->getReturn()->getMessage();
 ```
 
 While the Agent is streaming, a separate stop endpoint or process can request
@@ -115,7 +116,7 @@ $stopSignal->request();
 
 Connect `request()` to your application's stop button, endpoint or keyboard
 action. The stream detects and consumes the signal, allowing Neuron to finalize
-the partial response, which you can retrieve with `$handler->getMessage()`.
+the partial response, which you can retrieve with `$stream->getReturn()->getMessage()` after consuming the stream. A stop before any text raises Neuron's `ProviderException`.
 No stop check is needed in the consumer loop. Only `request()` writes a stop document; `clear()` removes it and `isRequested()` reads its state.
 Use the same `InMemoryStorage` instance when both handlers run in one process.
 

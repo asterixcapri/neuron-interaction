@@ -42,7 +42,7 @@ interface CommandAdapterInterface
 
     public function agent(): Agent;
 
-    public function useAgent(Agent $agent): void;
+    public function useAgent(Agent $agent, bool $preserveConversation = true): void;
 
     public function commands(): Commands;
 

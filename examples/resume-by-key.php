@@ -15,9 +15,9 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 // Seed a stored conversation so this example can run on its own.
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
 $session = $sessionStore->create();
-$session->addMessage(new UserMessage('A conversation to reopen'));
+$session->bindTo(new Agent())->getChatHistory()->addMessage(new UserMessage('A conversation to reopen'));
 
-$agent = new Agent();
+$agent = (new Agent())->setThreadId('test-thread');
 $commands = (new Commands())->addCommand(new ResumeCommand());
 $adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
 
@@ -25,5 +25,5 @@ $adapter = new BackendAdapter($agent, $commands, $sessionStore, static function 
 $sessionKey = $session->getKey();
 $commands->run('/resume', $sessionKey, $adapter);
 
-// Resume has installed the stored conversation as the Agent's History.
-echo $agent->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;
+// Resume has bound an Agent copy to the stored conversation.
+echo $adapter->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;

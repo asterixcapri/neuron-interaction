@@ -31,7 +31,7 @@ final readonly class SessionTitleGenerator
             return null;
         }
 
-        $agent = new SessionTitleAgent();
+        $agent = (new SessionTitleAgent())->setThreadId('title-' . $this->session->getKey());
         $agent->setAiProvider($this->provider);
         $result = $agent->structured(
             new UserMessage(json_encode($conversation, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)),

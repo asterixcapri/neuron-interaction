@@ -15,6 +15,7 @@ use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -44,8 +45,8 @@ final class SessionStoreTest extends TestCase
         self::assertSame([], $first->getMessages());
         self::assertSame([], $second->getMessages());
 
-        $first->addMessage(new UserMessage('First'));
-        $second->addMessage(new UserMessage('Second'));
+        SessionHistory::of($first)->addMessage(new UserMessage('First'));
+        SessionHistory::of($second)->addMessage(new UserMessage('Second'));
         $keys = array_map(
             static fn (SessionSummary $session): string => $session->key,
             $sessionStore->summaries(),
@@ -78,7 +79,7 @@ final class SessionStoreTest extends TestCase
             ? new FileStorage($this->directory)
             : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
-        $history->addMessage(new UserMessage('Written earlier'));
+        SessionHistory::of($history)->addMessage(new UserMessage('Written earlier'));
         $history->setTitle('Written earlier');
         $reopened = new SessionStore($files
             ? new FileStorage($this->directory)
@@ -102,11 +103,11 @@ final class SessionStoreTest extends TestCase
     {
         $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
         $first = $sessionStore->create();
-        $first->addMessage(new UserMessage('The older subject'));
+        SessionHistory::of($first)->addMessage(new UserMessage('The older subject'));
         $first->setTitle('The older subject');
-        $first->addMessage(new AssistantMessage('An answer'));
+        SessionHistory::of($first)->addMessage(new AssistantMessage('An answer'));
         $second = $sessionStore->create();
-        $second->addMessage(new UserMessage('The newer subject'));
+        SessionHistory::of($second)->addMessage(new UserMessage('The newer subject'));
         $second->setTitle('The newer subject');
 
         self::assertSame(
@@ -117,7 +118,7 @@ final class SessionStoreTest extends TestCase
             ),
         );
 
-        $first->addMessage(new UserMessage('A later question'));
+        SessionHistory::of($first)->addMessage(new UserMessage('A later question'));
         $listed = $sessionStore->summaries();
 
         self::assertSame('The older subject', $listed[0]->title);
@@ -140,9 +141,9 @@ final class SessionStoreTest extends TestCase
     {
         $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
         $history = $sessionStore->create();
-        $history->addMessage(new UserMessage(" \n\t"));
-        $history->addMessage(new AssistantMessage('An introductory answer'));
-        $history->addMessage(new UserMessage([
+        SessionHistory::of($history)->addMessage(new UserMessage(" \n\t"));
+        SessionHistory::of($history)->addMessage(new AssistantMessage('An introductory answer'));
+        SessionHistory::of($history)->addMessage(new UserMessage([
             new ReasoningContent('Internal reasoning'),
             new ImageContent('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', SourceType::BASE64, 'image/png'),
         ]));
@@ -151,15 +152,15 @@ final class SessionStoreTest extends TestCase
         self::assertCount(1, $withoutText);
         self::assertNull($withoutText[0]->title);
 
-        $history->addMessage(new AssistantMessage('Image received'));
+        SessionHistory::of($history)->addMessage(new AssistantMessage('Image received'));
         $title = "  A\x00 title\nwith \x1b[31mcolor\x1b[0m "
             . str_repeat('long words ', 30);
-        $history->addMessage(new UserMessage([
+        SessionHistory::of($history)->addMessage(new UserMessage([
             new ImageContent('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', SourceType::BASE64, 'image/png'),
             new TextContent($title),
         ]));
-        $history->addMessage(new AssistantMessage('An answer'));
-        $history->addMessage(new UserMessage('Another subject'));
+        SessionHistory::of($history)->addMessage(new AssistantMessage('An answer'));
+        SessionHistory::of($history)->addMessage(new UserMessage('Another subject'));
 
         self::assertNull($sessionStore->summaries()[0]->title);
     }
@@ -169,7 +170,7 @@ final class SessionStoreTest extends TestCase
         $storage = new FileStorage($this->directory);
         $store = new SessionStore($storage, 'local-user');
         $session = $store->create();
-        $session->addMessage(new UserMessage(new FileContent('https://example.com/report.pdf', SourceType::URL, 'application/pdf', 'report.pdf')));
+        SessionHistory::of($session)->addMessage(new UserMessage(new FileContent('https://example.com/report.pdf', SourceType::URL, 'application/pdf', 'report.pdf')));
         $reopened = new SessionStore(new FileStorage($this->directory), 'local-user');
         $listed = $reopened->summaries();
 
@@ -184,8 +185,8 @@ final class SessionStoreTest extends TestCase
     {
         $storage = new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
-        $sessionStore->create()->addMessage(new UserMessage('First'));
-        $sessionStore->create()->addMessage(new UserMessage('Second'));
+        SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('First'));
+        SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('Second'));
         $keys = [];
 
         foreach ($storage->entries('sessions') as $document) {
@@ -208,7 +209,7 @@ final class SessionStoreTest extends TestCase
     {
         $sessionStore = new SessionStore(new FileStorage($this->directory), 'local-user');
         $history = $sessionStore->create();
-        $history->addMessage(new UserMessage('Stored in a file'));
+        SessionHistory::of($history)->addMessage(new UserMessage('Stored in a file'));
         $history->setTitle('Stored in a file');
         $reopened = new SessionStore(new FileStorage($this->directory), 'local-user');
         $listed = $reopened->summaries();
@@ -250,7 +251,7 @@ final class SessionStoreTest extends TestCase
         self::assertSame('alice@example.com', $session->getUserId());
         self::assertNotNull($alice->read($key));
         self::assertNull($bob->read($key));
-        $session->addMessage(new UserMessage('Alice conversation'));
+        SessionHistory::of($session)->addMessage(new UserMessage('Alice conversation'));
         self::assertSame([], $bob->summaries());
         self::assertCount(1, $alice->summaries());
         $bob->delete($key);
@@ -283,19 +284,19 @@ final class SessionStoreTest extends TestCase
         $storage = new InMemoryStorage();
         $store = new SessionStore($storage, 'local-user');
         $session = $store->create();
-        self::assertNull($session->title());
-        $session->addMessage(new UserMessage('ciao'));
-        $before = $session->jsonSerialize();
+        self::assertNull($session->getTitle());
+        SessionHistory::of($session)->addMessage(new UserMessage('ciao'));
+        $before = $session->getMessages();
         $lastUsed = $store->summaries()[0]->lastUsedAt;
         $reopened = $store->read($session->getKey());
         self::assertNotNull($reopened);
 
         $reopened->setTitle('  Configurazione Redis  ');
 
-        self::assertSame('Configurazione Redis', $session->title());
+        self::assertSame('Configurazione Redis', $session->getTitle());
         self::assertSame('Configurazione Redis', $store->summaries()[0]->title);
         self::assertEquals($lastUsed, $store->summaries()[0]->lastUsedAt);
-        self::assertSame($before, $session->jsonSerialize());
+        self::assertEquals($before, $session->getMessages());
     }
 
     private function removeDirectory(string $directory): void

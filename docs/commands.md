@@ -53,8 +53,8 @@ their parameter as `CommandAdapterInterface<mixed>`; concrete Adapters declare
 `/resume` without arguments emits a `Selection` and returns. The Adapter
 presents its options and invokes the request's target Command again with the
 chosen value as a string. `/clear` installs a distinct empty
-Session History while preserving the previous Session. Both Commands install
-History directly with `adapter->agent()->setChatHistory()`. Adapters synchronize
+conversation while preserving the previous Session. Both Commands bind the selected Session and call
+`adapter->useAgent($agent, preserveConversation: false)`. Adapters synchronize
 their presentation with the Agent; Commands do not request a view refresh. Agent prompting,
 presentation and the interaction lifecycle remain Adapter responsibilities.
 
@@ -146,3 +146,16 @@ Implement it when a Command can execute while the Agent is working without
 interfering with state used by that work. Help and Leave implement this marker.
 Adapters decide whether to admit these Commands and still provide the ordinary
 `CommandAdapterInterface`; the marker does not enforce restricted controls.
+
+## Replacing the Agent
+
+Implement `useAgent(Agent $agent, bool $preserveConversation = true): void` in
+custom Adapters. By default, replacement Agents inherit the current Session
+through `SessionStore::transfer()`. For a conversation outside that Store, transfer
+copies its active messages into an in-memory store; applications needing their
+custom persistence must configure the replacement's store explicitly.
+
+Pass `preserveConversation: false` to adopt an already bound replacement's
+conversation, as Clear and Resume do. Retrieve the current Agent through
+`adapter->agent()` after a Command, since a thread switch can replace the instance.
+Neuron TUI exposes the same current instance through `Tui::agent()`.

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Session;
 
 use NeuronAI\Chat\Enums\SourceType;
-use NeuronAI\Chat\History\AbstractChatHistory;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
@@ -15,10 +14,11 @@ use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronAI\Tools\Tool;
+use NeuronAI\Tools\ToolCall;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -50,11 +50,12 @@ final class SessionTest extends TestCase
         return ['memory' => [false], 'files' => [true]];
     }
 
-    public function testItExtendsNeuronAiHistory(): void
+    public function testItRepresentsAnOwnedEmptyConversation(): void
     {
         $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
 
-        self::assertInstanceOf(AbstractChatHistory::class, $session);
+        self::assertSame([], $session->getMessages());
+        self::assertNotSame('', $session->getKey());
         self::assertSame('local-user', $session->getUserId());
     }
 
@@ -76,19 +77,18 @@ final class SessionTest extends TestCase
             new ReasoningContent('I inspected it.', 'reasoning-1'),
             new TextContent('A small diagram.'),
         ]))->setUsage(new Usage(18, 4));
-        $tool = Tool::make('inspect', 'Inspect an image')
-            ->setParameters(['type' => 'object'])
+        $tool = ToolCall::make(name: 'inspect', description: 'Inspect an image')
             ->setInputs(['detail' => 'high'])
             ->setCallId('call-1');
-        $result = Tool::make('inspect', 'Inspect an image')
+        $result = ToolCall::make(name: 'inspect', description: 'Inspect an image')
             ->setInputs(['detail' => 'high'])
             ->setCallId('call-1')
             ->setResult('diagram');
 
-        $history->addMessage($question);
-        $history->addMessage($answer);
-        $history->addMessage(new ToolCallMessage(tools: [$tool]));
-        $history->addMessage(new ToolResultMessage([$result]));
+        SessionHistory::of($history)->addMessage($question);
+        SessionHistory::of($history)->addMessage($answer);
+        SessionHistory::of($history)->addMessage(new ToolCallMessage(tools: [$tool]));
+        SessionHistory::of($history)->addMessage(new ToolResultMessage([$result]));
 
         $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
 
@@ -106,10 +106,10 @@ final class SessionTest extends TestCase
         );
         self::assertEquals(new Usage(18, 4), $messages[1]->getUsage());
         self::assertInstanceOf(ToolCallMessage::class, $messages[2]);
-        self::assertSame('inspect', $messages[2]->getTools()[0]->getName());
-        self::assertSame('call-1', $messages[2]->getTools()[0]->getCallId());
+        self::assertSame('inspect', $messages[2]->getToolCalls()[0]->getName());
+        self::assertSame('call-1', $messages[2]->getToolCalls()[0]->getCallId());
         self::assertInstanceOf(ToolResultMessage::class, $messages[3]);
-        self::assertSame('diagram', $messages[3]->getTools()[0]->getResult());
+        self::assertSame('diagram', $messages[3]->getToolCalls()[0]->getResult());
     }
 
     public function testSavingReplacesOnlyTheSelectedStorageValue(): void
@@ -117,13 +117,13 @@ final class SessionTest extends TestCase
         $storage = new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
         $other = $sessionStore->create();
-        $other->addMessage(new UserMessage('Untouched'));
+        SessionHistory::of($other)->addMessage(new UserMessage('Untouched'));
         $history = $sessionStore->create();
-        $history->addMessage(new UserMessage('First'));
+        SessionHistory::of($history)->addMessage(new UserMessage('First'));
         $first = $sessionStore->read($history->getKey());
         self::assertNotNull($first);
-        $history->addMessage(new AssistantMessage('Second'));
-        self::assertCount(1, $first->getMessages());
+        SessionHistory::of($history)->addMessage(new AssistantMessage('Second'));
+        self::assertCount(2, $first->getMessages());
         $current = $sessionStore->read($history->getKey());
         self::assertNotNull($current);
         self::assertCount(2, $current->getMessages());
@@ -137,18 +137,19 @@ final class SessionTest extends TestCase
     {
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
-        $history->addMessage(new UserMessage('Discarded'));
-        $history->addMessage((new AssistantMessage('Discarded answer'))->setUsage(new Usage(48000, 1000)));
+        SessionHistory::of($history)->addMessage(new UserMessage('Discarded'));
+        SessionHistory::of($history)->addMessage((new AssistantMessage('Discarded answer'))->setUsage(new Usage(48000, 1000)));
         $question = str_repeat('Next question ', 2000);
-        $history->addMessage(new UserMessage($question));
+        SessionHistory::of($history)->addMessage(new UserMessage($question));
 
         $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
         self::assertNotNull($reopened);
+        self::assertCount(3, $reopened->getMessages());
         self::assertSame(
             [$question],
             array_map(
                 static fn (Message $message): ?string => $message->getContent(),
-                $reopened->getMessages(),
+                SessionHistory::of($reopened)->getMessages(),
             ),
         );
     }
@@ -158,9 +159,9 @@ final class SessionTest extends TestCase
     {
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
-        $history->addMessage(new UserMessage('Remove me'));
+        SessionHistory::of($history)->addMessage(new UserMessage('Remove me'));
 
-        $history->flushAll();
+        SessionHistory::of($history)->flushAll();
 
         $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
         self::assertNotNull($reopened);

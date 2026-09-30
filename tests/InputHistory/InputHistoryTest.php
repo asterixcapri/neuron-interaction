@@ -12,6 +12,7 @@ use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
@@ -102,9 +103,9 @@ final class InputHistoryTest extends TestCase
         $history = $sessionStore->create();
 
         $inputs->record(new UserMessage('/summarize'));
-        $history->addMessage(new UserMessage('A generated prompt for the Agent'));
+        SessionHistory::of($history)->addMessage(new UserMessage('A generated prompt for the Agent'));
         $key = $sessionStore->summaries()[0]->key;
-        $sessionStore->create()->addMessage(new UserMessage('Another conversation'));
+        SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('Another conversation'));
         $inputs->record(new UserMessage('A submitted message'));
         $sessionStore->read($key);
 

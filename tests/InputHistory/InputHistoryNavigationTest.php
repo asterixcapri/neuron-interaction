@@ -29,7 +29,7 @@ final class InputHistoryNavigationTest extends TestCase
         self::assertSame('middle', $first->older()?->getContent());
         self::assertSame('newest', $second->older(new UserMessage('second draft'))?->getContent());
         self::assertSame('oldest', $first->older()?->getContent());
-        self::assertSame('oldest', $first->older()?->getContent());
+        self::assertSame('oldest', $first->older(new UserMessage('ignored draft'))?->getContent());
         self::assertSame('second draft', $second->newer()?->getContent());
         self::assertFalse($second->isNavigating());
         self::assertTrue($first->isNavigating());

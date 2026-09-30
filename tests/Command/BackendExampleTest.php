@@ -100,7 +100,7 @@ final class BackendExampleTest extends TestCase
             $received[] = [$answering, $prompt->getContent()];
         };
         $first = $commands->run('/choose', '', new BackendAdapter(
-            new Agent(),
+            (new Agent())->setThreadId('test-thread'),
             $commands,
             $sessionStore,
             $submitPrompt,
@@ -118,7 +118,7 @@ final class BackendExampleTest extends TestCase
         ], json_decode(json_encode($first['selection'], JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR));
         self::assertNotNull($first['selection']);
         $selection = $first['selection'];
-        $secondAgent = new Agent();
+        $secondAgent = (new Agent())->setThreadId('test-thread');
         $second = $commands->run($selection->command, $selection->options[0]->value, new BackendAdapter(
             $secondAgent,
             $commands,
@@ -142,10 +142,10 @@ final class BackendExampleTest extends TestCase
     {
         $storage = new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
-        $original = new Agent();
+        $original = (new Agent())->setThreadId('test-thread');
         $history = $original->getChatHistory();
         $history->addMessage(new UserMessage('Original conversation'));
-        $replacement = new Agent();
+        $replacement = (new Agent())->setThreadId('test-thread');
         $command = new class($replacement) implements CommandInterface {
             public function __construct(private Agent $replacement)
             {
@@ -167,8 +167,8 @@ final class BackendExampleTest extends TestCase
                 $previous = $adapter->agent()->getChatHistory();
                 $adapter->useAgent($this->replacement);
                 TestCase::assertSame($this->replacement, $adapter->agent());
-                TestCase::assertSame($previous, $adapter->agent()->getChatHistory());
-                $adapter->agent()->setChatHistory($adapter->sessionStore()->create());
+                TestCase::assertSame($previous->getThreadId(), $adapter->agent()->getChatHistory()->getThreadId());
+                $adapter->useAgent(($adapter->sessionStore()->create())->bindTo($adapter->agent()), preserveConversation: false);
                 $adapter->promptAgent(new UserMessage('A generated prompt for the replacement.'));
                 $adapter->notify($adapter->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');
@@ -185,18 +185,18 @@ final class BackendExampleTest extends TestCase
         self::assertSame('failed', $response['status']);
         self::assertSame('Failed after replacement.', $response['error']);
         self::assertSame(['/replace'], $response['notices']);
-        self::assertSame($replacement, $adapter->agent());
+        self::assertNotSame($replacement, $adapter->agent());
         self::assertNotSame($history, $replacement->getChatHistory());
-        self::assertSame([], $replacement->getChatHistory()->getMessages());
+        self::assertSame([], $adapter->agent()->getChatHistory()->getMessages());
         self::assertSame('Original conversation', $history->getMessages()[0]->getContent());
         self::assertSame($commands, $adapter->commands());
         self::assertSame($sessionStore, $adapter->sessionStore());
-        self::assertSame([[$replacement, 'A generated prompt for the replacement.']], $received);
+        self::assertSame([[$adapter->agent(), 'A generated prompt for the replacement.']], $received);
     }
 
     public function testBackendSubmitsTheCompleteMessageWithoutReconstructingIt(): void
     {
-        $agent = new Agent();
+        $agent = (new Agent())->setThreadId('test-thread');
         $received = null;
         $adapter = new BackendAdapter($agent, new Commands(), new SessionStore(new InMemoryStorage(), 'local'), static function (Agent $answering, UserMessage $message) use (&$received, $agent): void {
             self::assertSame($agent, $answering);
@@ -216,7 +216,7 @@ final class BackendExampleTest extends TestCase
 
         foreach (['/guide', '/missing', '/quit'] as $identifier) {
             $response = $commands->run($identifier, '', new BackendAdapter(
-                new Agent(),
+                (new Agent())->setThreadId('test-thread'),
                 $commands,
                 $sessionStore,
                 static function (): void {},

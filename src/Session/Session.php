@@ -4,35 +4,42 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Session;
 
-use DateTimeImmutable;
-use DateTimeZone;
 use InvalidArgumentException;
-use NeuronAI\Chat\History\AbstractChatHistory;
-use NeuronAI\Chat\History\HistoryTrimmer;
-use NeuronAI\Chat\History\HistoryTrimmerInterface;
+use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronAI\Chat\Messages\Message;
 use NeuronInteraction\Storage\StorageInterface;
-use NeuronInteraction\Storage\StoredDocument;
-use UnexpectedValueException;
 
-use function array_is_list;
-use function is_array;
-
-/** A persisted conversation that can be installed directly as Chat History. */
-final class Session extends AbstractChatHistory
+/** A persisted conversation whose message store can be bound to an Agent. */
+final readonly class Session
 {
-    public function __construct(
-        private readonly StorageInterface $storage,
-        private readonly string $namespace,
-        private readonly string $key,
-        private readonly string $userId,
-        int $contextWindow = 50000,
-        HistoryTrimmerInterface $trimmer = new HistoryTrimmer(),
-        ?StoredDocument $document = null,
-    ) {
-        parent::__construct($contextWindow, $trimmer);
+    private MessageStoreInterface $store;
 
-        $this->load($document);
+    public function __construct(
+        private StorageInterface $storage,
+        private string $namespace,
+        private string $key,
+        private string $userId,
+    ) {
+        $this->store = new SessionMessageStore($storage, $namespace, $userId);
+        $this->getMessages();
+    }
+
+    public function messageStore(): MessageStoreInterface
+    {
+        return $this->store;
+    }
+
+    /** @return list<Message> */
+    public function getMessages(): array
+    {
+        return array_values($this->store->loadAll($this->key));
+    }
+
+    /** Returns an Agent copy bound to this conversation, retaining its context window. */
+    public function bindTo(Agent $agent): Agent
+    {
+        return $agent->for($this->key)->setMessageStore($this->store);
     }
 
     public function getKey(): string
@@ -50,7 +57,7 @@ final class Session extends AbstractChatHistory
      *
      * @phpstan-impure
      */
-    public function title(): ?string
+    public function getTitle(): ?string
     {
         return $this->getMetadata()['title'] ?? null;
     }
@@ -82,7 +89,7 @@ final class Session extends AbstractChatHistory
         $metadata = $document->metadata ?? [];
         $metadata[$field] = $value;
         $metadata['userId'] = $this->userId;
-        $this->storage->write($this->namespace, $this->key, $document->data ?? $this->history, $metadata);
+        $this->storage->write($this->namespace, $this->key, $document->data ?? [], $metadata);
     }
 
     public function removeMetadata(string $key): void
@@ -98,62 +105,4 @@ final class Session extends AbstractChatHistory
         $this->storage->write($this->namespace, $this->key, $document->data, $metadata);
     }
 
-    /** @param list<Message> $messages */
-    protected function setMessages(array $messages): void
-    {
-        $this->persist($messages);
-    }
-
-    protected function clear(): void
-    {
-        $this->persist([]);
-    }
-
-    private function load(?StoredDocument $document): void
-    {
-        $document ??= $this->storage->read($this->namespace, $this->key);
-
-        if ($document === null) {
-            return;
-        }
-
-        $messages = $document->data;
-
-        if (!array_is_list($messages)) {
-            throw new UnexpectedValueException(
-                'A stored Chat History must be a JSON array.',
-            );
-        }
-
-        foreach ($messages as $message) {
-            if (!is_array($message)) {
-                throw new UnexpectedValueException(
-                    'Every stored Chat History entry must be a JSON object.',
-                );
-            }
-        }
-
-        /** @var list<array<string, mixed>> $messages */
-        $this->history = $this->deserializeMessages($messages);
-    }
-
-    /** @param list<Message> $messages */
-    private function persist(array $messages): void
-    {
-        $lastUsedAt = new DateTimeImmutable(
-            'now',
-            new DateTimeZone('UTC'),
-        );
-
-        $metadata = $this->storage->read($this->namespace, $this->key)->metadata ?? [];
-        $metadata['userId'] = $this->userId;
-        $metadata['lastUsedAt'] = $lastUsedAt->format('Y-m-d\TH:i:s.uP');
-
-        $this->storage->write(
-            $this->namespace,
-            $this->key,
-            $messages,
-            $metadata,
-        );
-    }
 }

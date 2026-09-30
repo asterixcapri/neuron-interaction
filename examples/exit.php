@@ -13,7 +13,7 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 
 $commands = (new Commands())->addCommand(new LeaveCommand());
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
-$adapter = new BackendAdapter(new Agent(), $commands, $sessionStore, static function (): void {});
+$adapter = new BackendAdapter((new Agent())->setThreadId('test-thread'), $commands, $sessionStore, static function (): void {});
 
 // The response contains stopped: true. The host decides how to end the interaction.
 $response = $commands->run('/exit', '', $adapter);

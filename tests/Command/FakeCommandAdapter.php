@@ -41,6 +41,9 @@ class FakeCommandAdapter implements CommandAdapterInterface
         private SessionStore $collection = new SessionStore(new InMemoryStorage(), 'local-user'),
         private ConfigurationStore $configurations = new ConfigurationStore(new InMemoryStorage(), 'local-user'),
     ) {
+        if ($this->answering->getThreadId() === null) {
+            $this->answering->setThreadId('test-thread');
+        }
     }
 
     public function admit(CommandInterface $command): bool
@@ -83,9 +86,11 @@ class FakeCommandAdapter implements CommandAdapterInterface
         return $this->answering;
     }
 
-    public function useAgent(Agent $agent): void
+    public function useAgent(Agent $agent, bool $preserveConversation = true): void
     {
-        $agent->setChatHistory($this->answering->getChatHistory());
+        if ($preserveConversation) {
+            $agent = $this->sessionStore()->transfer($this->answering, $agent);
+        }
         $this->answering = $agent;
     }
 
