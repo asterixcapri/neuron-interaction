@@ -32,6 +32,7 @@ final readonly class ClearCommand implements CommandInterface
     /** @param CommandAdapterInterface<mixed> $adapter */
     public function run(CommandAdapterInterface $adapter, string $value): void
     {
-        $adapter->useAgent($adapter->sessionStore()->create()->bindTo($adapter->agent()), preserveConversation: false);
+        $agent = $adapter->sessionStore()->create()->bindTo($adapter->agent());
+        $adapter->useAgent($agent, preserveConversation: false);
     }
 }
