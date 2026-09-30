@@ -11,12 +11,12 @@ use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\HttpClient\HttpRequest;
+use NeuronAI\HttpClient\StoppableHttpClient;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\Providers\Gemini\Gemini;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
-use NeuronInteraction\Http\StoppableHttpClient;
 use NeuronInteraction\Http\StopSignal;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\Tools\CallbackTool;
@@ -51,7 +51,7 @@ final class StoppableHttpClientTest extends TestCase
         $stopSignal = new StopSignal(new InMemoryStorage(), 'conversation');
         $stream = new FixtureStream($body);
         $client = new FixtureHttpClient([$stream, new FixtureStream($body)]);
-        $http = new StoppableHttpClient($client, $stopSignal, pollInterval: 0);
+        $http = new StoppableHttpClient($client, $stopSignal->stopCallback(pollInterval: 0));
         $provider = match ($name) {
             'openai' => new OpenAI('fixture-key', 'fixture-model', httpClient: $http),
             'responses' => new OpenAIResponses('fixture-key', 'fixture-model', httpClient: $http),
@@ -101,7 +101,7 @@ final class StoppableHttpClientTest extends TestCase
     {
         $stopSignal = new StopSignal(new InMemoryStorage(), 'conversation');
         $client = new FixtureHttpClient([new FixtureStream(self::openaiText())]);
-        $agent = $this->agent(new OpenAI('fixture-key', 'fixture-model', httpClient: new StoppableHttpClient($client, $stopSignal, pollInterval: 0)));
+        $agent = $this->agent(new OpenAI('fixture-key', 'fixture-model', httpClient: new StoppableHttpClient($client, $stopSignal->stopCallback(pollInterval: 0))));
         $stopSignal->clear();
         $stopSignal->request();
 
@@ -135,7 +135,7 @@ final class StoppableHttpClientTest extends TestCase
         });
         $body = 'data: {"id":"calls","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"one","type":"function","function":{"name":"first","arguments":"{}"}},{"index":1,"id":"two","type":"function","function":{"name":"second","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}' . "\n\n";
         $client = new FixtureHttpClient([new FixtureStream($body), new FixtureStream(self::openaiText())]);
-        $agent = $this->agent(new OpenAI('fixture-key', 'fixture-model', httpClient: new StoppableHttpClient($client, $stopSignal, pollInterval: 0)));
+        $agent = $this->agent(new OpenAI('fixture-key', 'fixture-model', httpClient: new StoppableHttpClient($client, $stopSignal->stopCallback(pollInterval: 0))));
         $agent->addTool($first)->addTool($second);
         $stopSignal->clear();
 
@@ -158,7 +158,7 @@ final class StoppableHttpClientTest extends TestCase
     {
         $stopSignal = new StopSignal(new InMemoryStorage(), 'conversation');
         $inner = new FixtureHttpClient([]);
-        $client = new StoppableHttpClient($inner, $stopSignal);
+        $client = new StoppableHttpClient($inner, $stopSignal->stopCallback());
         $request = HttpRequest::post('chat', ['message' => 'hello']);
 
         self::assertSame('normal request', $client->request($request)->body);
@@ -166,17 +166,17 @@ final class StoppableHttpClientTest extends TestCase
         self::assertFalse($stopSignal->isRequested());
     }
 
-    public function testNaturalEofWinsOverAnUnappliedRequest(): void
+    public function testNativeClientConsumesAStopBeforeCheckingNaturalEof(): void
     {
         $stopSignal = new StopSignal(new InMemoryStorage(), 'conversation');
         $empty = new FixtureStream('');
         $stopSignal->clear();
-        $stream = (new StoppableHttpClient(new FixtureHttpClient([$empty]), $stopSignal))->stream(HttpRequest::post('empty'));
+        $stream = (new StoppableHttpClient(new FixtureHttpClient([$empty]), $stopSignal->stopCallback()))->stream(HttpRequest::post('empty'));
         $stopSignal->request();
 
         self::assertTrue($stream->eof());
-        self::assertSame(0, $empty->closes);
-        self::assertTrue($stopSignal->isRequested());
+        self::assertSame(1, $empty->closes);
+        self::assertFalse($stopSignal->isRequested());
     }
 
     public static function openaiText(): string

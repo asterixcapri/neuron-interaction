@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Http;
 
+use Closure;
+use InvalidArgumentException;
 use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
@@ -14,6 +16,36 @@ final readonly class StopSignal
 
     public function __construct(private StorageInterface $storage, private string $key)
     {
+    }
+
+    /**
+     * Creates a polling callback for Neuron's native stoppable HTTP client.
+     *
+     * @param (Closure(): void)|null $onPoll Lets the Host process pending input.
+     * @return Closure(): bool
+     */
+    public function stopCallback(?Closure $onPoll = null, float $pollInterval = 0.01): Closure
+    {
+        if (!is_finite($pollInterval) || $pollInterval < 0) {
+            throw new InvalidArgumentException('The polling interval must be finite and non-negative.');
+        }
+
+        $nextPoll = 0.0;
+        return function () use ($onPoll, $pollInterval, &$nextPoll): bool {
+            $now = hrtime(true) / 1_000_000_000;
+            if ($now < $nextPoll) {
+                return false;
+            }
+
+            $nextPoll = $now + $pollInterval;
+            $onPoll?->__invoke();
+            if (!$this->isRequested()) {
+                return false;
+            }
+
+            $this->clear();
+            return true;
+        };
     }
 
     public function request(): void

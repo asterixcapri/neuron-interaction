@@ -24,6 +24,10 @@ final class FixtureStream implements StreamInterface
 
     public function read(int $length): string
     {
+        if ($this->closes > 0) {
+            return '';
+        }
+
         $text = substr($this->body, $this->offset, $length);
         $this->offset += strlen($text);
         ($this->onRead)?->__invoke($text);
