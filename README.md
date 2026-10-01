@@ -12,16 +12,22 @@ connect to its input and output.
 
 ## Installation
 
-Requires PHP 8.4.1+. The `0.9.x` branch supports Neuron AI 4; `0.8.x` supports Neuron AI 3.
+Requires PHP 8.4.1+ and Neuron AI 4.
 
 Run this command in your application's directory:
 
 ```bash
-composer require asterixcapri/neuron-interaction:^0.9@dev
+composer require asterixcapri/neuron-interaction
 ```
 
 Composer also installs Neuron AI as a required dependency. If you install Neuron
 TUI, Neuron Interaction is already included as its dependency.
+
+For applications using Neuron AI 3, install the `0.8` series:
+
+```bash
+composer require asterixcapri/neuron-interaction:^0.8
+```
 
 ## What it provides
 
