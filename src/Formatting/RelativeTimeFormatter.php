@@ -6,6 +6,8 @@ namespace NeuronInteraction\Formatting;
 
 use DateTimeInterface;
 
+use function intdiv;
+
 /** Formats elapsed time in English; present and future dates read "just now". */
 final class RelativeTimeFormatter
 {

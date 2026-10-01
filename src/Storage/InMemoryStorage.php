@@ -7,6 +7,15 @@ namespace NeuronInteraction\Storage;
 use InvalidArgumentException;
 use RuntimeException;
 
+use function bin2hex;
+use function is_array;
+use function json_decode;
+use function json_encode;
+use function random_bytes;
+
+use const JSON_PRESERVE_ZERO_FRACTION;
+use const JSON_THROW_ON_ERROR;
+
 final class InMemoryStorage extends AbstractStorage
 {
     /**

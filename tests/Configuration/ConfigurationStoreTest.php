@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Configuration;
 
 use InvalidArgumentException;
+use JsonSerializable;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -13,6 +14,22 @@ use NeuronInteraction\Storage\StoredDocument;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use stdClass;
+
+use function bin2hex;
+use function fclose;
+use function fopen;
+use function glob;
+use function hash;
+use function is_dir;
+use function is_resource;
+use function random_bytes;
+use function rmdir;
+use function sys_get_temp_dir;
+use function unlink;
+
+use const INF;
+use const NAN;
 
 final class ConfigurationStoreTest extends TestCase
 {
@@ -53,7 +70,7 @@ final class ConfigurationStoreTest extends TestCase
     {
         $store = new ConfigurationStore(new InMemoryStorage(), 'alice');
         $store->write('model', 'chosen-model');
-        foreach (['', INF, NAN, "\xB1", new \stdClass(), [new \stdClass()]] as $fallback) {
+        foreach (['', INF, NAN, "\xB1", new stdClass(), [new stdClass()]] as $fallback) {
             try {
                 $store->read('model', $fallback);
                 self::fail('Fallbacks must be usable JSON data.');
@@ -153,7 +170,7 @@ final class ConfigurationStoreTest extends TestCase
         $recursive = [];
         $recursive['self'] = &$recursive;
         $resource = fopen('php://memory', 'r');
-        $object = new class implements \JsonSerializable {
+        $object = new class implements JsonSerializable {
             public function jsonSerialize(): mixed
             {
                 throw new RuntimeException('Arbitrary objects must never be serialized.');
@@ -161,7 +178,7 @@ final class ConfigurationStoreTest extends TestCase
         };
 
         try {
-            foreach ([new \stdClass(), ['nested' => $object], INF, NAN, "\xB1", $resource, $recursive] as $value) {
+            foreach ([new stdClass(), ['nested' => $object], INF, NAN, "\xB1", $resource, $recursive] as $value) {
                 try {
                     $store->write('valid', $value);
                     self::fail('Invalid values must be rejected.');

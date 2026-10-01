@@ -19,6 +19,22 @@ use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+use function array_map;
+use function array_unique;
+use function bin2hex;
+use function file_get_contents;
+use function file_put_contents;
+use function is_dir;
+use function iterator_to_array;
+use function mkdir;
+use function random_bytes;
+use function rmdir;
+use function scandir;
+use function sort;
+use function str_repeat;
+use function sys_get_temp_dir;
+use function unlink;
+
 final class SessionStoreTest extends TestCase
 {
     private string $directory;
@@ -48,7 +64,7 @@ final class SessionStoreTest extends TestCase
         SessionHistory::of($first)->addMessage(new UserMessage('First'));
         SessionHistory::of($second)->addMessage(new UserMessage('Second'));
         $keys = array_map(
-            static fn (SessionSummary $session): string => $session->key,
+            static fn(SessionSummary $session): string => $session->key,
             $sessionStore->summaries(),
         );
 
@@ -113,7 +129,7 @@ final class SessionStoreTest extends TestCase
         self::assertSame(
             ['The newer subject', 'The older subject'],
             array_map(
-                static fn (SessionSummary $session): ?string => $session->title,
+                static fn(SessionSummary $session): ?string => $session->title,
                 $sessionStore->summaries(),
             ),
         );
@@ -200,7 +216,7 @@ final class SessionStoreTest extends TestCase
         sort($keys);
 
         self::assertSame($keys, array_map(
-            static fn (SessionSummary $session): string => $session->key,
+            static fn(SessionSummary $session): string => $session->key,
             $sessionStore->summaries(),
         ));
     }

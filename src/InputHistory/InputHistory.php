@@ -11,6 +11,15 @@ use NeuronInteraction\Message\UserMessageFactory;
 use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
+use function array_is_list;
+use function array_key_last;
+use function array_map;
+use function end;
+use function is_array;
+use function is_string;
+use function max;
+use function trim;
+
 /** Submitted inputs shared across Sessions and interaction Adapters. */
 final class InputHistory
 {
@@ -22,9 +31,7 @@ final class InputHistory
 
     private ?UserMessage $draft = null;
 
-    public function __construct(private readonly StorageInterface $storage)
-    {
-    }
+    public function __construct(private readonly StorageInterface $storage) {}
 
     /**
      * Records the person's original submission, including Command syntax.
@@ -45,7 +52,7 @@ final class InputHistory
         }
 
         $entries[] = $input;
-        $data = array_map(static fn (UserMessage $message): array => $message->jsonSerialize(), $entries);
+        $data = array_map(static fn(UserMessage $message): array => $message->jsonSerialize(), $entries);
         $this->storage->write(self::NAMESPACE, self::KEY, $data);
     }
 

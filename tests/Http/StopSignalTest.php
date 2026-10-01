@@ -11,6 +11,9 @@ use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+use const INF;
+use const NAN;
+
 final class StopSignalTest extends TestCase
 {
     public function testCreatingACallbackDoesNotAccessStorage(): void

@@ -13,6 +13,8 @@ use NeuronInteraction\Command\Selection;
 use NeuronInteraction\Command\SelectionOption;
 use PHPUnit\Framework\TestCase;
 
+use function array_map;
+
 final class CommandAdapterTest extends TestCase
 {
     public function testAnOrdinaryCommandUsesTheSharedAdapterWithoutATerminal(): void
@@ -21,10 +23,8 @@ final class CommandAdapterTest extends TestCase
         $selection = new Selection('/inspect', 'Pick one', [
             new SelectionOption('chosen-value', 'Visible label', 'Description'),
         ]);
-        $command = new class($replacement, $selection) implements CommandInterface {
-            public function __construct(private Agent $replacement, private Selection $selection)
-            {
-            }
+        $command = new class ($replacement, $selection) implements CommandInterface {
+            public function __construct(private Agent $replacement, private Selection $selection) {}
 
             public function name(): string
             {
@@ -60,7 +60,7 @@ final class CommandAdapterTest extends TestCase
         self::assertSame(['A warning.'], $adapter->warnings);
         self::assertSame(['An expected failure.'], $adapter->errors);
         self::assertNull($execution->exception);
-        self::assertSame(['A generated Agent prompt.'], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $adapter->prompts));
+        self::assertSame(['A generated Agent prompt.'], array_map(static fn(UserMessage $message): ?string => $message->getContent(), $adapter->prompts));
         self::assertSame([$selection], $adapter->selections);
         self::assertSame($commands, $adapter->commands());
         self::assertNotSame($replacement, $adapter->agent());

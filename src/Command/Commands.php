@@ -7,6 +7,9 @@ namespace NeuronInteraction\Command;
 use InvalidArgumentException;
 use Throwable;
 
+use function is_array;
+use function str_starts_with;
+
 /** Mounted Commands in order, with the first matching identifier winning. */
 final class Commands
 {

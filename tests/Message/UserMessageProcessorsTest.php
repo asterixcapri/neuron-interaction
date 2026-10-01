@@ -11,6 +11,8 @@ use NeuronInteraction\Message\UserMessageProcessorInterface;
 use NeuronInteraction\Message\UserMessageProcessors;
 use PHPUnit\Framework\TestCase;
 
+use function is_string;
+
 final class UserMessageProcessorsTest extends TestCase
 {
     public function testCompleteMessagesAreComposedInPreparationAndReverseDisplayOrder(): void

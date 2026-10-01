@@ -5,15 +5,44 @@ declare(strict_types=1);
 namespace NeuronInteraction\Storage;
 
 use RuntimeException;
+use Throwable;
 use UnexpectedValueException;
+
+use function basename;
+use function bin2hex;
+use function clearstatcache;
+use function dirname;
+use function file_exists;
+use function file_get_contents;
+use function file_put_contents;
+use function glob;
+use function is_array;
+use function is_dir;
+use function is_file;
+use function is_link;
+use function is_string;
+use function json_decode;
+use function json_encode;
+use function link;
+use function mkdir;
+use function random_bytes;
+use function realpath;
+use function rename;
+use function strlen;
+use function substr;
+use function tempnam;
+use function unlink;
+
+use const DIRECTORY_SEPARATOR;
+use const JSON_PRESERVE_ZERO_FRACTION;
+use const JSON_THROW_ON_ERROR;
+use const LOCK_EX;
 
 final class FileStorage extends AbstractStorage
 {
     private const string FILE_EXTENSION = '.json';
 
-    public function __construct(private readonly string $root)
-    {
-    }
+    public function __construct(private readonly string $root) {}
 
     /**
      * @param array<array-key, mixed> $data
@@ -148,7 +177,7 @@ final class FileStorage extends AbstractStorage
             }
 
             return $temporary;
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             unlink($temporary);
             throw $exception;
         }
@@ -286,7 +315,7 @@ final class FileStorage extends AbstractStorage
 
     private function namespaceDirectory(string $namespace): string
     {
-        if (!is_dir($this->root) && !@mkdir($this->root, 0777, true) && !is_dir($this->root)) {
+        if (!is_dir($this->root) && !@mkdir($this->root, 0o777, true) && !is_dir($this->root)) {
             throw new RuntimeException('The storage root could not be created.');
         }
 

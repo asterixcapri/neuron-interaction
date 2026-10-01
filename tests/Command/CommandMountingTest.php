@@ -14,6 +14,8 @@ use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
+use function array_map;
+
 final class CommandMountingTest extends TestCase
 {
     public function testIncrementalMountingMutatesTheOriginalCollectionInOrder(): void
@@ -25,7 +27,7 @@ final class CommandMountingTest extends TestCase
         self::assertSame($commands, $commands->addCommand($first));
         self::assertSame($commands, $commands->addCommand([new ClearCommand(), new ResumeCommand(), $last]));
         self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(
-            static fn (CommandInterface $command): string => $command->name(),
+            static fn(CommandInterface $command): string => $command->name(),
             $commands->all(),
         ));
         self::assertSame($last, $commands->all()[3]);
@@ -64,7 +66,7 @@ final class CommandMountingTest extends TestCase
         $execution = $commands->run('/clear', '', $adapter);
 
         self::assertSame(['/clear', '/resume'], array_map(
-            static fn (CommandInterface $command): string => $command->name(),
+            static fn(CommandInterface $command): string => $command->name(),
             $commands->all(),
         ));
         self::assertNotNull($execution);
@@ -86,7 +88,7 @@ final class CommandMountingTest extends TestCase
         $adapter->useSession($previous);
 
         self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(
-            static fn (CommandInterface $command): string => $command->name(),
+            static fn(CommandInterface $command): string => $command->name(),
             $commands->all(),
         ));
         self::assertSame($first, $commands->named('/resume'));

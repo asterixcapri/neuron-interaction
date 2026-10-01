@@ -15,9 +15,7 @@ namespace NeuronInteraction\Command;
 final readonly class ClearCommand implements CommandInterface
 {
     /** @param string $name the presentation-neutral identifier */
-    public function __construct(private string $name = '/clear')
-    {
-    }
+    public function __construct(private string $name = '/clear') {}
 
     public function name(): string
     {

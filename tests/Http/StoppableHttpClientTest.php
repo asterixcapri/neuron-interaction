@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Http;
 
+use LogicException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\History\ChatHistory;
 use NeuronAI\Chat\History\FileMessageStore;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpRequest;
 use NeuronAI\HttpClient\StoppableHttpClient;
 use NeuronAI\Providers\AIProviderInterface;
@@ -22,6 +24,12 @@ use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\Tools\CallbackTool;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+
+use function array_map;
+use function bin2hex;
+use function implode;
+use function random_bytes;
+use function sys_get_temp_dir;
 
 final class StoppableHttpClientTest extends TestCase
 {
@@ -57,7 +65,7 @@ final class StoppableHttpClientTest extends TestCase
             'responses' => new OpenAIResponses('fixture-key', 'fixture-model', httpClient: $http),
             'anthropic' => new Anthropic('fixture-key', 'fixture-model', httpClient: $http),
             'gemini' => new Gemini('fixture-key', 'fixture-model', httpClient: $http),
-            default => throw new \LogicException('Unknown fixture provider'),
+            default => throw new LogicException('Unknown fixture provider'),
         };
         $agent = $this->agent($provider);
         $key = 'http-stop-' . bin2hex(random_bytes(8));
@@ -78,7 +86,7 @@ final class StoppableHttpClientTest extends TestCase
             self::assertSame('Partial', $handler->getReturn()->getMessage()?->getContent());
             self::assertSame('stopped', $handler->getReturn()->getMessage()->getMetadata('stop_reason'));
             self::assertSame($history->getThreadId(), $agent->getChatHistory()->getThreadId());
-            self::assertSame(['Question', 'Partial'], array_map(static fn (Message $message): ?string => $message->getContent(), $agent->getChatHistory()->getMessages()));
+            self::assertSame(['Question', 'Partial'], array_map(static fn(Message $message): ?string => $message->getContent(), $agent->getChatHistory()->getMessages()));
             self::assertCount(2, $handler->getReturn()->getSteps());
 
             $reloaded = new ChatHistory(new FileMessageStore(sys_get_temp_dir()), $key);
@@ -110,7 +118,7 @@ final class StoppableHttpClientTest extends TestCase
                 self::fail('No text should be emitted before the requested EOF.');
             }
             self::fail('Neuron must reject a stop before any answer text.');
-        } catch (\NeuronAI\Exceptions\ProviderException $exception) {
+        } catch (ProviderException $exception) {
             self::assertSame('The stream was stopped before the answer started.', $exception->getMessage());
         }
         self::assertFalse($stopSignal->isRequested());
@@ -143,7 +151,7 @@ final class StoppableHttpClientTest extends TestCase
             foreach ($agent->stream(new UserMessage('Run tools')) as $chunk) {
             }
             self::fail('The following answer was stopped before any text.');
-        } catch (\NeuronAI\Exceptions\ProviderException $exception) {
+        } catch (ProviderException $exception) {
             self::assertSame('The stream was stopped before the answer started.', $exception->getMessage());
         }
         self::assertFalse($stopSignal->isRequested());

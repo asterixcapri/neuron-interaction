@@ -6,6 +6,13 @@ namespace NeuronInteraction\Session;
 
 use InvalidArgumentException;
 
+use function is_string;
+use function lcfirst;
+use function preg_match;
+use function str_starts_with;
+use function substr;
+use function ucfirst;
+
 /** @internal Encodes application metadata separately from Session system fields. */
 final class SessionMetadata
 {

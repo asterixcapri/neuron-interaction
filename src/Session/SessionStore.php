@@ -12,6 +12,9 @@ use NeuronInteraction\Storage\StorageInterface;
 use NeuronInteraction\Storage\StoredDocument;
 use UnexpectedValueException;
 
+use function trim;
+use function usort;
+
 /**
  * Owns the lifecycle of conversations persisted through shared storage.
  */
@@ -19,9 +22,7 @@ final readonly class SessionStore
 {
     private const string NAMESPACE = 'sessions';
 
-    public function __construct(private StorageInterface $storage, private string $userId)
-    {
-    }
+    public function __construct(private StorageInterface $storage, private string $userId) {}
 
     /**
      * Starts a distinct Session with an empty History.
@@ -71,8 +72,8 @@ final readonly class SessionStore
 
         usort(
             $sessions,
-            static fn (SessionSummary $one, SessionSummary $other): int =>
-                ($other->lastUsedAt <=> $one->lastUsedAt)
+            static fn(SessionSummary $one, SessionSummary $other): int
+                => ($other->lastUsedAt <=> $one->lastUsedAt)
                     ?: ($one->key <=> $other->key),
         );
 

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Formatting;
 
+use function count;
+use function number_format;
+use function rtrim;
+
 /** Formats bytes using powers of 1024 and at most one decimal place. */
 final class SizeFormatter
 {

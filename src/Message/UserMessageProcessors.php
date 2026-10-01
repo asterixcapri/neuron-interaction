@@ -7,6 +7,9 @@ namespace NeuronInteraction\Message;
 use InvalidArgumentException;
 use NeuronAI\Chat\Messages\UserMessage;
 
+use function array_reverse;
+use function is_array;
+
 /** Compose preparation in registration order and display in reverse order. */
 final class UserMessageProcessors implements UserMessageProcessorInterface
 {

@@ -28,6 +28,17 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
+use function array_map;
+use function dirname;
+use function json_decode;
+use function json_encode;
+use function ob_end_clean;
+use function ob_get_contents;
+use function ob_start;
+
+use const JSON_THROW_ON_ERROR;
+use const PHP_EOL;
+
 final class BackendExampleTest extends TestCase
 {
     /** @param list<string> $expected */
@@ -140,7 +151,7 @@ final class BackendExampleTest extends TestCase
         self::assertNull($second['error']);
         self::assertSame('completed', $second['status']);
         self::assertSame([[$secondAdapter->agent(), " 007\n "]], $received);
-        self::assertSame(['/choose'], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $inputs->entries()));
+        self::assertSame(['/choose'], array_map(static fn(UserMessage $message): ?string => $message->getContent(), $inputs->entries()));
     }
 
     public function testAgentReplacementTransfersHistoryAndImmediatelyUsesTheReplacementForFurtherEffects(): void
@@ -152,10 +163,8 @@ final class BackendExampleTest extends TestCase
         $history = SessionHistory::of($session);
         $history->addMessage(new UserMessage('Original conversation'));
         $replacement = (new Agent())->setThreadId('test-thread');
-        $command = new class($replacement) implements CommandInterface {
-            public function __construct(private Agent $replacement)
-            {
-            }
+        $command = new class ($replacement) implements CommandInterface {
+            public function __construct(private Agent $replacement) {}
 
             public function name(): string
             {
@@ -231,7 +240,7 @@ final class BackendExampleTest extends TestCase
         self::assertSame($currentSession, $adapter->session());
         $session = $store->read($key);
         self::assertNotNull($session);
-        self::assertSame(['First question', 'Replacement answer'], array_map(static fn (Message $message): ?string => $message->getContent(), $session->getMessages()));
+        self::assertSame(['First question', 'Replacement answer'], array_map(static fn(Message $message): ?string => $message->getContent(), $session->getMessages()));
     }
 
     public function testSelectingAnOtherUsersSessionDoesNotReplaceTheAgent(): void

@@ -14,14 +14,21 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Providers\AIProviderInterface;
 use UnexpectedValueException;
 
+use function implode;
+use function json_encode;
+use function trim;
+use function ucfirst;
+
+use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_UNICODE;
+
 /** Generates a topic title from a Session without modifying its messages. */
 final readonly class SessionTitleGenerator
 {
     public function __construct(
         private AIProviderInterface $provider,
         private Session $session,
-    ) {
-    }
+    ) {}
 
     public function generate(): ?string
     {

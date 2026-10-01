@@ -11,6 +11,34 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
+use function array_column;
+use function array_diff;
+use function array_values;
+use function bin2hex;
+use function dirname;
+use function fclose;
+use function fgets;
+use function file_put_contents;
+use function fwrite;
+use function is_dir;
+use function is_link;
+use function iterator_to_array;
+use function mkdir;
+use function proc_close;
+use function proc_open;
+use function random_bytes;
+use function rmdir;
+use function scandir;
+use function str_repeat;
+use function stream_get_contents;
+use function strlen;
+use function symlink;
+use function sys_get_temp_dir;
+use function unlink;
+use function usleep;
+
+use const PHP_BINARY;
+
 final class FileStorageTest extends TestCase
 {
     public function testStoredMetadataAreDetachedFromExternalReferences(): void
@@ -39,7 +67,7 @@ final class FileStorageTest extends TestCase
         try {
             $storage->create('demo', ['value' => 'second'], key: 'chosen');
             self::fail('An existing key must not be overwritten.');
-        } catch (\RuntimeException) {
+        } catch (RuntimeException) {
             self::assertSame(['value' => 'first'], $storage->read('demo', 'chosen')?->data);
         }
     }
@@ -62,17 +90,19 @@ final class FileStorageTest extends TestCase
     public function testCompetingCreatesPublishOnlyOneCompleteDocument(): void
     {
         $script = <<<'PHP'
-require $argv[1];
-$storage = new \NeuronInteraction\Storage\FileStorage($argv[2]);
-fgets(STDIN);
-try {
-    $storage->create('race', ['winner' => $argv[3], 'payload' => str_repeat('x', 100000)], key: 'shared');
-    exit(0);
-} catch (\RuntimeException $exception) {
-    fwrite(STDERR, $exception->getMessage());
-    exit(2);
-}
-PHP;
+            use NeuronInteraction\Storage\FileStorage;
+
+            require $argv[1];
+            $storage = new FileStorage($argv[2]);
+            fgets(STDIN);
+            try {
+                $storage->create('race', ['winner' => $argv[3], 'payload' => str_repeat('x', 100000)], key: 'shared');
+                exit(0);
+            } catch (RuntimeException $exception) {
+                fwrite(STDERR, $exception->getMessage());
+                exit(2);
+            }
+            PHP;
         $workers = [];
         for ($index = 0; $index < 8; ++$index) {
             $process = proc_open(
@@ -123,20 +153,22 @@ PHP;
     public function testConcurrentReadersAndDeletersTreatDisappearingDocumentsAsMissing(): void
     {
         $script = <<<'PHP'
-require $argv[1];
-$storage = new \NeuronInteraction\Storage\FileStorage($argv[2]);
-while (fgets(STDIN) !== false) {
-    try {
-        $storage->read('race', 'shared');
-        iterator_to_array($storage->entries('race'));
-        $storage->write('race', 'shared', ['value' => 'from reader']);
-        $storage->delete('race', 'shared');
-        echo "ok\n";
-    } catch (Throwable $exception) {
-        echo $exception->getMessage() . "\n";
-    }
-}
-PHP;
+            use NeuronInteraction\Storage\FileStorage;
+
+            require $argv[1];
+            $storage = new FileStorage($argv[2]);
+            while (fgets(STDIN) !== false) {
+                try {
+                    $storage->read('race', 'shared');
+                    iterator_to_array($storage->entries('race'));
+                    $storage->write('race', 'shared', ['value' => 'from reader']);
+                    $storage->delete('race', 'shared');
+                    echo "ok\n";
+                } catch (Throwable $exception) {
+                    echo $exception->getMessage() . "\n";
+                }
+            }
+            PHP;
         $process = proc_open(
             [PHP_BINARY, '-r', $script, dirname(__DIR__, 2) . '/vendor/autoload.php', $this->directory],
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
@@ -329,7 +361,7 @@ PHP;
     public function testASymbolicLinkCannotRedirectAKeyOutsideTheRoot(): void
     {
         $outside = $this->directory . '-outside';
-        mkdir($this->directory . '/sessions', 0777, true);
+        mkdir($this->directory . '/sessions', 0o777, true);
         file_put_contents($outside, 'untouched');
         symlink($outside, $this->directory . '/sessions/known.json');
 

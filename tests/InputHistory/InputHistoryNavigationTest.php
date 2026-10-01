@@ -9,6 +9,8 @@ use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 
+use function array_map;
+
 final class InputHistoryNavigationTest extends TestCase
 {
     public function testTwoComposersRecallTheSameSequenceWithIndependentDraftsAndPositions(): void
@@ -52,6 +54,6 @@ final class InputHistoryNavigationTest extends TestCase
         self::assertNull($navigation->newer());
         self::assertSame('remembered', $navigation->older()?->getContent());
         self::assertNull($navigation->newer()?->getContent());
-        self::assertSame(['remembered'], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $history->entries()));
+        self::assertSame(['remembered'], array_map(static fn(UserMessage $message): ?string => $message->getContent(), $history->entries()));
     }
 }
