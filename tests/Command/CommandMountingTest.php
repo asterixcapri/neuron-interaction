@@ -58,7 +58,7 @@ final class CommandMountingTest extends TestCase
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->sessionStore()->create();
         SessionHistory::of($previous)->addMessage(new UserMessage('Keep this conversation'));
-        $adapter->useAgent(($previous)->bindTo($adapter->agent()), preserveConversation: false);
+        $adapter->useSession($previous);
         $key = $adapter->sessionStore()->summaries()[0]->key;
 
         $execution = $commands->run('/clear', '', $adapter);
@@ -83,7 +83,7 @@ final class CommandMountingTest extends TestCase
         $commands = (new Commands())->addCommand([$first, new ClearCommand(), new ResumeCommand(), $last]);
         $adapter = new FakeCommandAdapter($commands);
         $previous = $adapter->sessionStore()->create();
-        $adapter->useAgent(($previous)->bindTo($adapter->agent()), preserveConversation: false);
+        $adapter->useSession($previous);
 
         self::assertSame(['/resume', '/clear', '/resume', '/last'], array_map(
             static fn (CommandInterface $command): string => $command->name(),

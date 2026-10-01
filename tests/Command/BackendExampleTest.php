@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use Generator;
+use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
+use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandAdapterInterface;
 use NeuronInteraction\Command\CommandInterface;
@@ -20,6 +23,7 @@ use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -119,12 +123,13 @@ final class BackendExampleTest extends TestCase
         self::assertNotNull($first['selection']);
         $selection = $first['selection'];
         $secondAgent = (new Agent())->setThreadId('test-thread');
-        $second = $commands->run($selection->command, $selection->options[0]->value, new BackendAdapter(
+        $secondAdapter = new BackendAdapter(
             $secondAgent,
             $commands,
             $sessionStore,
             $submitPrompt,
-        ));
+        );
+        $second = $commands->run($selection->command, $selection->options[0]->value, $secondAdapter);
 
         self::assertNotNull($second);
         self::assertSame('completed', $second['status']);
@@ -134,7 +139,7 @@ final class BackendExampleTest extends TestCase
         self::assertSame(['An expected failure.'], $second['errors']);
         self::assertNull($second['error']);
         self::assertSame('completed', $second['status']);
-        self::assertSame([[$secondAgent, " 007\n "]], $received);
+        self::assertSame([[$secondAdapter->agent(), " 007\n "]], $received);
         self::assertSame(['/choose'], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $inputs->entries()));
     }
 
@@ -143,7 +148,8 @@ final class BackendExampleTest extends TestCase
         $storage = new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
         $original = (new Agent())->setThreadId('test-thread');
-        $history = $original->getChatHistory();
+        $session = $sessionStore->create();
+        $history = SessionHistory::of($session);
         $history->addMessage(new UserMessage('Original conversation'));
         $replacement = (new Agent())->setThreadId('test-thread');
         $command = new class($replacement) implements CommandInterface {
@@ -166,9 +172,10 @@ final class BackendExampleTest extends TestCase
             {
                 $previous = $adapter->agent()->getChatHistory();
                 $adapter->useAgent($this->replacement);
-                TestCase::assertSame($this->replacement, $adapter->agent());
+                TestCase::assertNotSame($this->replacement, $adapter->agent());
+                TestCase::assertSame($this->replacement::class, $adapter->agent()::class);
                 TestCase::assertSame($previous->getThreadId(), $adapter->agent()->getChatHistory()->getThreadId());
-                $adapter->useAgent(($adapter->sessionStore()->create())->bindTo($adapter->agent()), preserveConversation: false);
+                $adapter->useSession($adapter->sessionStore()->create());
                 $adapter->promptAgent(new UserMessage('A generated prompt for the replacement.'));
                 $adapter->notify($adapter->commands()->all()[0]->name());
                 throw new RuntimeException('Failed after replacement.');
@@ -178,7 +185,7 @@ final class BackendExampleTest extends TestCase
         $received = [];
         $adapter = new BackendAdapter($original, $commands, $sessionStore, static function (Agent $answering, UserMessage $prompt) use (&$received): void {
             $received[] = [$answering, $prompt->getContent()];
-        });
+        }, session: $session);
         $response = $commands->run('/replace', '', $adapter);
 
         self::assertNotNull($response);
@@ -199,13 +206,48 @@ final class BackendExampleTest extends TestCase
         $agent = (new Agent())->setThreadId('test-thread');
         $received = null;
         $adapter = new BackendAdapter($agent, new Commands(), new SessionStore(new InMemoryStorage(), 'local'), static function (Agent $answering, UserMessage $message) use (&$received, $agent): void {
-            self::assertSame($agent, $answering);
+            self::assertNotSame($agent, $answering);
+            self::assertSame($agent::class, $answering::class);
             $received = $message;
         });
         $message = new UserMessage(new ImageContent('https://example.com/photo.png', SourceType::URL));
         $adapter->promptAgent($message);
 
         self::assertSame($message, $received);
+    }
+
+    public function testStartupCreatesAManagedSessionAndAgentReplacementContinuesIt(): void
+    {
+        $store = new SessionStore(new InMemoryStorage(), 'local-user');
+        $adapter = new BackendAdapter(new Agent(), new Commands(), $store, static function (): void {});
+        $key = $adapter->agent()->getChatHistory()->getThreadId();
+        $currentSession = $adapter->session();
+        $adapter->agent()->getChatHistory()->addMessage(new UserMessage('First question'));
+
+        $adapter->useAgent(new Agent());
+        $adapter->agent()->getChatHistory()->addMessage(new AssistantMessage('Replacement answer'));
+
+        self::assertSame($key, $adapter->agent()->getThreadId());
+        self::assertSame($currentSession, $adapter->session());
+        $session = $store->read($key);
+        self::assertNotNull($session);
+        self::assertSame(['First question', 'Replacement answer'], array_map(static fn (Message $message): ?string => $message->getContent(), $session->getMessages()));
+    }
+
+    public function testSelectingAnOtherUsersSessionDoesNotReplaceTheAgent(): void
+    {
+        $storage = new InMemoryStorage();
+        $store = new SessionStore($storage, 'alice');
+        $foreign = (new SessionStore($storage, 'bob'))->create();
+        $adapter = new BackendAdapter(new Agent(), new Commands(), $store, static function (): void {});
+        $before = $adapter->agent();
+        $this->expectException(InvalidArgumentException::class);
+
+        try {
+            $adapter->useSession($foreign);
+        } finally {
+            self::assertSame($before, $adapter->agent());
+        }
     }
 
     public function testBackendReturnsHelpLeaveAndUnknownResponsesFromRunAlone(): void

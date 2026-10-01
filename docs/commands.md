@@ -53,8 +53,8 @@ their parameter as `CommandAdapterInterface<mixed>`; concrete Adapters declare
 `/resume` without arguments emits a `Selection` and returns. The Adapter
 presents its options and invokes the request's target Command again with the
 chosen value as a string. `/clear` installs a distinct empty
-conversation while preserving the previous Session. Both Commands bind the selected Session and call
-`adapter->useAgent($agent, preserveConversation: false)`. Adapters synchronize
+conversation while preserving the previous Session. Both Commands call
+`adapter->useSession($session)`. Adapters synchronize
 their presentation with the Agent; Commands do not request a view refresh. Agent prompting,
 presentation and the interaction lifecycle remain Adapter responsibilities.
 
@@ -149,13 +149,19 @@ Adapters decide whether to admit these Commands and still provide the ordinary
 
 ## Replacing the Agent
 
-Implement `useAgent(Agent $agent, bool $preserveConversation = true): void` in
-custom Adapters. By default, replacement Agents inherit the current Session
-through `SessionStore::transfer()`. For a conversation outside that Store, transfer
-copies its active messages into an in-memory store; applications needing their
-custom persistence must configure the replacement's store explicitly.
+Implement `useAgent(Agent $agent): void` and `useSession(Session $session): void`
+in custom Adapters. Keep the current Session explicitly alongside the current
+Agent. Expose it through `session(): Session`, which always returns the selected
+conversation. `useAgent()` binds the replacement to that Session through `bindTo()`;
+`useSession()` binds the current Agent to the selected Session. Retain the returned
+Agent copy in both cases. Validate selected Sessions through the Adapter's
+SessionStore before changing state, so absent and other-user keys cannot be used.
 
-Pass `preserveConversation: false` to adopt an already bound replacement's
-conversation, as Clear and Resume do. Retrieve the current Agent through
-`adapter->agent()` after a Command, since a thread switch can replace the instance.
-Neuron TUI exposes the same current instance through `Tui::agent()`.
+The example BackendAdapter creates an empty Session on startup unless the Host
+passes `session: $session` together with its matching Store. An Agent with existing
+messages requires an explicit Session, which determines the active conversation.
+Across backend requests, pass that Session again to continue it.
+
+Retrieve the current Agent through `adapter->agent()` after a Command, since
+binding can replace the instance. Neuron TUI exposes the same current instance
+through `Tui::agent()`.

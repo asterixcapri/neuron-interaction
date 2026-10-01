@@ -47,8 +47,7 @@ final readonly class ResumeCommand implements CommandInterface
                 return;
             }
 
-            $agent = $session->bindTo($adapter->agent());
-            $adapter->useAgent($agent, preserveConversation: false);
+            $adapter->useSession($session);
 
             return;
         }

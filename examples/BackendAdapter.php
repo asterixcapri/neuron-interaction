@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Examples;
 
 use Closure;
+use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandAdapterInterface;
@@ -13,6 +14,7 @@ use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\Selection;
 use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
@@ -33,6 +35,8 @@ use NeuronInteraction\Storage\InMemoryStorage;
  */
 final class BackendAdapter implements CommandAdapterInterface
 {
+    private Session $session;
+
     /** @var list<string> */
     private array $notices = [];
 
@@ -53,7 +57,12 @@ final class BackendAdapter implements CommandAdapterInterface
         private readonly SessionStore $sessionStore,
         private readonly Closure $submitPrompt,
         private readonly ConfigurationStore $configurationStore = new ConfigurationStore(new InMemoryStorage(), 'local'),
+        ?Session $session = null,
     ) {
+        if ($session === null && $this->answeringAgent->getThreadId() !== null && $this->answeringAgent->getChatHistory()->getMessages() !== []) {
+            throw new InvalidArgumentException('An Agent with existing messages requires an explicit Session.');
+        }
+        $this->useSession($session ?? $this->sessionStore->create());
     }
 
     public function admit(CommandInterface $command): bool
@@ -106,11 +115,24 @@ final class BackendAdapter implements CommandAdapterInterface
         return $this->answeringAgent;
     }
 
-    public function useAgent(Agent $agent, bool $preserveConversation = true): void
+    public function useAgent(Agent $agent): void
     {
-        if ($preserveConversation) {
-            $agent = $this->sessionStore->transfer($this->answeringAgent, $agent);
+        $this->answeringAgent = $this->session->bindTo($agent);
+    }
+
+    public function session(): Session
+    {
+        return $this->session;
+    }
+
+    public function useSession(Session $session): void
+    {
+        $selected = $this->sessionStore->read($session->getKey());
+        if ($selected === null) {
+            throw new InvalidArgumentException('The selected Session does not belong to this SessionStore.');
         }
+        $agent = $selected->bindTo($this->answeringAgent);
+        $this->session = $selected;
         $this->answeringAgent = $agent;
     }
 
