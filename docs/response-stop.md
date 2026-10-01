@@ -26,7 +26,7 @@ use NeuronInteraction\Storage\FileStorage;
 $storage = new FileStorage('/app/interaction-state');
 $chatId = 'chat-42'; // Chosen and authorized by the Host.
 $stopSignal = new StopSignal(storage: $storage, key: $chatId);
-$agent = Agent::make(workflowId: $chatId);
+$agent = Agent::make()->setThreadId($chatId);
 $agent->setAiProvider(new OpenAI(
     key: $apiKey,
     model: $model,

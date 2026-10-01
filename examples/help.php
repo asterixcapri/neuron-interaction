@@ -14,7 +14,7 @@ require_once \dirname(__DIR__) . '/vendor/autoload.php';
 // Mount one Command and return its help text as response data.
 $commands = (new Commands())->addCommand(new HelpCommand());
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
-$adapter = new BackendAdapter((new Agent())->setThreadId('test-thread'), $commands, $sessionStore, static function (): void {});
+$adapter = new BackendAdapter(Agent::make(), $commands, $sessionStore, static function (): void {});
 
 $response = $commands->run('/help', '', $adapter);
 

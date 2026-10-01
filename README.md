@@ -45,7 +45,7 @@ use NeuronInteraction\Storage\FileStorage;
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');
 $sessionStore = new SessionStore($storage, 'local-user');
-$agent = new Agent();
+$agent = Agent::make();
 $agent = $sessionStore->create()->bindTo($agent);
 ```
 
@@ -84,7 +84,7 @@ $client = new StoppableHttpClient(
     shouldStop: $stopSignal->stopCallback(),
 );
 
-$agent = Agent::make(workflowId: $chatId);
+$agent = Agent::make()->setThreadId($chatId);
 $agent->setAiProvider(new OpenAIResponses(
     key: $apiKey,
     model: $model,

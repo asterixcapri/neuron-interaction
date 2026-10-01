@@ -15,10 +15,10 @@ require_once \dirname(__DIR__) . '/vendor/autoload.php';
 // Seed a stored conversation so this example can run on its own.
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
 $session = $sessionStore->create();
-$agent = $session->bindTo(new Agent());
+$agent = $session->bindTo(Agent::make());
 $agent->getChatHistory()->addMessage(new UserMessage('A conversation to reopen'));
 
-$agent = (new Agent())->setThreadId('test-thread');
+$agent = Agent::make();
 $commands = (new Commands())->addCommand(new ResumeCommand());
 $adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
 

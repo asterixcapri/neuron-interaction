@@ -8,7 +8,7 @@ use NeuronInteraction\Storage\FileStorage;
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');
 $sessionStore = new SessionStore($storage, 'local-user');
-$agent = new Agent();
+$agent = Agent::make();
 $agent = $sessionStore->create()->bindTo($agent);
 
 // After the Agent has exchanged messages, list recognizable Sessions.
