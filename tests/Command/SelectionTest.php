@@ -83,7 +83,7 @@ final class SelectionTest extends TestCase
         $stored = $adapter->sessionStore()->create();
         SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
         $active = $adapter->sessionStore()->create();
-        $adapter->useAgent(($active)->bindTo($adapter->agent()), preserveConversation: false);
+        $adapter->useSession($active);
         $session = $adapter->sessionStore()->summaries()[0];
 
         $first = $commands->run('/return', '', $adapter);
@@ -91,6 +91,7 @@ final class SelectionTest extends TestCase
         self::assertNotNull($first);
         self::assertSame('completed', $first->status);
         self::assertSame($active->getKey(), $adapter->agent()->getChatHistory()->getThreadId());
+        self::assertSame($active->getKey(), $adapter->session()->getKey());
         self::assertCount(1, $adapter->selections);
         $request = $adapter->selections[0];
         self::assertSame('/return', $request->command);
@@ -103,6 +104,7 @@ final class SelectionTest extends TestCase
         self::assertNotNull($second);
         self::assertSame('completed', $second->status);
         self::assertSame('Stored subject', $adapter->agent()->getChatHistory()->getMessages()[0]->getContent());
+        self::assertSame($stored->getKey(), $adapter->session()->getKey());
         self::assertCount(1, $adapter->selections);
     }
 

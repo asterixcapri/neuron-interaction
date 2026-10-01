@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Session;
 
 use DateTimeImmutable;
-use NeuronAI\Agent\Agent;
-use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\UserMessage;
@@ -91,24 +89,6 @@ final readonly class SessionStore
         }
 
         return $this->session($document);
-    }
-
-    /** Transfers the selected conversation to the answering agent. */
-    public function transfer(Agent $previous, Agent $replacement): Agent
-    {
-        $threadId = $previous->getChatHistory()->getThreadId();
-        $session = $this->read($threadId);
-        if ($session !== null) {
-            return $session->bindTo($replacement);
-        }
-        $store = new InMemoryMessageStore();
-        foreach ($previous->getChatHistory()->getMessages() as $message) {
-            $store->append($threadId, $message);
-        }
-        if ($replacement->getThreadId() !== null && $replacement->getThreadId() !== $threadId) {
-            $replacement = $replacement->for($threadId);
-        }
-        return $replacement->setThreadId($threadId)->setMessageStore($store);
     }
 
     public function delete(string $key): void

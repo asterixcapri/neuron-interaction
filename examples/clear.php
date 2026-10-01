@@ -18,11 +18,8 @@ $previousSession = $sessionStore->create();
 $agent = $previousSession->bindTo(new Agent());
 $agent->getChatHistory()->addMessage(new UserMessage('The previous conversation'));
 
-$agent = (new Agent())->setThreadId('test-thread');
-$agent = ($previousSession)->bindTo($agent);
-
 $commands = (new Commands())->addCommand(new ClearCommand());
-$adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {});
+$adapter = new BackendAdapter($agent, $commands, $sessionStore, static function (): void {}, session: $previousSession);
 $commands->run('/clear', '', $adapter);
 
 // The Agent now has an empty Session; the previous conversation is still stored.

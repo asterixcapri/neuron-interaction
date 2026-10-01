@@ -7,6 +7,7 @@ namespace NeuronInteraction\Command;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 
 /**
@@ -42,7 +43,13 @@ interface CommandAdapterInterface
 
     public function agent(): Agent;
 
-    public function useAgent(Agent $agent, bool $preserveConversation = true): void;
+    /** Replace the answering Agent within the current Session. */
+    public function useAgent(Agent $agent): void;
+
+    public function session(): Session;
+
+    /** Select a conversation owned by this Adapter's SessionStore. */
+    public function useSession(Session $session): void;
 
     public function commands(): Commands;
 
