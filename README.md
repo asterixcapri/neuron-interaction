@@ -74,7 +74,7 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\HttpClient\Curl\CurlHttpClient;
 use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
 use NeuronAI\HttpClient\StoppableHttpClient;
-use NeuronInteraction\Http\StopSignal;
+use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Storage\FileStorage;
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace NeuronInteraction\Tests\Http;
+namespace NeuronInteraction\Tests\Interruption;
 
 use InvalidArgumentException;
-use NeuronInteraction\Http\StopSignal;
+use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\Attributes\DataProvider;

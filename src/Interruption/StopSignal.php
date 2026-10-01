@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace NeuronInteraction\Http;
+namespace NeuronInteraction\Interruption;
 
 use Closure;
 use InvalidArgumentException;
