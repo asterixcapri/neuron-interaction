@@ -20,9 +20,6 @@ Run this command in your application's directory:
 composer require asterixcapri/neuron-interaction
 ```
 
-Composer also installs Neuron AI as a required dependency. If you install Neuron
-TUI, Neuron Interaction is already included as its dependency.
-
 For applications using Neuron AI 3, install the `0.8` series:
 
 ```bash
@@ -31,13 +28,13 @@ composer require asterixcapri/neuron-interaction:^0.8
 
 ## What it provides
 
-- **Sessions** save, list and resume Neuron AI conversations.
+- **SessionStore and Storage** save, list and resume conversations using memory, JSON files or your own storage implementation.
+- **Stop signal** shares stop requests across handlers and processes through a signal used by Neuron AI's native stoppable HTTP client.
 - **Input history** records submissions and supports recalling previous inputs.
 - **Commands** provide `/clear`, `/resume`, `/help`, `/exit` and custom behavior.
-- **Selections** let commands ask users to choose an option, including across HTTP requests.
+- **Backend examples** show how to execute commands and handle user choices across requests.
 - **Configuration** stores user preferences such as the selected model.
-- **Response stop** interrupts HTTP streaming while letting Neuron finalize its partial response.
-- **Storage** provides memory and JSON-file implementations, with an interface for your own storage.
+- **User message processing** prepares messages for the Agent and projects them for display.
 
 ## SessionStore and Storage
 
