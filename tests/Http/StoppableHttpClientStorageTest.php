@@ -11,7 +11,7 @@ use NeuronAI\HttpClient\HttpRequest;
 use NeuronAI\HttpClient\StoppableHttpClient;
 use NeuronAI\HttpClient\StreamInterface;
 use NeuronAI\Providers\OpenAI\OpenAI;
-use NeuronInteraction\Http\StopSignal;
+use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Storage\StorageInterface;
@@ -179,7 +179,7 @@ final class StoppableHttpClientStorageTest extends TestCase
     private function requestFromAnotherProcess(string $directory, string $key): void
     {
         $script = <<<'WORKER'
-            use NeuronInteraction\Http\StopSignal;
+            use NeuronInteraction\Interruption\StopSignal;
             use NeuronInteraction\Storage\FileStorage;
 
             require $argv[1];

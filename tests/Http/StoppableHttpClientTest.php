@@ -19,7 +19,7 @@ use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\Providers\Gemini\Gemini;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
-use NeuronInteraction\Http\StopSignal;
+use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\Tools\CallbackTool;
 use PHPUnit\Framework\Attributes\DataProvider;
