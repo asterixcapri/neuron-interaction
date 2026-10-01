@@ -24,8 +24,7 @@ final class CommandsTest extends TestCase
         $duplicate = self::command('/review', static function (): void {
             self::fail('The duplicate must not execute.');
         });
-        $last = self::command('/last', static function (): void {
-        });
+        $last = self::command('/last', static function (): void {});
         $commands = (new Commands())->addCommand([$first, $duplicate, $last]);
         $value = " \tline one\n  line two \t";
 
@@ -62,8 +61,7 @@ final class CommandsTest extends TestCase
             self::command('/broken', static function () use ($failure): void {
                 throw $failure;
             }),
-            self::command('/healthy', static function (): void {
-            }),
+            self::command('/healthy', static function (): void {}),
         ]);
         $adapter = new FakeCommandAdapter();
         $execution = $commands->run('/broken', '', $adapter);
@@ -78,7 +76,7 @@ final class CommandsTest extends TestCase
     public function testUnknownIdentifierCompletesWithoutAdmissionAndReturnsTheAdaptersOutputUnchanged(): void
     {
         $output = CommandExecution::completed('/adapter-output');
-        $adapter = new class($output) extends FakeCommandAdapter {
+        $adapter = new class ($output) extends FakeCommandAdapter {
             public function __construct(private CommandExecution $output)
             {
                 parent::__construct();
@@ -110,7 +108,7 @@ final class CommandsTest extends TestCase
         $duplicate = self::command('/duplicate', static function (): void {
             self::fail('Admission must not fall through to a duplicate.');
         });
-        $adapter = new class($first) extends FakeCommandAdapter {
+        $adapter = new class ($first) extends FakeCommandAdapter {
             public function __construct(private CommandInterface $refused)
             {
                 parent::__construct();
@@ -153,7 +151,7 @@ final class CommandsTest extends TestCase
         ]);
 
         foreach (['/healthy' => null, '/broken' => $failure] as $identifier => $exception) {
-            $adapter = new class($identifier, $exception, $output) extends FakeCommandAdapter {
+            $adapter = new class ($identifier, $exception, $output) extends FakeCommandAdapter {
                 public function __construct(
                     private string $identifier,
                     private ?RuntimeException $exception,
@@ -180,7 +178,7 @@ final class CommandsTest extends TestCase
     public function testAdmissionExceptionsPropagateWithoutInvokingOrCompletingTheCommand(): void
     {
         $failure = new RuntimeException('Admission failed.');
-        $adapter = new class($failure) extends FakeCommandAdapter {
+        $adapter = new class ($failure) extends FakeCommandAdapter {
             public function __construct(private RuntimeException $failure)
             {
                 parent::__construct();
@@ -219,7 +217,7 @@ final class CommandsTest extends TestCase
         ]);
 
         foreach (['/healthy', '/broken', '/unknown'] as $identifier) {
-            $adapter = new class($failure) extends FakeCommandAdapter {
+            $adapter = new class ($failure) extends FakeCommandAdapter {
                 public function __construct(private RuntimeException $failure)
                 {
                     parent::__construct();
@@ -270,11 +268,9 @@ final class CommandsTest extends TestCase
     /** @param Closure(string, CommandAdapterInterface<mixed>): void $run */
     private static function command(string $name, Closure $run): CommandInterface
     {
-        return new class($name, $run) implements CommandInterface {
+        return new class ($name, $run) implements CommandInterface {
             /** @param Closure(string, CommandAdapterInterface<mixed>): void $run */
-            public function __construct(private string $name, private Closure $run)
-            {
-            }
+            public function __construct(private string $name, private Closure $run) {}
 
             public function name(): string
             {

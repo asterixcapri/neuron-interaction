@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Storage;
 
+use function json_encode;
+use function strlen;
+
+use const JSON_THROW_ON_ERROR;
+
 /**
  * One JSON document read through Storage under its logical key.
  */
@@ -17,8 +22,7 @@ final readonly class StoredDocument
         public string $key,
         public array $data,
         public array $metadata,
-    ) {
-    }
+    ) {}
 
     /**
      * Number of bytes in this document's runtime JSON representation.

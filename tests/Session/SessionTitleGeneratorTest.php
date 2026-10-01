@@ -13,12 +13,15 @@ use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronAI\Providers\ProviderResponse;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
+
+use function is_array;
 
 final class SessionTitleGeneratorTest extends TestCase
 {
@@ -32,13 +35,13 @@ final class SessionTitleGeneratorTest extends TestCase
         $input->setMetadata(['source' => 'original']);
         $original = $input->jsonSerialize();
         $capture = new TitleInput();
-        $provider = new class($capture) extends FakeAIProvider {
+        $provider = new class ($capture) extends FakeAIProvider {
             public function __construct(private readonly TitleInput $capture)
             {
                 parent::__construct(new AssistantMessage('{"title":"Report review"}'));
             }
 
-            public function structured(array|Message $messages, string $class, array $response_schema): \NeuronAI\Providers\ProviderResponse
+            public function structured(array|Message $messages, string $class, array $response_schema): ProviderResponse
             {
                 $messages = is_array($messages) ? $messages : [$messages];
                 $this->capture->text = $messages[0]->getContent() ?? '';

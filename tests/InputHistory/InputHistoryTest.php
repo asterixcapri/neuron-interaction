@@ -17,6 +17,20 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
 
+use function array_map;
+use function bin2hex;
+use function is_dir;
+use function is_link;
+use function json_decode;
+use function json_encode;
+use function random_bytes;
+use function rmdir;
+use function scandir;
+use function sys_get_temp_dir;
+use function unlink;
+
+use const JSON_THROW_ON_ERROR;
+
 final class InputHistoryTest extends TestCase
 {
     private string $directory;
@@ -48,7 +62,7 @@ final class InputHistoryTest extends TestCase
         self::assertSame([], $second->entries());
 
         $first->record(new UserMessage('  Message exactly as submitted  '));
-        self::assertSame(['  Message exactly as submitted  '], array_map(static fn (UserMessage $message): ?string => $message->getContent(), $second->entries()));
+        self::assertSame(['  Message exactly as submitted  '], array_map(static fn(UserMessage $message): ?string => $message->getContent(), $second->entries()));
 
         $second->record(new UserMessage('/resume session-key'));
         $first->record(new UserMessage("Another\nmessage"));
@@ -58,9 +72,9 @@ final class InputHistoryTest extends TestCase
             "Another\nmessage",
         ];
 
-        self::assertSame($expected, array_map(static fn (UserMessage $message): ?string => $message->getContent(), $first->entries()));
-        self::assertSame($expected, array_map(static fn (UserMessage $message): ?string => $message->getContent(), $second->entries()));
-        self::assertSame($expected, array_map(static fn (UserMessage $message): ?string => $message->getContent(), (new InputHistory($files
+        self::assertSame($expected, array_map(static fn(UserMessage $message): ?string => $message->getContent(), $first->entries()));
+        self::assertSame($expected, array_map(static fn(UserMessage $message): ?string => $message->getContent(), $second->entries()));
+        self::assertSame($expected, array_map(static fn(UserMessage $message): ?string => $message->getContent(), (new InputHistory($files
             ? new FileStorage($this->directory)
             : $storage))->entries()));
     }
@@ -88,7 +102,7 @@ final class InputHistoryTest extends TestCase
 
         self::assertSame(
             ['same', 'different', 'same', ' same '],
-            array_map(static fn (UserMessage $message): ?string => $message->getContent(), $first->entries()),
+            array_map(static fn(UserMessage $message): ?string => $message->getContent(), $first->entries()),
         );
     }
 
@@ -111,7 +125,7 @@ final class InputHistoryTest extends TestCase
 
         self::assertSame(
             ['/summarize', 'A submitted message'],
-            array_map(static fn (UserMessage $message): ?string => $message->getContent(), (new InputHistory($storage))->entries()),
+            array_map(static fn(UserMessage $message): ?string => $message->getContent(), (new InputHistory($storage))->entries()),
         );
         self::assertCount(2, $sessionStore->summaries());
     }

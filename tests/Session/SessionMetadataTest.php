@@ -17,6 +17,16 @@ use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+use function array_map;
+use function bin2hex;
+use function glob;
+use function is_dir;
+use function random_bytes;
+use function rmdir;
+use function str_repeat;
+use function sys_get_temp_dir;
+use function unlink;
+
 final class SessionMetadataTest extends TestCase
 {
     private string $directory;
@@ -122,7 +132,7 @@ final class SessionMetadataTest extends TestCase
         SessionHistory::of($first)->addMessage(new AssistantMessage('Latest answer'));
         $filter = ['projectId' => 'alpha', 'branchName' => 'main'];
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
-        self::assertSame(['First title', 'Second title'], array_map(static fn (SessionSummary $summary): ?string => $summary->title, $fresh->summaries($filter)));
+        self::assertSame(['First title', 'Second title'], array_map(static fn(SessionSummary $summary): ?string => $summary->title, $fresh->summaries($filter)));
         self::assertSame([], $fresh->summaries(['missingKey' => 'value']));
         self::assertCount(1, $fresh->summaries(['userId' => 'bob']));
         self::assertCount(5, $fresh->summaries([]));

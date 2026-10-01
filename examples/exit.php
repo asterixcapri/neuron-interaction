@@ -9,7 +9,7 @@ use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
-require_once dirname(__DIR__) . '/vendor/autoload.php';
+require_once \dirname(__DIR__) . '/vendor/autoload.php';
 
 $commands = (new Commands())->addCommand(new LeaveCommand());
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
@@ -18,4 +18,4 @@ $adapter = new BackendAdapter((new Agent())->setThreadId('test-thread'), $comman
 // The response contains stopped: true. The host decides how to end the interaction.
 $response = $commands->run('/exit', '', $adapter);
 
-echo json_encode($response, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
+echo \json_encode($response, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR) . \PHP_EOL;

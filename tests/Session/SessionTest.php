@@ -22,6 +22,16 @@ use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+use function array_map;
+use function bin2hex;
+use function glob;
+use function is_dir;
+use function random_bytes;
+use function rmdir;
+use function str_repeat;
+use function sys_get_temp_dir;
+use function unlink;
+
 final class SessionTest extends TestCase
 {
     private string $directory;
@@ -148,7 +158,7 @@ final class SessionTest extends TestCase
         self::assertSame(
             [$question],
             array_map(
-                static fn (Message $message): ?string => $message->getContent(),
+                static fn(Message $message): ?string => $message->getContent(),
                 SessionHistory::of($reopened)->getMessages(),
             ),
         );

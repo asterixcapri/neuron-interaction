@@ -14,6 +14,11 @@ use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 
+use function json_decode;
+use function json_encode;
+
+use const JSON_THROW_ON_ERROR;
+
 final class SelectionTest extends TestCase
 {
     public function testSelectionSerializesOrderedOptionsAndReceivesTheValueInANewInvocation(): void
@@ -22,10 +27,8 @@ final class SelectionTest extends TestCase
             new SelectionOption('007', 'Visible label', 'Detailed description'),
             new SelectionOption(' raw value ', 'Another label'),
         ]);
-        $command = new class($request) implements CommandInterface {
-            public function __construct(private Selection $request)
-            {
-            }
+        $command = new class ($request) implements CommandInterface {
+            public function __construct(private Selection $request) {}
 
             public function name(): string
             {

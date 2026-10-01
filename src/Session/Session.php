@@ -10,6 +10,10 @@ use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronAI\Chat\Messages\Message;
 use NeuronInteraction\Storage\StorageInterface;
 
+use function array_key_exists;
+use function array_values;
+use function trim;
+
 /** A persisted conversation whose message store can be bound to an Agent. */
 final readonly class Session
 {

@@ -11,6 +11,15 @@ use NeuronAI\Chat\Messages\UserMessage;
 use Throwable;
 use UnexpectedValueException;
 
+use function array_is_list;
+use function array_key_exists;
+use function is_array;
+use function is_string;
+use function json_decode;
+use function json_encode;
+
+use const JSON_THROW_ON_ERROR;
+
 /** Reuses Neuron's content-block and metadata deserialization. */
 final class UserMessageFactory
 {

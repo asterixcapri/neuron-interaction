@@ -19,6 +19,20 @@ use NeuronInteraction\Storage\StoredDocument;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
 
+use function bin2hex;
+use function dirname;
+use function fclose;
+use function proc_close;
+use function proc_open;
+use function random_bytes;
+use function rmdir;
+use function str_repeat;
+use function stream_get_contents;
+use function sys_get_temp_dir;
+use function usleep;
+
+use const PHP_BINARY;
+
 final class StoppableHttpClientStorageTest extends TestCase
 {
     public function testAnotherProcessCanStopStreamingAndNeuronSavesThePartialHistory(): void
@@ -165,10 +179,13 @@ final class StoppableHttpClientStorageTest extends TestCase
     private function requestFromAnotherProcess(string $directory, string $key): void
     {
         $script = <<<'WORKER'
-require $argv[1];
-$storage = new \NeuronInteraction\Storage\FileStorage($argv[2]);
-(new \NeuronInteraction\Http\StopSignal($storage, $argv[3]))->request();
-WORKER;
+            use NeuronInteraction\Http\StopSignal;
+            use NeuronInteraction\Storage\FileStorage;
+
+            require $argv[1];
+            $storage = new FileStorage($argv[2]);
+            (new StopSignal($storage, $argv[3]))->request();
+            WORKER;
         $process = proc_open(
             [PHP_BINARY, '-r', $script, dirname(__DIR__, 2) . '/vendor/autoload.php', $directory, $key],
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],

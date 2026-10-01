@@ -7,6 +7,11 @@ namespace NeuronInteraction\Tests\Storage;
 use InvalidArgumentException;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
+
+use function array_column;
+use function iterator_to_array;
+use function strlen;
 
 final class InMemoryStorageTest extends TestCase
 {
@@ -36,7 +41,7 @@ final class InMemoryStorageTest extends TestCase
         try {
             $storage->create('demo', ['value' => 'second'], key: 'chosen');
             self::fail('An existing key must not be overwritten.');
-        } catch (\RuntimeException) {
+        } catch (RuntimeException) {
             self::assertSame(['value' => 'first'], $storage->read('demo', 'chosen')?->data);
         }
     }

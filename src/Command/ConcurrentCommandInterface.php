@@ -11,6 +11,4 @@ namespace NeuronInteraction\Command;
  * Adapters decide whether to admit the Command; this marker grants no automatic
  * execution and does not restrict the ordinary CommandAdapterInterface controls.
  */
-interface ConcurrentCommandInterface extends CommandInterface
-{
-}
+interface ConcurrentCommandInterface extends CommandInterface {}

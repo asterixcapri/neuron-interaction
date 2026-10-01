@@ -10,7 +10,7 @@ use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
-require_once dirname(__DIR__) . '/vendor/autoload.php';
+require_once \dirname(__DIR__) . '/vendor/autoload.php';
 
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
 
@@ -23,7 +23,7 @@ $adapter = new BackendAdapter($agent, $commands, $sessionStore, static function 
 $commands->run('/clear', '', $adapter);
 
 // The Agent now has an empty Session; the previous conversation is still stored.
-echo json_encode([
+echo \json_encode([
     'currentMessages' => $adapter->agent()->getChatHistory()->getMessages(),
-    'storedConversations' => count($sessionStore->summaries()),
-], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
+    'storedConversations' => \count($sessionStore->summaries()),
+], \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR) . \PHP_EOL;

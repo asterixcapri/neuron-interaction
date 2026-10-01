@@ -10,7 +10,7 @@ use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
-require_once dirname(__DIR__) . '/vendor/autoload.php';
+require_once \dirname(__DIR__) . '/vendor/autoload.php';
 
 // Seed a stored conversation so this example can run on its own.
 $sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
@@ -27,4 +27,4 @@ $sessionKey = $session->getKey();
 $commands->run('/resume', $sessionKey, $adapter);
 
 // Resume has bound an Agent copy to the stored conversation.
-echo $adapter->agent()->getChatHistory()->getMessages()[0]->getContent() . PHP_EOL;
+echo $adapter->agent()->getChatHistory()->getMessages()[0]->getContent() . \PHP_EOL;

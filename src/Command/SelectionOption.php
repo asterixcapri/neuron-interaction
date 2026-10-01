@@ -11,6 +11,5 @@ final readonly class SelectionOption
         public string $value,
         public string $label,
         public ?string $description = null,
-    ) {
-    }
+    ) {}
 }

@@ -9,7 +9,7 @@ use NeuronInteraction\Examples\BackendAdapter;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
-require_once dirname(__DIR__) . '/vendor/autoload.php';
+require_once \dirname(__DIR__) . '/vendor/autoload.php';
 
 // Mount one Command and return its help text as response data.
 $commands = (new Commands())->addCommand(new HelpCommand());
@@ -18,4 +18,4 @@ $adapter = new BackendAdapter((new Agent())->setThreadId('test-thread'), $comman
 
 $response = $commands->run('/help', '', $adapter);
 
-echo json_encode($response, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
+echo \json_encode($response, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR) . \PHP_EOL;

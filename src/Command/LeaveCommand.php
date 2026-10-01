@@ -10,9 +10,7 @@ final readonly class LeaveCommand implements ConcurrentCommandInterface
     /**
      * @param string $name the name it answers to, including the leading slash
      */
-    public function __construct(private string $name = '/exit')
-    {
-    }
+    public function __construct(private string $name = '/exit') {}
 
     public function name(): string
     {

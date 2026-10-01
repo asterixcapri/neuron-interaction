@@ -8,6 +8,18 @@ use InvalidArgumentException;
 use JsonException;
 use NeuronInteraction\Storage\StorageInterface;
 
+use function array_key_exists;
+use function hash;
+use function is_array;
+use function is_bool;
+use function is_float;
+use function is_int;
+use function is_object;
+use function is_string;
+use function json_encode;
+
+use const JSON_THROW_ON_ERROR;
+
 final class ConfigurationStore
 {
     // Direct preferences never read or overwrite legacy named configurations.
@@ -16,8 +28,7 @@ final class ConfigurationStore
     public function __construct(
         private readonly StorageInterface $storage,
         private readonly string $userId,
-    ) {
-    }
+    ) {}
 
     /**
      * The fallback selects the exact PHP type; strings must also be non-empty.

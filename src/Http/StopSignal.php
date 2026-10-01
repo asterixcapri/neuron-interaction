@@ -9,14 +9,16 @@ use InvalidArgumentException;
 use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
+use function hrtime;
+use function is_bool;
+use function is_finite;
+
 /** A shared stop signal under a key chosen by the Host Application. */
 final readonly class StopSignal
 {
     private const string NAMESPACE = 'response-stops';
 
-    public function __construct(private StorageInterface $storage, private string $key)
-    {
-    }
+    public function __construct(private StorageInterface $storage, private string $key) {}
 
     /**
      * Creates a polling callback for Neuron's native stoppable HTTP client.

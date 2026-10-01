@@ -13,6 +13,18 @@ use NeuronAI\Chat\Messages\MessageDeserializer;
 use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
+use function array_filter;
+use function array_is_list;
+use function array_map;
+use function array_values;
+use function hash;
+use function is_array;
+use function is_string;
+use function json_encode;
+
+use const DATE_ATOM;
+use const JSON_THROW_ON_ERROR;
+
 /** Persists active and archived messages in the Session's storage document. */
 final readonly class SessionMessageStore implements MessageStoreInterface
 {
@@ -22,14 +34,13 @@ final readonly class SessionMessageStore implements MessageStoreInterface
         private StorageInterface $storage,
         private string $namespace,
         private string $userId,
-    ) {
-    }
+    ) {}
 
     public function loadActive(string $threadId): array
     {
         return $this->deserialize(array_values(array_filter(
             $this->read($threadId),
-            static fn (array $entry): bool => !isset($entry['archived_at']),
+            static fn(array $entry): bool => !isset($entry['archived_at']),
         )));
     }
 

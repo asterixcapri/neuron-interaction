@@ -18,6 +18,8 @@ use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
 
+use const PHP_INT_MAX;
+
 final class SessionMessageStoreTest extends TestCase
 {
     public function testArchivingRetainsMessagesAndAppendIsIdempotent(): void

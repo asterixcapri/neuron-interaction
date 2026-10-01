@@ -10,9 +10,7 @@ final readonly class HelpCommand implements ConcurrentCommandInterface
     /**
      * @param string $name the name it answers to, including the leading slash
      */
-    public function __construct(private string $name = '/help')
-    {
-    }
+    public function __construct(private string $name = '/help') {}
 
     public function name(): string
     {

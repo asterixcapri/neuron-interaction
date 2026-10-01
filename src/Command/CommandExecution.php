@@ -16,8 +16,7 @@ final readonly class CommandExecution
         public string $identifier,
         public string $status,
         public ?Throwable $exception = null,
-    ) {
-    }
+    ) {}
 
     public static function completed(string $identifier): self
     {

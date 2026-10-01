@@ -6,6 +6,8 @@ namespace NeuronInteraction\Command;
 
 use InvalidArgumentException;
 
+use function array_is_list;
+
 /** A choice to present before invoking the target Command again. */
 final readonly class Selection
 {
