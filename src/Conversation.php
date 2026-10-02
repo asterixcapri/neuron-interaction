@@ -15,7 +15,6 @@ use NeuronInteraction\Message\UserMessageProcessorInterface;
 use NeuronInteraction\Message\UserMessageProcessors;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryStorage;
 
 use function array_any;
 use function trim;
@@ -23,8 +22,6 @@ use function trim;
 /** Executes one conversation turn; pending inputs and scheduling belong to the client. */
 final class Conversation
 {
-    private readonly SessionStore $sessionStore;
-
     private Agent $agent;
 
     private Session $session;
@@ -33,13 +30,11 @@ final class Conversation
 
     public function __construct(
         Agent $agent,
-        ?SessionStore $sessionStore = null,
+        private readonly SessionStore $sessionStore,
         ?Session $session = null,
         private readonly ?StopSignal $stopSignal = null,
         private readonly UserMessageProcessorInterface $userMessageProcessors = new UserMessageProcessors(),
     ) {
-        $this->sessionStore = $sessionStore ?? new SessionStore(new InMemoryStorage(), 'local');
-
         if ($session === null) {
             if ($agent->getThreadId() !== null && $agent->getChatHistory()->getMessages() !== []) {
                 throw new InvalidArgumentException('An Agent with existing messages requires an explicit Session.');
