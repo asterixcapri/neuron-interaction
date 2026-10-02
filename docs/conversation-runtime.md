@@ -4,6 +4,10 @@ Conversation executes one message in a Session and returns Neuron's
 response stream. React and Neuron TUI are frontends: they own input, pending
 messages, presentation and the policy for starting the next turn.
 
+Every Conversation requires an Agent and a SessionStore. Without an explicit
+initial Session, construction creates a new Session in that Store. Use a
+SessionStore backed by InMemoryStorage for process-local conversations.
+
 History presentation follows the same boundary. Core stores and returns native
 Neuron messages; each frontend chooses visible content and correlates tools for
 its display. Neuron TUI projects directly into terminal entries using native
@@ -54,11 +58,19 @@ The live preview and the saved Agent History are separate representations.
 ## TUI script
 
 ```php
-use NeuronInteraction\Conversation;
 use NeuronTui\Tui;
 
-Tui::make(new Conversation($agent, $sessionStore))->run();
+Tui::make($agent)
+    ->setSessionStore($sessionStore)
+    ->run();
 ```
+
+The TUI constructs its Conversation at startup, using a default in-memory
+SessionStore unless `setSessionStore()` supplies one. An explicit initial Session
+requires an explicit Store. Initial Session, stop signal and message processing
+are configured through `setSession()`,
+`setStopSignal()` and `setUserMessageProcessors()` before `run()`. The host
+does not construct or retain the TUI-owned Conversation.
 
 Internally the TUI shows original input immediately and clears the composer.
 On its next tick it submits the head message, reads the native stream in an Amp

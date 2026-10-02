@@ -41,7 +41,7 @@ use NeuronInteraction\Message\UserMessageProcessors;
 $processing = (new UserMessageProcessors())
     ->addProcessor($first)
     ->addProcessor([$second]);
-$conversation = new Conversation($agent, userMessageProcessors: $processing);
+$conversation = new Conversation($agent, $sessionStore, userMessageProcessors: $processing);
 $stream = $conversation->submitMessage($submitted);
 foreach ($stream as $chunk) {
     // Present the native Neuron output.
