@@ -1,6 +1,6 @@
-# ConversationRuntime and the frontend/backend boundary
+# Conversation and the frontend/backend boundary
 
-ConversationRuntime executes one message in a Session and returns Neuron's
+Conversation executes one message in a Session and returns Neuron's
 response stream. React and Neuron TUI are frontends: they own input, pending
 messages, presentation and the policy for starting the next turn.
 
@@ -15,11 +15,11 @@ ToolCall, without core MessageEntry, ToolEntry or ToolData wrappers.
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Conversation\ConversationRuntime;
+use NeuronInteraction\Conversation;
 
 // $agent is configured by the host; $sessionStore belongs to the current user.
-$runtime = new ConversationRuntime($agent, $sessionStore, session: $session);
-$stream = $runtime->submitMessage(new UserMessage('Analyse this file'));
+$conversation = new Conversation($agent, $sessionStore, session: $session);
+$stream = $conversation->submitMessage(new UserMessage('Analyse this file'));
 foreach ($stream as $chunk) {
     if ($chunk instanceof TextChunk) {
         echo $chunk->content;
@@ -34,7 +34,7 @@ delivered as it arrives. Text, tools, reasoning and other native output retain
 identity and ordering. If the host configures a Neuron stream adapter, its output
 also passes through without a second conversion.
 
-An unstarted stream does not execute the Agent. ConversationRuntime exposes no
+An unstarted stream does not execute the Agent. Conversation exposes no
 isBusy() and does not enforce execution admission. TUI scheduling coordinates its
 own turns; web applications choose their own session concurrency policy. Neuron
 may impose its own execution constraints. Errors propagate unchanged, without retry.
@@ -54,10 +54,10 @@ The live preview and the saved Agent History are separate representations.
 ## TUI script
 
 ```php
-use NeuronInteraction\Conversation\ConversationRuntime;
+use NeuronInteraction\Conversation;
 use NeuronTui\Tui;
 
-Tui::make(new ConversationRuntime($agent, $sessionStore))->run();
+Tui::make(new Conversation($agent, $sessionStore))->run();
 ```
 
 Internally the TUI shows original input immediately and clears the composer.
@@ -121,15 +121,15 @@ wire vocabulary rather than a chat-core event protocol.
 use NeuronAI\Agent\Adapters\AgentChunkAdapter;
 use NeuronAI\Workflow\Streaming\ProtocolEvent;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Conversation\ConversationRuntime;
+use NeuronInteraction\Conversation;
 
-$runtime = new ConversationRuntime(
+$conversation = new Conversation(
     $agent,
     $sessionStore,
     session: $session,
     stopSignal: $stopSignal,
 );
-$stream = $runtime->submitMessage(new UserMessage($text));
+$stream = $conversation->submitMessage(new UserMessage($text));
 $adapter = new AgentChunkAdapter();
 
 // Inside the framework's streaming-response callback:
@@ -194,7 +194,7 @@ Collections remain explicitly mounted and invoke Commands::run() with a client
 Adapter. Availability belongs to the frontend: TUI suggestions hide ordinary
 Commands while busy and its Adapter checks current state before dispatch, including
 later Selection choices. TUI counts its locally reserved turn as busy before
-consumption. ConversationRuntime exposes no Command dispatch or availability
+consumption. Conversation exposes no Command dispatch or availability
 methods or busy flag; it validates Session ownership directly.
 An active stream retains its captured Agent/Session even if a supported operation
 selects a replacement for later execution.

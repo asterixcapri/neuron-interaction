@@ -300,12 +300,12 @@ composer cs
 The Host Application configures a Neuron Agent and composes a runtime:
 
 ```php
-use NeuronInteraction\Conversation\ConversationRuntime;
+use NeuronInteraction\Conversation;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 
-$runtime = new ConversationRuntime($agent, $sessionStore, userMessageProcessors: $processors);
-$stream = $runtime->submitMessage(new UserMessage('Hello'));
+$conversation = new Conversation($agent, $sessionStore, userMessageProcessors: $processors);
+$stream = $conversation->submitMessage(new UserMessage('Hello'));
 foreach ($stream as $chunk) {
     if ($chunk instanceof TextChunk) {
         echo $chunk->content;
@@ -331,5 +331,5 @@ stop during execution. The host must wire the same signal into Neuron's stoppabl
 HTTP client. Separate requests can signal shared storage directly; disconnecting
 the frontend alone does not guarantee cancellation.
 
-See [ConversationRuntime and the frontend/backend boundary](docs/conversation-runtime.md)
+See [Conversation and the frontend/backend boundary](docs/conversation-runtime.md)
 for TUI, React/controller examples, lifecycle and response-stop limits.

@@ -12,7 +12,7 @@ use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
-use NeuronInteraction\Conversation\ConversationRuntime;
+use NeuronInteraction\Conversation;
 use NeuronInteraction\Message\UserMessageProcessorInterface;
 use NeuronInteraction\Message\UserMessageProcessors;
 use PHPUnit\Framework\TestCase;
@@ -28,13 +28,13 @@ final class UserMessagePreparationTest extends TestCase
         $second = new PreparationRecorder('B');
         $processors = (new UserMessageProcessors())->addProcessor([$first, $second]);
         $provider = new FakeAIProvider(new AssistantMessage('One'), new AssistantMessage('Two'), new AssistantMessage('Three'));
-        $runtime = new ConversationRuntime((new Agent())->setAiProvider($provider), userMessageProcessors: $processors);
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), userMessageProcessors: $processors);
         $original = new UserMessage('First');
         $original->addMetadata('origin', 'human');
-        $firstStream = $runtime->submitMessage($original);
-        $secondStream = $runtime->submitMessage(new UserMessage('Second'));
-        $promptStream = $runtime->submitMessage(new UserMessage('Raw command'));
-        self::assertSame($processors, $runtime->userMessageProcessors());
+        $firstStream = $conversation->submitMessage($original);
+        $secondStream = $conversation->submitMessage(new UserMessage('Second'));
+        $promptStream = $conversation->submitMessage(new UserMessage('Raw command'));
+        self::assertSame($processors, $conversation->userMessageProcessors());
         self::assertSame('First', $original->getContent());
         $before = $provider->getRecorded();
         self::assertSame([], $before);
@@ -67,11 +67,11 @@ final class UserMessagePreparationTest extends TestCase
             }
         };
         $provider = new FakeAIProvider();
-        $runtime = new ConversationRuntime((new Agent())->setAiProvider($provider), userMessageProcessors: $processor);
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), userMessageProcessors: $processor);
         foreach (['fail', 'empty'] as $text) {
             $original = new UserMessage($text);
             try {
-                $runtime->submitMessage($original);
+                $conversation->submitMessage($original);
                 self::fail('Expected rejection');
             } catch (InvalidArgumentException|RuntimeException $exception) {
                 self::assertSame($text === 'fail' ? 'Preparation failed' : 'The prepared user message is empty.', $exception->getMessage());
@@ -95,29 +95,29 @@ final class UserMessagePreparationTest extends TestCase
                 return clone $input;
             }
         };
-        $runtime = new ConversationRuntime((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), userMessageProcessors: $processor);
+        $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), userMessageProcessors: $processor);
         $otherStream = null;
-        $processor->onPrepare = static function () use ($runtime, $processor, &$otherStream): void {
+        $processor->onPrepare = static function () use ($conversation, $processor, &$otherStream): void {
             $processor->onPrepare = null;
-            $otherStream = $runtime->submitMessage(new UserMessage('Other'));
+            $otherStream = $conversation->submitMessage(new UserMessage('Other'));
             $otherStream->rewind();
         };
-        $preparedStream = $runtime->submitMessage(new UserMessage('Preparing'));
+        $preparedStream = $conversation->submitMessage(new UserMessage('Preparing'));
         self::assertNotNull($otherStream);
         iterator_to_array($otherStream);
         $processor->onPrepare = null;
         iterator_to_array($preparedStream);
-        self::assertSame('Preparing', $runtime->agent()->getChatHistory()->getMessages()[2]->getContent());
+        self::assertSame('Preparing', $conversation->agent()->getChatHistory()->getMessages()[2]->getContent());
     }
 
     public function testNonTextAttachmentAndMetadataAreAcceptedWithoutText(): void
     {
         $provider = new FakeAIProvider(new AssistantMessage('Image response'));
-        $runtime = new ConversationRuntime((new Agent())->setAiProvider($provider));
+        $conversation = new Conversation((new Agent())->setAiProvider($provider));
         $image = (new ImageContent('https://example.com/image.png', SourceType::URL))->addMetadata('image', 'original');
         $message = new UserMessage($image);
         $message->addMetadata('origin', 'attachment');
-        iterator_to_array($runtime->submitMessage($message));
+        iterator_to_array($conversation->submitMessage($message));
         self::assertSame($message->jsonSerialize(), $provider->getRecorded()[0]->messages[0]->jsonSerialize());
     }
 }

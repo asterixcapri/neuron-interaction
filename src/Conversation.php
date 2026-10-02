@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace NeuronInteraction\Conversation;
+namespace NeuronInteraction;
 
 use Generator;
 use InvalidArgumentException;
@@ -21,7 +21,7 @@ use function array_any;
 use function trim;
 
 /** Executes one conversation turn; pending inputs and scheduling belong to the client. */
-final class ConversationRuntime
+final class Conversation
 {
     private readonly SessionStore $sessionStore;
 
