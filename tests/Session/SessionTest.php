@@ -15,10 +15,10 @@ use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Tools\ToolCall;
+use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
-use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
@@ -29,7 +29,6 @@ use function glob;
 use function is_dir;
 use function random_bytes;
 use function rmdir;
-use function str_repeat;
 use function sys_get_temp_dir;
 use function unlink;
 
@@ -110,10 +109,11 @@ final class SessionTest extends TestCase
             ->setCallId('call-1')
             ->setResult('diagram');
 
-        SessionHistory::of($history)->addMessage($question);
-        SessionHistory::of($history)->addMessage($answer);
-        SessionHistory::of($history)->addMessage(new ToolCallMessage(tools: [$tool]));
-        SessionHistory::of($history)->addMessage(new ToolResultMessage([$result]));
+        $messageStore = new SessionMessageStore($storage, 'sessions', 'local-user');
+        $messageStore->append($history->getKey(), $question);
+        $messageStore->append($history->getKey(), $answer);
+        $messageStore->append($history->getKey(), new ToolCallMessage(tools: [$tool]));
+        $messageStore->append($history->getKey(), new ToolResultMessage([$result]));
 
         $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
 
@@ -142,12 +142,13 @@ final class SessionTest extends TestCase
         $storage = new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
         $other = $sessionStore->create();
-        SessionHistory::of($other)->addMessage(new UserMessage('Untouched'));
+        $messageStore = new SessionMessageStore($storage, 'sessions', 'local-user');
+        $messageStore->append($other->getKey(), new UserMessage('Untouched'));
         $history = $sessionStore->create();
-        SessionHistory::of($history)->addMessage(new UserMessage('First'));
+        $messageStore->append($history->getKey(), new UserMessage('First'));
         $first = $sessionStore->get($history->getKey());
         self::assertNotNull($first);
-        SessionHistory::of($history)->addMessage(new AssistantMessage('Second'));
+        $messageStore->append($history->getKey(), new AssistantMessage('Second'));
         self::assertCount(2, $first->getMessages());
         $current = $sessionStore->get($history->getKey());
         self::assertNotNull($current);
@@ -158,14 +159,16 @@ final class SessionTest extends TestCase
     }
 
     #[DataProvider('storageKinds')]
-    public function testTrimmingPersistsTheHistoryNeuronAiKeeps(bool $files): void
+    public function testArchivedMessagesRemainAvailableWhenReopeningTheSession(bool $files): void
     {
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
-        SessionHistory::of($history)->addMessage(new UserMessage('Discarded'));
-        SessionHistory::of($history)->addMessage((new AssistantMessage('Discarded answer'))->setUsage(new Usage(48000, 1000)));
-        $question = str_repeat('Next question ', 2000);
-        SessionHistory::of($history)->addMessage(new UserMessage($question));
+        $messages = new SessionMessageStore($storage, 'sessions', 'local-user');
+        $messages->append($history->getKey(), new UserMessage('Earlier question'));
+        $messages->append($history->getKey(), new AssistantMessage('Earlier answer'));
+        $question = 'Next question';
+        $messages->append($history->getKey(), new UserMessage($question));
+        $messages->archive($history->getKey(), 2);
 
         $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
         self::assertNotNull($reopened);
@@ -174,7 +177,7 @@ final class SessionTest extends TestCase
             [$question],
             array_map(
                 static fn(Message $message): ?string => $message->getContent(),
-                SessionHistory::of($reopened)->getMessages(),
+                (new SessionMessageStore($files ? new FileStorage($this->directory) : $storage, 'sessions', 'local-user'))->loadActive($reopened->getKey()),
             ),
         );
     }
@@ -184,9 +187,10 @@ final class SessionTest extends TestCase
     {
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
-        SessionHistory::of($history)->addMessage(new UserMessage('Remove me'));
+        $messageStore = new SessionMessageStore($storage, 'sessions', 'local-user');
+        $messageStore->append($history->getKey(), new UserMessage('Remove me'));
 
-        SessionHistory::of($history)->flushAll();
+        $messageStore->clear($history->getKey());
 
         $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
         self::assertNotNull($reopened);

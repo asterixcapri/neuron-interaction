@@ -6,14 +6,13 @@ namespace NeuronInteraction\Tests\Session;
 
 use InvalidArgumentException;
 use NeuronAI\Chat\Messages\AssistantMessage;
-use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Storage\StorageInterface;
-use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -23,7 +22,6 @@ use function glob;
 use function is_dir;
 use function random_bytes;
 use function rmdir;
-use function str_repeat;
 use function sys_get_temp_dir;
 use function unlink;
 
@@ -70,7 +68,8 @@ final class SessionMetadataTest extends TestCase
         $initial = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice'))->get($session->getKey());
         self::assertNotNull($initial);
         self::assertSame($session->getMetadata(), $initial->getMetadata());
-        SessionHistory::of($session)->addMessage(new UserMessage('Opening title'));
+        $messageStore = new SessionMessageStore($storage, 'sessions', 'alice');
+        $messageStore->append($session->getKey(), new UserMessage('Opening title'));
         $lastUsed = $store->list()[0]->getLastUsedAt();
         $session->setMetadata('projectId', 'beta');
         $session->setMetadata('branchName', 'main');
@@ -89,23 +88,25 @@ final class SessionMetadataTest extends TestCase
     }
 
     #[DataProvider('storageKinds')]
-    public function testHistoryAddingTrimmingAndClearingPreserveMetadata(bool $files): void
+    public function testAppendingArchivingAndClearingPreserveMetadata(bool $files): void
     {
         $storage = $this->storage($files);
         $store = new SessionStore($storage, 'alice');
         $session = $store->create(['projectId' => 'alpha']);
-        SessionHistory::of($session)->addMessage(new UserMessage('Old question'));
-        SessionHistory::of($session)->addMessage((new AssistantMessage('Old answer'))->setUsage(new Usage(48000, 1000)));
-        $question = str_repeat('Next question ', 2000);
-        SessionHistory::of($session)->addMessage(new UserMessage($question));
+        $messages = new SessionMessageStore($storage, 'sessions', 'alice');
+        $messages->append($session->getKey(), new UserMessage('Old question'));
+        $messages->append($session->getKey(), new AssistantMessage('Old answer'));
+        $question = 'Next question';
+        $messages->append($session->getKey(), new UserMessage($question));
+        $messages->archive($session->getKey(), 2);
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
         $reopened = $fresh->get($session->getKey());
         self::assertNotNull($reopened);
         self::assertSame(['projectId' => 'alpha'], $reopened->getMetadata());
         self::assertCount(3, $reopened->getMessages());
-        self::assertCount(1, SessionHistory::of($reopened)->getMessages());
+        self::assertCount(1, $messages->loadActive($session->getKey()));
         self::assertSame($question, $reopened->getMessages()[2]->getContent());
-        SessionHistory::of($reopened)->flushAll();
+        $messages->clear($reopened->getKey());
         $cleared = $fresh->get($session->getKey());
         self::assertNotNull($cleared);
         self::assertSame([], $cleared->getMessages());
@@ -119,17 +120,18 @@ final class SessionMetadataTest extends TestCase
         $storage = $this->storage($files);
         $store = new SessionStore($storage, 'alice');
         $first = $store->create(['projectId' => 'alpha', 'branchName' => 'main', 'extra' => 'allowed', 'userId' => 'bob']);
-        SessionHistory::of($first)->addMessage(new UserMessage('First title'));
+        $messageStore = new SessionMessageStore($storage, 'sessions', 'alice');
+        $messageStore->append($first->getKey(), new UserMessage('First title'));
         $first->setTitle('First title');
         $second = $store->create(['projectId' => 'alpha', 'branchName' => 'main']);
-        SessionHistory::of($second)->addMessage(new UserMessage('Second title'));
+        $messageStore->append($second->getKey(), new UserMessage('Second title'));
         $second->setTitle('Second title');
         $store->create(['projectId' => 'alpha', 'branchName' => 'main']);
-        SessionHistory::of($store->create(['projectId' => 'alpha']))->addMessage(new UserMessage('Missing branch'));
-        SessionHistory::of($store->create(['projectId' => 'alpha', 'branchName' => 'Main']))->addMessage(new UserMessage('Different case'));
-        SessionHistory::of($store->create(['projectId' => 'alpha', 'branchName' => 'main ']))->addMessage(new UserMessage('Trailing space'));
-        SessionHistory::of((new SessionStore($storage, 'bob'))->create(['projectId' => 'alpha', 'branchName' => 'main', 'userId' => 'bob']))->addMessage(new UserMessage('Another owner'));
-        SessionHistory::of($first)->addMessage(new AssistantMessage('Latest answer'));
+        $messageStore->append($store->create(['projectId' => 'alpha'])->getKey(), new UserMessage('Missing branch'));
+        $messageStore->append($store->create(['projectId' => 'alpha', 'branchName' => 'Main'])->getKey(), new UserMessage('Different case'));
+        $messageStore->append($store->create(['projectId' => 'alpha', 'branchName' => 'main '])->getKey(), new UserMessage('Trailing space'));
+        (new SessionMessageStore($storage, 'sessions', 'bob'))->append((new SessionStore($storage, 'bob'))->create(['projectId' => 'alpha', 'branchName' => 'main', 'userId' => 'bob'])->getKey(), new UserMessage('Another owner'));
+        $messageStore->append($first->getKey(), new AssistantMessage('Latest answer'));
         $filter = ['projectId' => 'alpha', 'branchName' => 'main'];
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
         self::assertSame(['First title', 'Second title'], array_map(static fn(SessionSummary $summary): ?string => $summary->getTitle(), $fresh->list($filter)));
