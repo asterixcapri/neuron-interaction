@@ -10,8 +10,8 @@ use NeuronAI\Chat\Messages\UserMessage;
 interface UserMessageProcessorInterface
 {
     /**
-     * Prepare ordinary submitted input before it is queued for the Agent.
-     * Commands and their prepared prompts bypass this method.
+     * Prepare a submitted message before it is sent to the Agent.
+     * This includes prompts produced by Commands; leave already expanded content intact.
      * Throw to reject submission; the caller decides how to report the error.
      * Return a new message without modifying the input or its content blocks.
      */
