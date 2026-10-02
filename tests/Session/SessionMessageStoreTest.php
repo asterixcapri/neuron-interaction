@@ -24,8 +24,9 @@ final class SessionMessageStoreTest extends TestCase
 {
     public function testArchivingRetainsMessagesAndAppendIsIdempotent(): void
     {
-        $session = (new SessionStore(new InMemoryStorage(), 'alice'))->create();
-        $store = $session->messageStore();
+        $storage = new InMemoryStorage();
+        $session = (new SessionStore($storage, 'alice'))->create();
+        $store = new SessionMessageStore($storage, 'sessions', 'alice');
         $threadId = $session->getKey();
         $first = new UserMessage('First');
         $second = new AssistantMessage('Second');
@@ -61,10 +62,12 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testStructuredToolErrorsRoundTrip(): void
     {
-        $session = (new SessionStore(new InMemoryStorage(), 'alice'))->create();
+        $storage = new InMemoryStorage();
+        $session = (new SessionStore($storage, 'alice'))->create();
+        $store = new SessionMessageStore($storage, 'sessions', 'alice');
         $call = (new ToolCall(name: 'lookup', callId: 'call-1'))->setResult(ToolOutput::error('Invalid input'));
-        $session->messageStore()->append($session->getKey(), new ToolResultMessage([$call]));
-        $message = $session->messageStore()->loadAll($session->getKey())[0];
+        $store->append($session->getKey(), new ToolResultMessage([$call]));
+        $message = $store->loadAll($session->getKey())[0];
         self::assertInstanceOf(ToolResultMessage::class, $message);
         $result = $message->getToolCalls()[0]->getResult();
         self::assertInstanceOf(ToolOutput::class, $result);
@@ -87,9 +90,9 @@ final class SessionMessageStoreTest extends TestCase
         $first = $sessions->create();
         $second = $sessions->create();
         $provider = new FakeAIProvider(new AssistantMessage('First answer'), new AssistantMessage('Second answer'));
-        $agent = $first->bindTo((new Agent())->setAiProvider($provider));
+        $agent = $first->bindToAgent((new Agent())->setAiProvider($provider));
         $agent->chat(new UserMessage('First question'));
-        $replacement = $second->bindTo($agent);
+        $replacement = $second->bindToAgent($agent);
         self::assertNotSame($agent, $replacement);
         self::assertSame($first->getKey(), $agent->getThreadId());
         self::assertSame($second->getKey(), $replacement->getThreadId());
@@ -104,7 +107,7 @@ final class SessionMessageStoreTest extends TestCase
         $session = (new SessionStore(new InMemoryStorage(), 'alice'))->create();
         $provider = new FakeAIProvider();
         $original = (new Agent())->setAiProvider($provider)->setContextWindow(PHP_INT_MAX);
-        $bound = $session->bindTo($original);
+        $bound = $session->bindToAgent($original);
         self::assertNotSame($original, $bound);
         self::assertNull($original->getThreadId());
         self::assertSame($provider, $bound->getProvider());
@@ -118,14 +121,16 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testArchivedConversationsRemainListedAndReadableThroughTheSession(): void
     {
-        $sessions = new SessionStore(new InMemoryStorage(), 'alice');
+        $storage = new InMemoryStorage();
+        $sessions = new SessionStore($storage, 'alice');
         $session = $sessions->create();
+        $store = new SessionMessageStore($storage, 'sessions', 'alice');
         $message = new UserMessage('Saved subject');
-        $session->messageStore()->append($session->getKey(), $message);
-        $session->messageStore()->archive($session->getKey(), 1);
-        self::assertSame([], $session->bindTo(new Agent())->getChatHistory()->getMessages());
+        $store->append($session->getKey(), $message);
+        $store->archive($session->getKey(), 1);
+        self::assertSame([], $session->bindToAgent(new Agent())->getChatHistory()->getMessages());
         self::assertEquals([$message], $session->getMessages());
-        self::assertSame($session->getKey(), $sessions->summaries()[0]->key);
+        self::assertSame($session->getKey(), $sessions->list()[0]->getKey());
     }
 
 }

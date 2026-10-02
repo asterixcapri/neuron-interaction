@@ -94,7 +94,7 @@ class FakeCommandAdapter implements CommandAdapterInterface
 
     public function useAgent(Agent $agent): void
     {
-        $this->answering = $this->session->bindTo($agent);
+        $this->answering = $this->session->bindToAgent($agent);
     }
 
     public function session(): Session
@@ -104,11 +104,11 @@ class FakeCommandAdapter implements CommandAdapterInterface
 
     public function useSession(Session $session): void
     {
-        $selected = $this->collection->read($session->getKey());
+        $selected = $this->collection->get($session->getKey());
         if ($selected === null) {
             throw new InvalidArgumentException('The selected Session does not belong to this SessionStore.');
         }
-        $agent = $selected->bindTo($this->answering);
+        $agent = $selected->bindToAgent($this->answering);
         $this->session = $selected;
         $this->answering = $agent;
     }

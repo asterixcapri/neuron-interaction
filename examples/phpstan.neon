@@ -1,0 +1,8 @@
+parameters:
+    level: max
+    tmpDir: .phpstan.cache
+    stubFiles:
+        - ../phpstan/neuron-history.stub
+    paths:
+        - src
+        - bin

@@ -11,10 +11,10 @@ use InvalidArgumentException;
 final readonly class SessionSummary
 {
     public function __construct(
-        public string $key,
-        public DateTimeImmutable $lastUsedAt,
-        public ?string $title,
-        public ?int $size = null,
+        private string $key,
+        private DateTimeImmutable $lastUsedAt,
+        private ?string $title,
+        private ?int $size = null,
     ) {
         if ($this->size !== null && $this->size < 0) {
             throw new InvalidArgumentException(
@@ -22,4 +22,25 @@ final readonly class SessionSummary
             );
         }
     }
+
+    public function getKey(): string
+    {
+        return $this->key;
+    }
+
+    public function getTitle(): ?string
+    {
+        return $this->title;
+    }
+
+    public function getLastUsedAt(): DateTimeImmutable
+    {
+        return $this->lastUsedAt;
+    }
+
+    public function getSize(): ?int
+    {
+        return $this->size;
+    }
+
 }

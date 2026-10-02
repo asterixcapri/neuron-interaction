@@ -64,8 +64,8 @@ final class SessionStoreTest extends TestCase
         SessionHistory::of($first)->addMessage(new UserMessage('First'));
         SessionHistory::of($second)->addMessage(new UserMessage('Second'));
         $keys = array_map(
-            static fn(SessionSummary $session): string => $session->key,
-            $sessionStore->summaries(),
+            static fn(SessionSummary $session): string => $session->getKey(),
+            $sessionStore->list(),
         );
 
         self::assertCount(2, array_unique($keys));
@@ -81,8 +81,8 @@ final class SessionStoreTest extends TestCase
         $sessionStore = new SessionStore($storage, 'local-user');
         $key = $sessionStore->create()->getKey();
 
-        self::assertSame([], $sessionStore->summaries());
-        $resumed = $sessionStore->read($key);
+        self::assertSame([], $sessionStore->list());
+        $resumed = $sessionStore->get($key);
         self::assertNotNull($resumed);
         self::assertSame($key, $resumed->getKey());
         self::assertSame([], $resumed->getMessages());
@@ -100,11 +100,11 @@ final class SessionStoreTest extends TestCase
         $reopened = new SessionStore($files
             ? new FileStorage($this->directory)
             : $storage, 'local-user');
-        $listed = $reopened->summaries();
+        $listed = $reopened->list();
 
         self::assertCount(1, $listed);
-        self::assertSame('Written earlier', $listed[0]->title);
-        $session = $reopened->read($listed[0]->key);
+        self::assertSame('Written earlier', $listed[0]->getTitle());
+        $session = $reopened->get($listed[0]->getKey());
         self::assertNotNull($session);
         self::assertSame('Written earlier', $session->getMessages()[0]->getContent());
     }
@@ -129,17 +129,17 @@ final class SessionStoreTest extends TestCase
         self::assertSame(
             ['The newer subject', 'The older subject'],
             array_map(
-                static fn(SessionSummary $session): ?string => $session->title,
-                $sessionStore->summaries(),
+                static fn(SessionSummary $session): ?string => $session->getTitle(),
+                $sessionStore->list(),
             ),
         );
 
         SessionHistory::of($first)->addMessage(new UserMessage('A later question'));
-        $listed = $sessionStore->summaries();
+        $listed = $sessionStore->list();
 
-        self::assertSame('The older subject', $listed[0]->title);
-        self::assertGreaterThan($listed[1]->lastUsedAt, $listed[0]->lastUsedAt);
-        self::assertGreaterThan(0, $listed[0]->size);
+        self::assertSame('The older subject', $listed[0]->getTitle());
+        self::assertGreaterThan($listed[1]->getLastUsedAt(), $listed[0]->getLastUsedAt());
+        self::assertGreaterThan(0, $listed[0]->getSize());
     }
 
     public function testUnknownKeysAreRejectedWithoutCreatingAHistory(): void
@@ -147,7 +147,7 @@ final class SessionStoreTest extends TestCase
         $storage = new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
 
-        self::assertNull($sessionStore->read('unknown'));
+        self::assertNull($sessionStore->get('unknown'));
 
         self::assertNull($storage->read('sessions', 'unknown'));
         self::assertSame([], iterator_to_array($storage->entries('sessions')));
@@ -164,9 +164,9 @@ final class SessionStoreTest extends TestCase
             new ImageContent('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', SourceType::BASE64, 'image/png'),
         ]));
 
-        $withoutText = $sessionStore->summaries();
+        $withoutText = $sessionStore->list();
         self::assertCount(1, $withoutText);
-        self::assertNull($withoutText[0]->title);
+        self::assertNull($withoutText[0]->getTitle());
 
         SessionHistory::of($history)->addMessage(new AssistantMessage('Image received'));
         $title = "  A\x00 title\nwith \x1b[31mcolor\x1b[0m "
@@ -178,7 +178,7 @@ final class SessionStoreTest extends TestCase
         SessionHistory::of($history)->addMessage(new AssistantMessage('An answer'));
         SessionHistory::of($history)->addMessage(new UserMessage('Another subject'));
 
-        self::assertNull($sessionStore->summaries()[0]->title);
+        self::assertNull($sessionStore->list()[0]->getTitle());
     }
 
     public function testFileOnlySessionUsesItsFilenameAndCanBeResumed(): void
@@ -188,11 +188,11 @@ final class SessionStoreTest extends TestCase
         $session = $store->create();
         SessionHistory::of($session)->addMessage(new UserMessage(new FileContent('https://example.com/report.pdf', SourceType::URL, 'application/pdf', 'report.pdf')));
         $reopened = new SessionStore(new FileStorage($this->directory), 'local-user');
-        $listed = $reopened->summaries();
+        $listed = $reopened->list();
 
         self::assertCount(1, $listed);
-        self::assertNull($listed[0]->title);
-        $resumed = $reopened->read($listed[0]->key);
+        self::assertNull($listed[0]->getTitle());
+        $resumed = $reopened->get($listed[0]->getKey());
         self::assertNotNull($resumed);
         self::assertInstanceOf(FileContent::class, $resumed->getMessages()[0]->getContentBlocks()[0]);
     }
@@ -216,8 +216,8 @@ final class SessionStoreTest extends TestCase
         sort($keys);
 
         self::assertSame($keys, array_map(
-            static fn(SessionSummary $session): string => $session->key,
-            $sessionStore->summaries(),
+            static fn(SessionSummary $session): string => $session->getKey(),
+            $sessionStore->list(),
         ));
     }
 
@@ -228,12 +228,12 @@ final class SessionStoreTest extends TestCase
         SessionHistory::of($history)->addMessage(new UserMessage('Stored in a file'));
         $history->setTitle('Stored in a file');
         $reopened = new SessionStore(new FileStorage($this->directory), 'local-user');
-        $listed = $reopened->summaries();
+        $listed = $reopened->list();
 
         self::assertCount(1, $listed);
-        self::assertSame($history->getKey(), $listed[0]->key);
-        self::assertSame('Stored in a file', $listed[0]->title);
-        self::assertGreaterThan(0, $listed[0]->size);
+        self::assertSame($history->getKey(), $listed[0]->getKey());
+        self::assertSame('Stored in a file', $listed[0]->getTitle());
+        self::assertGreaterThan(0, $listed[0]->getSize());
     }
 
     public function testLegacyFilesAreNeitherDiscoveredNorMigrated(): void
@@ -244,9 +244,9 @@ final class SessionStoreTest extends TestCase
         $contents = file_get_contents($legacy);
         $sessionStore = new SessionStore(new FileStorage($this->directory), 'local-user');
 
-        self::assertSame([], $sessionStore->summaries());
+        self::assertSame([], $sessionStore->list());
 
-        self::assertNull($sessionStore->read('legacy-key'));
+        self::assertNull($sessionStore->get('legacy-key'));
 
         self::assertFileExists($legacy);
         self::assertSame($contents, file_get_contents($legacy));
@@ -265,23 +265,23 @@ final class SessionStoreTest extends TestCase
         $key = $session->getKey();
 
         self::assertSame('alice@example.com', $session->getUserId());
-        self::assertNotNull($alice->read($key));
-        self::assertNull($bob->read($key));
+        self::assertNotNull($alice->get($key));
+        self::assertNull($bob->get($key));
         SessionHistory::of($session)->addMessage(new UserMessage('Alice conversation'));
-        self::assertSame([], $bob->summaries());
-        self::assertCount(1, $alice->summaries());
+        self::assertSame([], $bob->list());
+        self::assertCount(1, $alice->list());
         $bob->delete($key);
-        self::assertNotNull($alice->read($key));
+        self::assertNotNull($alice->get($key));
 
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice@example.com');
-        $reopened = $fresh->read($key);
+        $reopened = $fresh->get($key);
         self::assertNotNull($reopened);
         self::assertSame('alice@example.com', $reopened->getUserId());
         self::assertSame('Alice conversation', $reopened->getMessages()[0]->getContent());
         $fresh->delete($key);
         $fresh->delete($key);
-        self::assertNull($alice->read($key));
-        self::assertSame([], $alice->summaries());
+        self::assertNull($alice->get($key));
+        self::assertSame([], $alice->list());
     }
 
     public function testOwnerlessDocumentsAreNotAssignedToTheStoreUser(): void
@@ -289,8 +289,8 @@ final class SessionStoreTest extends TestCase
         $storage = new InMemoryStorage();
         $document = $storage->create('sessions', []);
         $sessionStore = new SessionStore($storage, 'local-user');
-        self::assertNull($sessionStore->read($document->key));
-        self::assertSame([], $sessionStore->summaries());
+        self::assertNull($sessionStore->get($document->key));
+        self::assertSame([], $sessionStore->list());
         $sessionStore->delete($document->key);
         self::assertNotNull($storage->read('sessions', $document->key));
     }
@@ -303,15 +303,15 @@ final class SessionStoreTest extends TestCase
         self::assertNull($session->getTitle());
         SessionHistory::of($session)->addMessage(new UserMessage('ciao'));
         $before = $session->getMessages();
-        $lastUsed = $store->summaries()[0]->lastUsedAt;
-        $reopened = $store->read($session->getKey());
+        $lastUsed = $store->list()[0]->getLastUsedAt();
+        $reopened = $store->get($session->getKey());
         self::assertNotNull($reopened);
 
         $reopened->setTitle('  Configurazione Redis  ');
 
         self::assertSame('Configurazione Redis', $session->getTitle());
-        self::assertSame('Configurazione Redis', $store->summaries()[0]->title);
-        self::assertEquals($lastUsed, $store->summaries()[0]->lastUsedAt);
+        self::assertSame('Configurazione Redis', $store->list()[0]->getTitle());
+        self::assertEquals($lastUsed, $store->list()[0]->getLastUsedAt());
         self::assertEquals($before, $session->getMessages());
     }
 

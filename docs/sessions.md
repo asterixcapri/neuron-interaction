@@ -9,18 +9,18 @@ use NeuronInteraction\Storage\FileStorage;
 $storage = new FileStorage(__DIR__ . '/interaction-state');
 $sessionStore = new SessionStore($storage, 'local-user');
 $agent = Agent::make();
-$agent = $sessionStore->create()->bindTo($agent);
+$agent = $sessionStore->create()->bindToAgent($agent);
 
 // After the Agent has exchanged messages, list recognizable Sessions.
-foreach ($sessionStore->summaries() as $session) {
-    // Render $session->title ?? 'New session'.
+foreach ($sessionStore->list() as $session) {
+    // Render $session->getTitle() ?? 'New session'.
     // Resume a chosen Session by binding the Agent to its thread:
-    // $conversation = $sessionStore->read($session->key);
-    // if ($conversation !== null) { $agent = $conversation->bindTo($agent); }
+    // $conversation = $sessionStore->get($session->getKey());
+    // if ($conversation !== null) { $agent = $conversation->bindToAgent($agent); }
 }
 ```
 
-Host Applications explicitly bind a Session from `create()` or `read($key)`
+Host Applications explicitly bind a Session from `create()` or `get($key)`
 to the Agent when they want that conversation managed by this SessionStore.
 Interaction Adapters keep that Session explicitly: replacing the Agent preserves
 it, while selecting another Session changes the conversation. Neuron TUI creates
@@ -35,13 +35,16 @@ for application-specific persistence. Storage holds namespaced JSON documents
 identified by logical keys. It preserves string metadata together with data;
 `StoredDocument::size()` reports the JSON size of its data.
 
-`SessionStore::create()` creates a distinct empty conversation. `SessionStore::summaries()`
-returns Sessions with user-authored text or attachments, ordered by most recent
+`SessionStore::create()` creates a distinct empty conversation. `SessionStore::list()`
+returns lightweight `SessionSummary` objects for conversations with user-authored
+text or attachments, ordered by most recent
 use and then key. Titles are independent metadata: `Session::getTitle()` returns
 the saved title or null, and `Session::setTitle()` saves a non-blank title without
 changing messages or the last-used time. Summaries expose that same nullable
-title. The Store does not infer titles from messages or generate them.
-Empty sessions remain excluded. `SessionStore::read($key)`
+title through `getTitle()`. A summary also exposes `getKey()`, `getLastUsedAt()`
+and `getSize()`. Its properties are private and immutable. The Store does not
+infer titles from messages or generate them.
+Empty sessions remain excluded. `SessionStore::get($key)`
 reopens its stored conversation or returns null for absent or other-user keys.
 `SessionStore::delete($key)` deletes only the current user’s Session and is a
 no-op when absent. Sessions expose `getKey()` and `getUserId()`; History updates
@@ -58,7 +61,7 @@ $session = $sessionStore->create(['projectId' => 'alpha', 'branchName' => 'main'
 $session->setMetadata('branchName', 'release');
 $metadata = $session->getMetadata(); // The complete application metadata map.
 $session->removeMetadata('branchName');
-$matches = $sessionStore->summaries(['projectId' => 'alpha']);
+$matches = $sessionStore->list(['projectId' => 'alpha']);
 ```
 
 Multiple filters are combined with AND using exact string equality. Missing
@@ -104,12 +107,12 @@ messages, from storage on every call. Existing Session instances therefore see
 messages saved by later turns. Listings include conversations whose user messages
 have been archived.
 
-`bindTo()` returns an Agent copy bound to the Session key and message store. Always
+`bindToAgent()` returns an Agent copy bound to the Session key and message store. Always
 keep the returned Agent. The provider, tools and context window remain configured
 on the Agent; the Session does not choose a token budget.
 
 ```php
-$agent = $session->bindTo($agent);
+$agent = $session->bindToAgent($agent);
 $conversation = $session->getMessages(); // All saved messages, including archives.
 $context = $agent->getChatHistory()->getMessages(); // Active model context.
 ```

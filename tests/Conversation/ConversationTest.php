@@ -166,7 +166,7 @@ final class ConversationTest extends TestCase
         iterator_to_array($stream);
         self::assertSame('Selected response', $stream->getReturn()->getMessage()?->getContent());
         self::assertSame([], $conversation->agent()->getChatHistory()->getMessages());
-        $saved = $store->read($selected->getKey());
+        $saved = $store->get($selected->getKey());
         self::assertNotNull($saved);
         self::assertCount(2, $saved->getMessages());
         self::assertSame($original->getKey(), $conversation->session()->getKey());

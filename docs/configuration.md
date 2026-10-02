@@ -94,5 +94,3 @@ are neither discovered nor imported, overwritten or deleted by this API. A
 previously saved model in a named configuration therefore does not initialize
 the new preference; the Host Application uses its fallback until a new choice
 is written. Migration is a separate application decision.
-
-Run `php examples/configuration.php` for a file-backed example.

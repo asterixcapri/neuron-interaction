@@ -61,7 +61,7 @@ final class CommandMountingTest extends TestCase
         $previous = $adapter->sessionStore()->create();
         SessionHistory::of($previous)->addMessage(new UserMessage('Keep this conversation'));
         $adapter->useSession($previous);
-        $key = $adapter->sessionStore()->summaries()[0]->key;
+        $key = $adapter->sessionStore()->list()[0]->getKey();
 
         $execution = $commands->run('/clear', '', $adapter);
 
@@ -73,7 +73,7 @@ final class CommandMountingTest extends TestCase
         self::assertSame('completed', $execution->status);
         self::assertNotSame($previous, $adapter->agent()->getChatHistory());
         self::assertSame([], $adapter->agent()->getChatHistory()->getMessages());
-        $reopened = $adapter->sessionStore()->read($key);
+        $reopened = $adapter->sessionStore()->get($key);
         self::assertNotNull($reopened);
         self::assertSame('Keep this conversation', $reopened->getMessages()[0]->getContent());
     }

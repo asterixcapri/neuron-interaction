@@ -37,7 +37,7 @@ final readonly class ResumeCommand implements CommandInterface
     public function run(CommandAdapterInterface $adapter, string $value): void
     {
         if ($value !== '') {
-            $session = $adapter->sessionStore()->read($value);
+            $session = $adapter->sessionStore()->get($value);
 
             if ($session === null) {
                 $adapter->error('No Session is named by that key.');
@@ -50,7 +50,7 @@ final readonly class ResumeCommand implements CommandInterface
             return;
         }
 
-        $sessions = $adapter->sessionStore()->summaries();
+        $sessions = $adapter->sessionStore()->list();
 
         if ($sessions === []) {
             $adapter->warn('There is no earlier Session to return to yet.');
@@ -63,8 +63,8 @@ final readonly class ResumeCommand implements CommandInterface
 
         foreach ($sessions as $session) {
             $options[] = new SelectionOption(
-                $session->key,
-                $session->title ?? 'New session',
+                $session->getKey(),
+                $session->getTitle() ?? 'New session',
                 $this->formatDescription($session, $now),
             );
         }
@@ -76,12 +76,13 @@ final readonly class ResumeCommand implements CommandInterface
         SessionSummary $session,
         DateTimeImmutable $now,
     ): string {
-        $relativeAge = RelativeTimeFormatter::format($session->lastUsedAt, $now);
+        $relativeAge = RelativeTimeFormatter::format($session->getLastUsedAt(), $now);
 
-        if ($session->size === null) {
+        $size = $session->getSize();
+        if ($size === null) {
             return $relativeAge;
         }
 
-        return $relativeAge . ' · ' . SizeFormatter::format($session->size);
+        return $relativeAge . ' · ' . SizeFormatter::format($size);
     }
 }

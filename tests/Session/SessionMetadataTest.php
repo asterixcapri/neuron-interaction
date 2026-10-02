@@ -67,25 +67,25 @@ final class SessionMetadataTest extends TestCase
         $store = new SessionStore($storage, 'alice');
         $session = $store->create(['projectId' => 'alpha', 'userId' => 'bob', 'lastUsedAt' => 'application value']);
         self::assertSame(['projectId' => 'alpha', 'userId' => 'bob', 'lastUsedAt' => 'application value'], $session->getMetadata());
-        $initial = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice'))->read($session->getKey());
+        $initial = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice'))->get($session->getKey());
         self::assertNotNull($initial);
         self::assertSame($session->getMetadata(), $initial->getMetadata());
         SessionHistory::of($session)->addMessage(new UserMessage('Opening title'));
-        $lastUsed = $store->summaries()[0]->lastUsedAt;
+        $lastUsed = $store->list()[0]->getLastUsedAt();
         $session->setMetadata('projectId', 'beta');
         $session->setMetadata('branchName', 'main');
         $session->removeMetadata('userId');
         $session->removeMetadata('absent');
-        self::assertEquals($lastUsed, $store->summaries()[0]->lastUsedAt);
+        self::assertEquals($lastUsed, $store->list()[0]->getLastUsedAt());
 
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
-        $reopened = $fresh->read($session->getKey());
+        $reopened = $fresh->get($session->getKey());
         self::assertNotNull($reopened);
         self::assertSame('alice', $reopened->getUserId());
         self::assertSame(['projectId' => 'beta', 'lastUsedAt' => 'application value', 'branchName' => 'main'], $reopened->getMetadata());
         self::assertSame('Opening title', $reopened->getMessages()[0]->getContent());
-        self::assertNull((new SessionStore($storage, 'bob'))->read($session->getKey()));
-        self::assertCount(1, $fresh->summaries(['lastUsedAt' => 'application value']));
+        self::assertNull((new SessionStore($storage, 'bob'))->get($session->getKey()));
+        self::assertCount(1, $fresh->list(['lastUsedAt' => 'application value']));
     }
 
     #[DataProvider('storageKinds')]
@@ -99,14 +99,14 @@ final class SessionMetadataTest extends TestCase
         $question = str_repeat('Next question ', 2000);
         SessionHistory::of($session)->addMessage(new UserMessage($question));
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
-        $reopened = $fresh->read($session->getKey());
+        $reopened = $fresh->get($session->getKey());
         self::assertNotNull($reopened);
         self::assertSame(['projectId' => 'alpha'], $reopened->getMetadata());
         self::assertCount(3, $reopened->getMessages());
         self::assertCount(1, SessionHistory::of($reopened)->getMessages());
         self::assertSame($question, $reopened->getMessages()[2]->getContent());
         SessionHistory::of($reopened)->flushAll();
-        $cleared = $fresh->read($session->getKey());
+        $cleared = $fresh->get($session->getKey());
         self::assertNotNull($cleared);
         self::assertSame([], $cleared->getMessages());
         self::assertSame(['projectId' => 'alpha'], $cleared->getMetadata());
@@ -132,11 +132,11 @@ final class SessionMetadataTest extends TestCase
         SessionHistory::of($first)->addMessage(new AssistantMessage('Latest answer'));
         $filter = ['projectId' => 'alpha', 'branchName' => 'main'];
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
-        self::assertSame(['First title', 'Second title'], array_map(static fn(SessionSummary $summary): ?string => $summary->title, $fresh->summaries($filter)));
-        self::assertSame([], $fresh->summaries(['missingKey' => 'value']));
-        self::assertCount(1, $fresh->summaries(['userId' => 'bob']));
-        self::assertCount(5, $fresh->summaries([]));
-        self::assertEquals($fresh->summaries(), $fresh->summaries([]));
+        self::assertSame(['First title', 'Second title'], array_map(static fn(SessionSummary $summary): ?string => $summary->getTitle(), $fresh->list($filter)));
+        self::assertSame([], $fresh->list(['missingKey' => 'value']));
+        self::assertCount(1, $fresh->list(['userId' => 'bob']));
+        self::assertCount(5, $fresh->list([]));
+        self::assertEquals($fresh->list(), $fresh->list([]));
     }
 
     public function testInvalidMetadataNamesAreRejectedBeforeWriting(): void

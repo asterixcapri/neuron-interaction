@@ -132,7 +132,7 @@ final class SessionTitleGeneratorTest extends TestCase
         SessionHistory::of($session)->addMessage(new UserMessage('Hello'));
 
         for ($turn = 0; $turn < 4; ++$turn) {
-            $reloaded = (new SessionStore($storage, 'local'))->read($session->getKey());
+            $reloaded = (new SessionStore($storage, 'local'))->get($session->getKey());
             self::assertNotNull($reloaded);
             self::assertNull((new SessionTitleGenerator($provider, $reloaded))->generate());
         }
@@ -204,7 +204,7 @@ final class SessionTitleGeneratorTest extends TestCase
         $store = new SessionStore(new InMemoryStorage(), 'local');
         $session = $store->create();
         SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
-        $otherSession = $store->read($session->getKey());
+        $otherSession = $store->get($session->getKey());
         self::assertNotNull($otherSession);
         $requests = new TitleGenerationRequests(['{"title":"Automatic title"}']);
         $requests->onRequest = static fn() => $otherSession->setTitle('Manual title');
@@ -229,7 +229,7 @@ final class SessionTitleGeneratorTest extends TestCase
             self::assertSame('The Session no longer exists.', $error->getMessage());
         }
 
-        self::assertNull($store->read($session->getKey()));
+        self::assertNull($store->get($session->getKey()));
     }
 
     private function provider(TitleGenerationRequests $requests): FakeAIProvider

@@ -33,4 +33,4 @@ return (new Config())
         ],
         'whitespace_after_comma_in_array' => true,
     ])
-    ->setFinder((new Finder())->in(__DIR__)->append([__FILE__]));
+    ->setFinder((new Finder())->in(__DIR__)->exclude('vendor')->append([__FILE__]));

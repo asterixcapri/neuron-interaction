@@ -1,0 +1,49 @@
+{
+    "name": "asterixcapri/neuron-interaction-examples",
+    "description": "Example Host Application for Neuron Interaction.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.4.1",
+        "amphp/http-client": "^5.3",
+        "asterixcapri/neuron-interaction": "1.x-dev",
+        "neuron-core/neuron-ai": "^4.0",
+        "symfony/dotenv": "^8.1"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "..",
+            "options": {
+                "symlink": true,
+                "versions": {
+                    "asterixcapri/neuron-interaction": "1.x-dev"
+                }
+            }
+        }
+    ],
+    "scripts": {
+        "sessions": "php bin/01-multiple-sessions.php",
+        "stan": "phpstan analyse --no-progress --memory-limit=512M",
+        "commands": "php bin/02-commands.php",
+        "selection": "php bin/03-selection.php",
+        "interruption": "php bin/04-interruption.php",
+        "processors": "php bin/05-processors.php",
+        "input-history": "php bin/06-input-history.php",
+        "preferences": "php bin/07-preferences.php"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": {
+            "NeuronInteractionDemo\\": "src/"
+        },
+        "files": [
+            "src/functions.php"
+        ]
+    }
+}

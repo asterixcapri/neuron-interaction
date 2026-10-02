@@ -25,8 +25,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "NeuronInteraction\\Tests\\": "tests/",
-            "NeuronInteraction\\Examples\\": "examples/"
+            "NeuronInteraction\\Tests\\": "tests/"
         }
     },
     "scripts": {

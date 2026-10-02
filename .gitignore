@@ -9,3 +9,10 @@
 .opencode
 /.php-cs-fixer.cache
 /.php-cs-fixer.php
+
+/examples/.env
+/examples/.storage/
+
+/examples/vendor/
+/examples/composer.lock
+/examples/.phpstan.cache/

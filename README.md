@@ -32,7 +32,6 @@ composer require asterixcapri/neuron-interaction:^0.8
 - **Stop signal** shares stop requests across handlers and processes through a signal used by Neuron AI's native stoppable HTTP client.
 - **Input history** records submissions and supports recalling previous inputs.
 - **Commands** provide `/clear`, `/resume`, `/help`, `/exit` and custom behavior.
-- **Backend examples** show how to execute commands and handle user choices across requests.
 - **Configuration** stores user preferences such as the selected model.
 - **User message processing** prepares messages for the Agent and projects them for display.
 
@@ -49,11 +48,11 @@ use NeuronInteraction\Storage\FileStorage;
 $storage = new FileStorage(__DIR__ . '/interaction-state');
 $sessionStore = new SessionStore($storage, 'local-user');
 $agent = Agent::make();
-$agent = $sessionStore->create()->bindTo($agent);
+$agent = $sessionStore->create()->bindToAgent($agent);
 ```
 
-Use `summaries()` to list conversations and `read($key)` to reopen one, then
-bind it with `$agent = $session->bindTo($agent)`. Always keep the returned Agent: binding returns a copy. Supply the current user's
+Use `list()` to list conversations and `get($key)` to reopen one, then
+bind it with `$agent = $session->bindToAgent($agent)`. Always keep the returned Agent: binding returns a copy. Supply the current user's
 identity instead of `local-user`; reads and listings are scoped to that user.
 
 Use `InMemoryStorage` for transient state, or implement `StorageInterface`
@@ -223,32 +222,31 @@ $commands->addCommand(new HelloCommand());
 See the [Command and Adapter reference](docs/commands.md) for custom Adapters,
 mounting, execution outcomes and error handling.
 
-## Backend examples
+## Examples
 
-These examples use [BackendAdapter](examples/BackendAdapter.php) to collect
-Command messages and choices into response data. They run locally without an
-HTTP server, API credentials or model requests.
-
-Each backend example is self-contained and demonstrates one flow:
-
-| Example | What it shows |
-| --- | --- |
-| [help.php](examples/help.php) | Execute Help and print the response. |
-| [exit.php](examples/exit.php) | Ask the application to end the interaction. |
-| [clear.php](examples/clear.php) | Start an empty Session while keeping the previous conversation. |
-| [resume-by-key.php](examples/resume-by-key.php) | Reopen a conversation whose key is already known. |
-| [resume-selection.php](examples/resume-selection.php) | Offer conversations, then receive the user's choice in a second request. |
-
-Run any file after installing development dependencies:
+The examples demonstrate Interaction's advantages around a real Neuron Agent:
+managing multiple Sessions, reusable Commands, Selections, response interruption,
+message processors, Input history and user preferences. They print readable
+messages directly, with every Agent response shown in streaming.
 
 ```bash
-php examples/help.php
-php examples/resume-selection.php
+composer --working-dir=examples install
+# Configure OPENAI_API_KEY in examples/.env (see examples/.env.example).
+composer --working-dir=examples sessions
 ```
 
-In `resume-selection.php`, the first request offers saved conversations. The
-second simulates the user's choice and reopens that conversation with a fresh
-Agent and Adapter. The example provides its own sample data in memory.
+| Run from `examples/` | Demonstrates |
+| --- | --- |
+| `composer sessions` | List Sessions, inspect their messages and switch between independent contexts. |
+| `composer commands` | Mount shared Commands and a custom Command that prompts the Agent. |
+| `composer selection` | Choose a Session through presentation-neutral Selection options. |
+| `composer interruption` | Stop an HTTP response and retain its partial message. |
+| `composer processors` | Expand a file reference for the Agent and project saved content for display. |
+| `composer input-history` | Recall original inputs and recover a draft. |
+| `composer preferences -- Italian` | Persist a preference; run again without arguments to read it. |
+
+Examples have their own Composer dependencies. See the [walkthrough](examples/README.md)
+for setup, expected results and the Host's responsibilities.
 
 ## Configuration
 

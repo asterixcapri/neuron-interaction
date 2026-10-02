@@ -118,39 +118,25 @@ Adapter implementations must replace `say()` with `notify()` and implement
 
 ## Backend Adapter
 
-[BackendAdapter](../examples/BackendAdapter.php) implements every operation of
-`CommandAdapterInterface`. It admits its Commands and collects notices, warnings, expected errors,
-a `Selection`, and the stop effect for one response. Its `afterExecution()`
-returns response data containing those values, the technical status, identifier,
-and any exception message. The `errors` list contains expected failures reported
-by Commands; the singular `error` field contains the execution exception message.
-The caller obtains that response directly from `run()`.
-`promptAgent(UserMessage $prompt)` submits the complete Neuron user message,
-including content blocks and metadata. Commands that only generate text wrap it
-in `new UserMessage($text)`. Adapters must retain attachments when scheduling
-or executing the message.
+A Host Application can implement `CommandAdapterInterface` to present Command
+effects as backend response data. `afterExecution()` receives the technical
+execution status; the Adapter decides how to expose notices, warnings, errors,
+Selections and the request to leave the interaction.
 
-The example delegates `promptAgent()` to a callback supplied by the Host
-Application, with the Agent and complete UserMessage as arguments. Scheduling and response presentation belong to the client;
-Conversation can execute the prompt through submitMessage(). No model request is made by these examples.
+`promptAgent(UserMessage $prompt)` receives a complete Neuron user message,
+including content blocks and metadata. Submit it through the Host's configured
+`Conversation::submitMessage()` so the same processors apply to ordinary inputs
+and Command-generated prompts. The client decides scheduling and presentation
+of the native response stream.
 
-In [resume-selection.php](../examples/resume-selection.php), the first response contains `selection.options` for a
-frontend to display. Each option has a `value` (the Session key), `label` and
-`description`. The script simulates choosing one conversation and submitting its
-key with `/resume` to a fresh Agent and Adapter. Cancelling means making no second
-request. The examples share `InMemoryStorage` within one process; separate backend
-requests can construct `FileStorage` with the same root and a SessionStore scoped
-to the authenticated user.
+To offer a Session choice, invoke `/resume` without arguments and present the
+resulting Selection. Send the chosen option's value as arguments to `/resume`
+in a subsequent request. Restore the Host's active Conversation for each request
+and scope the SessionStore to the authenticated user. Cancelling requires no
+second invocation.
 
-The Host Application supplies its configured Agent and restores the active
-Session when appropriate. Original submitted input is recorded at the Adapter
-boundary; generated prompts and the internal selection continuation are not
-additional typed submissions.
-
-Commands, SessionStore, Input history and Storage are composed directly. There is
-no required application facade, HTTP framework, authentication subsystem,
-worker topology or subagent orchestration. Help and Leave are shared Commands;
-the client decides whether to admit them during a Turn and presents the Picker.
+Record original submitted input at the Adapter; generated prompts and selection
+continuations are not additional typed submissions.
 
 ## Commands during Agent work
 
@@ -167,12 +153,12 @@ and does not enforce restricted controls.
 Implement `useAgent(Agent $agent): void` and `useSession(Session $session): void`
 in custom Adapters. Keep the current Session explicitly alongside the current
 Agent. Expose it through `session(): Session`, which always returns the selected
-conversation. `useAgent()` binds the replacement to that Session through `bindTo()`;
+conversation. `useAgent()` binds the replacement to that Session through `bindToAgent()`;
 `useSession()` binds the current Agent to the selected Session. Retain the returned
 Agent copy in both cases. Validate selected Sessions through the Adapter's
 SessionStore before changing state, so absent and other-user keys cannot be used.
 
-The example BackendAdapter creates an empty Session on startup unless the Host
+The Host creates a `Conversation`, which starts an empty Session unless the Host
 passes `session: $session` together with its matching Store. An Agent with existing
 messages requires an explicit Session, which determines the active conversation.
 Across backend requests, pass that Session again to continue it.

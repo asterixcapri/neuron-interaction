@@ -46,7 +46,7 @@ final readonly class SessionStore
      * @param array<string, string> $metadata
      * @return list<SessionSummary>
      */
-    public function summaries(array $metadata = []): array
+    public function list(array $metadata = []): array
     {
         $sessions = [];
 
@@ -73,15 +73,15 @@ final readonly class SessionStore
         usort(
             $sessions,
             static fn(SessionSummary $one, SessionSummary $other): int
-                => ($other->lastUsedAt <=> $one->lastUsedAt)
-                    ?: ($one->key <=> $other->key),
+                => ($other->getLastUsedAt() <=> $one->getLastUsedAt())
+                    ?: ($one->getKey() <=> $other->getKey()),
         );
 
         return $sessions;
     }
 
     /** Reads only Sessions owned by this Store's user. */
-    public function read(string $key): ?Session
+    public function get(string $key): ?Session
     {
         $document = $this->storage->read(self::NAMESPACE, $key);
 
@@ -94,7 +94,7 @@ final readonly class SessionStore
 
     public function delete(string $key): void
     {
-        if ($this->read($key) !== null) {
+        if ($this->get($key) !== null) {
             $this->storage->delete(self::NAMESPACE, $key);
         }
     }

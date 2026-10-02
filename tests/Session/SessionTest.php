@@ -21,6 +21,7 @@ use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use UnexpectedValueException;
 
 use function array_map;
 use function bin2hex;
@@ -69,6 +70,20 @@ final class SessionTest extends TestCase
         self::assertSame('local-user', $session->getUserId());
     }
 
+    public function testReopeningDefersMessageValidationUntilMessagesAreRead(): void
+    {
+        $storage = new InMemoryStorage();
+        $storage->write('sessions', 'malformed', [42], ['userId' => 'local-user']);
+        $session = (new SessionStore($storage, 'local-user'))->get('malformed');
+
+        self::assertNotNull($session);
+        self::assertSame('malformed', $session->getKey());
+        self::assertSame('local-user', $session->getUserId());
+        $this->expectException(UnexpectedValueException::class);
+        $this->expectExceptionMessage('Every stored Chat History entry must be a JSON object.');
+        $session->getMessages();
+    }
+
     #[DataProvider('storageKinds')]
     public function testMessagesRoundTripWithTheirSupportedContent(bool $files): void
     {
@@ -100,7 +115,7 @@ final class SessionTest extends TestCase
         SessionHistory::of($history)->addMessage(new ToolCallMessage(tools: [$tool]));
         SessionHistory::of($history)->addMessage(new ToolResultMessage([$result]));
 
-        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
 
         self::assertNotNull($reopened);
         $messages = $reopened->getMessages();
@@ -130,14 +145,14 @@ final class SessionTest extends TestCase
         SessionHistory::of($other)->addMessage(new UserMessage('Untouched'));
         $history = $sessionStore->create();
         SessionHistory::of($history)->addMessage(new UserMessage('First'));
-        $first = $sessionStore->read($history->getKey());
+        $first = $sessionStore->get($history->getKey());
         self::assertNotNull($first);
         SessionHistory::of($history)->addMessage(new AssistantMessage('Second'));
         self::assertCount(2, $first->getMessages());
-        $current = $sessionStore->read($history->getKey());
+        $current = $sessionStore->get($history->getKey());
         self::assertNotNull($current);
         self::assertCount(2, $current->getMessages());
-        $untouched = $sessionStore->read($other->getKey());
+        $untouched = $sessionStore->get($other->getKey());
         self::assertNotNull($untouched);
         self::assertSame('Untouched', $untouched->getMessages()[0]->getContent());
     }
@@ -152,7 +167,7 @@ final class SessionTest extends TestCase
         $question = str_repeat('Next question ', 2000);
         SessionHistory::of($history)->addMessage(new UserMessage($question));
 
-        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
         self::assertNotNull($reopened);
         self::assertCount(3, $reopened->getMessages());
         self::assertSame(
@@ -173,7 +188,7 @@ final class SessionTest extends TestCase
 
         SessionHistory::of($history)->flushAll();
 
-        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->read($history->getKey());
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
         self::assertNotNull($reopened);
         self::assertSame(
             [],

@@ -118,16 +118,16 @@ final class InputHistoryTest extends TestCase
 
         $inputs->record(new UserMessage('/summarize'));
         SessionHistory::of($history)->addMessage(new UserMessage('A generated prompt for the Agent'));
-        $key = $sessionStore->summaries()[0]->key;
+        $key = $sessionStore->list()[0]->getKey();
         SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('Another conversation'));
         $inputs->record(new UserMessage('A submitted message'));
-        $sessionStore->read($key);
+        $sessionStore->get($key);
 
         self::assertSame(
             ['/summarize', 'A submitted message'],
             array_map(static fn(UserMessage $message): ?string => $message->getContent(), (new InputHistory($storage))->entries()),
         );
-        self::assertCount(2, $sessionStore->summaries());
+        self::assertCount(2, $sessionStore->list());
     }
 
     #[DataProvider('storageKinds')]

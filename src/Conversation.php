@@ -46,7 +46,7 @@ final class Conversation
         }
 
         $this->session = $session;
-        $this->agent = $session->bindTo($agent);
+        $this->agent = $session->bindToAgent($agent);
     }
 
     public function sessionStore(): SessionStore
@@ -122,13 +122,13 @@ final class Conversation
 
     public function useAgent(Agent $agent): void
     {
-        $this->agent = $this->session->bindTo($agent);
+        $this->agent = $this->session->bindToAgent($agent);
     }
 
     public function useSession(Session $session): void
     {
         $session = $this->ownedSession($session);
-        $this->agent = $session->bindTo($this->agent);
+        $this->agent = $session->bindToAgent($this->agent);
         $this->session = $session;
     }
 
@@ -143,7 +143,7 @@ final class Conversation
 
     private function ownedSession(Session $session): Session
     {
-        return $this->sessionStore->read($session->getKey())
+        return $this->sessionStore->get($session->getKey())
             ?? throw new InvalidArgumentException('The selected Session does not belong to this SessionStore.');
     }
 

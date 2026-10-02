@@ -87,7 +87,7 @@ final class SelectionTest extends TestCase
         SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
         $active = $adapter->sessionStore()->create();
         $adapter->useSession($active);
-        $session = $adapter->sessionStore()->summaries()[0];
+        $session = $adapter->sessionStore()->list()[0];
 
         $first = $commands->run('/return', '', $adapter);
 
@@ -98,7 +98,7 @@ final class SelectionTest extends TestCase
         self::assertCount(1, $adapter->selections);
         $request = $adapter->selections[0];
         self::assertSame('/return', $request->command);
-        self::assertSame($session->key, $request->options[0]->value);
+        self::assertSame($session->getKey(), $request->options[0]->value);
         self::assertSame('New session', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
@@ -116,7 +116,7 @@ final class SelectionTest extends TestCase
         $commands = (new Commands())->addCommand([new ResumeCommand()]);
         $adapter = new FakeCommandAdapter($commands);
         SessionHistory::of($adapter->sessionStore()->create())->addMessage(new UserMessage('Direct resume'));
-        $key = $adapter->sessionStore()->summaries()[0]->key;
+        $key = $adapter->sessionStore()->list()[0]->getKey();
 
         self::assertSame('completed', $commands->run('/resume', $key, $adapter)?->status);
         self::assertSame('Direct resume', $adapter->agent()->getChatHistory()->getMessages()[0]->getContent());

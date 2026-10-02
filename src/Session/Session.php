@@ -26,12 +26,6 @@ final readonly class Session
         private string $userId,
     ) {
         $this->store = new SessionMessageStore($storage, $namespace, $userId);
-        $this->getMessages();
-    }
-
-    public function messageStore(): MessageStoreInterface
-    {
-        return $this->store;
     }
 
     /** @return list<Message> */
@@ -41,7 +35,7 @@ final readonly class Session
     }
 
     /** Returns an Agent copy bound to this conversation, retaining its context window. */
-    public function bindTo(Agent $agent): Agent
+    public function bindToAgent(Agent $agent): Agent
     {
         return $agent->for($this->key)->setMessageStore($this->store);
     }
