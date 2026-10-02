@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Session;
 
+use InvalidArgumentException;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
@@ -14,29 +15,51 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Providers\AIProviderInterface;
 use UnexpectedValueException;
 
+use function filter_var;
 use function implode;
 use function json_encode;
 use function trim;
 use function ucfirst;
 
+use const FILTER_VALIDATE_INT;
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_UNICODE;
 
-/** Generates a topic title from a Session without modifying its messages. */
+/** Generates and persists a topic title within a per-Session attempt limit, preserving messages. */
 final readonly class SessionTitleGenerator
 {
     public function __construct(
         private AIProviderInterface $provider,
         private Session $session,
-    ) {}
+        private int $maxAttempts = 3,
+    ) {
+        if ($maxAttempts < 1) {
+            throw new InvalidArgumentException('The title generation attempt limit must be positive.');
+        }
+    }
 
     public function generate(): ?string
     {
+        if ($this->session->getTitle() !== null) {
+            return null;
+        }
+
+        $attempts = filter_var(
+            $this->session->getMetadata()['titleGenerationAttempts'] ?? '0',
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]],
+        );
+        if ($attempts === false || $attempts >= $this->maxAttempts) {
+            return null;
+        }
+
         $conversation = $this->conversation($this->session);
 
         if ($conversation === []) {
             return null;
         }
+
+        $this->session->setMetadata('titleGenerationAttempts', (string) ($attempts + 1));
 
         $agent = (new SessionTitleAgent())->setThreadId('title-' . $this->session->getKey());
         $agent->setAiProvider($this->provider);
@@ -50,7 +73,13 @@ final readonly class SessionTitleGenerator
 
         $title = trim($result->title ?? '');
 
-        return $title === '' ? null : $title;
+        if ($title === '' || $this->session->getTitle() !== null) {
+            return null;
+        }
+
+        $this->session->setTitle($title);
+
+        return $title;
     }
 
     /**

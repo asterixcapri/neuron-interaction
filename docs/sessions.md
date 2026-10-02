@@ -69,20 +69,29 @@ updates it and retains application metadata.
 
 ## Generating titles
 
-`SessionTitleGenerator` generates a title from a Session using an injected `AIProviderInterface`.
-It reads the history messages directly, ignores reasoning and tool activity, and calls `structured()` on a dedicated `SessionTitleAgent` that owns the title instructions. It returns null when no topic has emerged; provider errors
-propagate to the host. It never modifies the supplied messages or Session.
+`SessionTitleGenerator` generates and saves a title using an injected `AIProviderInterface`.
+It reads the history messages directly, ignores reasoning and tool activity, and
+calls `structured()` on a dedicated `SessionTitleAgent` that owns the title instructions.
+It preserves messages and their last-used time.
 
 ```php
 $generator = new SessionTitleGenerator($provider, $session);
-$title = $generator->generate();
-if ($title !== null && $session->getTitle() === null) {
-    $session->setTitle($title);
-}
+$title = $generator->generate(); // The newly saved title, or null.
 ```
 
-The host decides when to run this operation and how to report errors.
-Neuron TUI runs it automatically in the background after successful turns.
+The generator skips Sessions that already have a title, have no usable conversation,
+or have exhausted their attempt limit. The default limit is three; pass
+`maxAttempts` to the constructor to configure a positive limit. Attempts are stored
+in `titleGenerationAttempts` and survive Session reloads. Each provider request
+consumes an attempt, including null results and errors. Missing attempt metadata
+starts at zero; invalid or negative values prevent generation without being changed.
+A title assigned while generation is running takes precedence over the generated title.
+
+Provider and persistence errors propagate to the host. The host decides when to
+run this operation, coordinates concurrent calls, and chooses how to report errors.
+The attempt counter does not provide locking across processes.
+Neuron TUI runs generation in the background after successful turns and prevents
+locally overlapping requests for the same Session.
 
 ## Neuron AI 4 message storage
 
