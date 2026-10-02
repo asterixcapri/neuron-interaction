@@ -118,8 +118,8 @@ in `new UserMessage($text)`. Adapters must retain attachments when scheduling
 or executing the message.
 
 The example delegates `promptAgent()` to a callback supplied by the Host
-Application, with the Agent and complete UserMessage as arguments. Agent execution, scheduling and response streaming are outside this
-package. No model request is made by these examples.
+Application, with the Agent and complete UserMessage as arguments. Scheduling and response presentation belong to the client;
+ConversationRuntime can execute the prompt through submitMessage(). No model request is made by these examples.
 
 In [resume-selection.php](../examples/resume-selection.php), the first response contains `selection.options` for a
 frontend to display. Each option has a `value` (the Session key), `label` and
@@ -137,15 +137,17 @@ additional typed submissions.
 Commands, SessionStore, Input history and Storage are composed directly. There is
 no required application facade, HTTP framework, authentication subsystem,
 worker topology or subagent orchestration. Help and Leave are shared Commands;
-permission to run them during a Turn and Picker presentation belong to Neuron TUI.
+the client decides whether to admit them during a Turn and presents the Picker.
 
 ## Commands during Agent work
 
 `ConcurrentCommandInterface` extends `CommandInterface` without adding methods.
 Implement it when a Command can execute while the Agent is working without
 interfering with state used by that work. Help and Leave implement this marker.
-Adapters decide whether to admit these Commands and still provide the ordinary
-`CommandAdapterInterface`; the marker does not enforce restricted controls.
+Neuron TUI uses this marker to keep these Commands visible and admit them during
+a busy Turn. Other clients choose their own presentation and admission policy
+through `CommandAdapterInterface::admit()`. The marker grants no backend permission
+and does not enforce restricted controls.
 
 ## Replacing the Agent
 
@@ -165,3 +167,26 @@ Across backend requests, pass that Session again to continue it.
 Retrieve the current Agent through `adapter->agent()` after a Command, since
 binding can replace the instance. Neuron TUI exposes the same current instance
 through `Tui::agent()`.
+
+Clients mount their own collections and decide which Commands to show and admit.
+Neuron TUI hides ordinary Commands during a Turn and refuses them if typed or
+selected directly. Its busy state includes a local turn reservation before core
+stream consumption. Exact identifiers and the first mounted duplicate win.
+
+```php
+$commands = (new Commands())->addCommand([new ExitCommand(), new ClearCommand()]);
+$commands->run('/clear', '', $adapter);
+```
+
+Commands::run() resolves the identifier and asks the client Adapter to admit the
+Command before dispatch. A refused invocation neither dispatches the Command nor
+calls afterExecution(). Unknown, completed and failed invocations retain their
+usual completion status. Selection continuations invoke Commands::run() through a
+fresh client Adapter, which checks the current interaction state again.
+
+UI commands operate on the frontend Adapter; Session and Agent changes delegate
+to the core. Command prompts enter the client queue before core execution,
+preserving their preparation bypass. ConversationRuntime has no Command dispatch
+or availability methods, and exposes no busy state. Selected Sessions must belong
+to its SessionStore; execution coordination belongs to the caller. A web backend
+also supplies application-specific authorization and shared concurrency controls.

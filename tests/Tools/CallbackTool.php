@@ -7,11 +7,12 @@ namespace NeuronInteraction\Tests\Tools;
 use Closure;
 use NeuronAI\Tools\Tool;
 use NeuronAI\Tools\ToolCall;
+use NeuronAI\Tools\ToolOutput;
 
 /** Executable tool fixture; conversation records are created separately. */
 final class CallbackTool extends Tool
 {
-    /** @var Closure(): string */
+    /** @var Closure(): (string|ToolOutput) */
     private Closure $callback;
 
     /** @var array<string, mixed> */
@@ -23,14 +24,14 @@ final class CallbackTool extends Tool
         $this->callback = static fn(): string => '';
     }
 
-    /** @param callable(): string $callback */
+    /** @param callable(): (string|ToolOutput) $callback */
     public function setCallable(callable $callback): self
     {
         $this->callback = Closure::fromCallable($callback);
         return $this;
     }
 
-    public function __invoke(): string
+    public function __invoke(): string|ToolOutput
     {
         return ($this->callback)();
     }

@@ -294,3 +294,42 @@ composer test
 composer stan
 composer cs
 ```
+
+## Conversation execution
+
+The Host Application configures a Neuron Agent and composes a runtime:
+
+```php
+use NeuronInteraction\Conversation\ConversationRuntime;
+use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Chat\Messages\UserMessage;
+
+$runtime = new ConversationRuntime($agent, $sessionStore, userMessageProcessors: $processors);
+$stream = $runtime->submitMessage(new UserMessage('Hello'));
+foreach ($stream as $chunk) {
+    if ($chunk instanceof TextChunk) {
+        echo $chunk->content;
+    }
+}
+$state = $stream->getReturn(); // Native Neuron AgentState.
+```
+
+Preparation is synchronous; consuming the generator starts execution. Original
+Neuron objects, order and final state pass through unchanged. The runtime has
+no busy state or execution lock; callers coordinate overlapping submissions.
+Provider failures propagate unchanged. If you break iteration and keep the generator, it remains suspended;
+release it with `unset($stream)` when abandoning it.
+
+Pending inputs, queue policy, rendering and scheduling belong to the client:
+React in a web app, or Neuron TUI in a terminal. Command-generated prompts use
+`submitMessage()` as well; processors preserve recognized expanded content. Each client mounts its own Commands
+and decides visibility and admission through its Adapter. The runtime validates
+Session ownership and binds Agent/Session replacements.
+
+With `stopSignal:`, `requestInterruption()` requests the existing HTTP response
+stop during execution. The host must wire the same signal into Neuron's stoppable
+HTTP client. Separate requests can signal shared storage directly; disconnecting
+the frontend alone does not guarantee cancellation.
+
+See [ConversationRuntime and the frontend/backend boundary](docs/conversation-runtime.md)
+for TUI, React/controller examples, lifecycle and response-stop limits.
