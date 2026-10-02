@@ -48,6 +48,19 @@ output from `run()` instead of expecting `CommandExecution`. Commands can annota
 their parameter as `CommandAdapterInterface<mixed>`; concrete Adapters declare
 `@implements CommandAdapterInterface<TheirOutputType>`.
 
+## Optional shared Conversation delegation
+
+Commands continue to depend on `CommandAdapterInterface<TOutput>`. An Adapter may
+extend `AbstractCommandAdapter<TOutput>` to share `agent()`, `useAgent()`,
+`session()`, `useSession()` and `sessionStore()` through a protected Conversation.
+It can also implement the interface directly. Subclasses document their output
+with `@extends AbstractCommandAdapter<TheirOutputType>`.
+
+The Conversation is not exposed through a public accessor. `promptAgent()` remains
+a frontend operation: terminal Adapters enqueue the prompt through their scheduler,
+while backend Adapters submit it through the host's configured flow. Session
+selection overrides must preserve any frontend History invalidation.
+
 ## Session selection
 
 `/resume` without arguments emits a `Selection` and returns. The Adapter
@@ -119,7 +132,7 @@ or executing the message.
 
 The example delegates `promptAgent()` to a callback supplied by the Host
 Application, with the Agent and complete UserMessage as arguments. Scheduling and response presentation belong to the client;
-ConversationRuntime can execute the prompt through submitMessage(). No model request is made by these examples.
+Conversation can execute the prompt through submitMessage(). No model request is made by these examples.
 
 In [resume-selection.php](../examples/resume-selection.php), the first response contains `selection.options` for a
 frontend to display. Each option has a `value` (the Session key), `label` and
@@ -186,7 +199,7 @@ fresh client Adapter, which checks the current interaction state again.
 
 UI commands operate on the frontend Adapter; Session and Agent changes delegate
 to the core. Command prompts enter the client queue before core execution,
-preserving their preparation bypass. ConversationRuntime has no Command dispatch
+with preparation performed when each prompt is submitted. Conversation has no Command dispatch
 or availability methods, and exposes no busy state. Selected Sessions must belong
 to its SessionStore; execution coordination belongs to the caller. A web backend
 also supplies application-specific authorization and shared concurrency controls.

@@ -5,15 +5,15 @@ declare(strict_types=1);
 namespace NeuronInteraction\Examples;
 
 use Closure;
-use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\AbstractCommandAdapter;
 use NeuronInteraction\Command\CommandExecution;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\Selection;
 use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -31,12 +31,10 @@ use NeuronInteraction\Storage\InMemoryStorage;
  *     selection: ?Selection,
  *     stopped: bool,
  * }
- * @implements CommandAdapterInterface<BackendResponse>
+ * @extends AbstractCommandAdapter<BackendResponse>
  */
-final class BackendAdapter implements CommandAdapterInterface
+final class BackendAdapter extends AbstractCommandAdapter
 {
-    private Session $session;
-
     /** @var list<string> */
     private array $notices = [];
 
@@ -52,17 +50,14 @@ final class BackendAdapter implements CommandAdapterInterface
 
     /** @param Closure(Agent, UserMessage): void $submitPrompt */
     public function __construct(
-        private Agent $answeringAgent,
+        Agent $answeringAgent,
         private readonly Commands $mountedCommands,
-        private readonly SessionStore $sessionStore,
+        SessionStore $sessionStore,
         private readonly Closure $submitPrompt,
         private readonly ConfigurationStore $configurationStore = new ConfigurationStore(new InMemoryStorage(), 'local'),
         ?Session $session = null,
     ) {
-        if ($session === null && $this->answeringAgent->getThreadId() !== null && $this->answeringAgent->getChatHistory()->getMessages() !== []) {
-            throw new InvalidArgumentException('An Agent with existing messages requires an explicit Session.');
-        }
-        $this->useSession($session ?? $this->sessionStore->create());
+        parent::__construct(new Conversation($answeringAgent, $sessionStore, session: $session));
     }
 
     public function admit(CommandInterface $command): bool
@@ -102,7 +97,7 @@ final class BackendAdapter implements CommandAdapterInterface
 
     public function promptAgent(UserMessage $prompt): void
     {
-        ($this->submitPrompt)($this->answeringAgent, $prompt);
+        ($this->submitPrompt)($this->agent(), $prompt);
     }
 
     public function requestSelection(Selection $request): void
@@ -110,40 +105,9 @@ final class BackendAdapter implements CommandAdapterInterface
         $this->selection = $request;
     }
 
-    public function agent(): Agent
-    {
-        return $this->answeringAgent;
-    }
-
-    public function useAgent(Agent $agent): void
-    {
-        $this->answeringAgent = $this->session->bindTo($agent);
-    }
-
-    public function session(): Session
-    {
-        return $this->session;
-    }
-
-    public function useSession(Session $session): void
-    {
-        $selected = $this->sessionStore->read($session->getKey());
-        if ($selected === null) {
-            throw new InvalidArgumentException('The selected Session does not belong to this SessionStore.');
-        }
-        $agent = $selected->bindTo($this->answeringAgent);
-        $this->session = $selected;
-        $this->answeringAgent = $agent;
-    }
-
     public function commands(): Commands
     {
         return $this->mountedCommands;
-    }
-
-    public function sessionStore(): SessionStore
-    {
-        return $this->sessionStore;
     }
 
     public function configurationStore(): ConfigurationStore

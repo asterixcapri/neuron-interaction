@@ -8,7 +8,7 @@ public function forAgent(UserMessage $message): UserMessage;
 public function forDisplay(UserMessage $message): UserMessage;
 ```
 
-The Host Application supplies the processing module to `ConversationRuntime`
+The Host Application supplies the processing module to `Conversation`
 with `userMessageProcessors:`. `submitMessage()` invokes `forAgent()` exactly
 once synchronously, before returning the lazy response stream. Frontend queue
 entries are original input; they are prepared when the frontend submits them.
@@ -41,8 +41,8 @@ use NeuronInteraction\Message\UserMessageProcessors;
 $processing = (new UserMessageProcessors())
     ->addProcessor($first)
     ->addProcessor([$second]);
-$runtime = new ConversationRuntime($agent, userMessageProcessors: $processing);
-$stream = $runtime->submitMessage($submitted);
+$conversation = new Conversation($agent, userMessageProcessors: $processing);
+$stream = $conversation->submitMessage($submitted);
 foreach ($stream as $chunk) {
     // Present the native Neuron output.
 }
