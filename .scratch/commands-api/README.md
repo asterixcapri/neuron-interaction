@@ -34,10 +34,13 @@ La pubblicazione dei ticket non avvia implementazione, commit, PR o push.
 ## Stato dell'implementazione
 
 Gli otto ticket sono implementati e la validazione congiunta è completata:
-core237 test/2327 asserzioni, TUI261/1217, Solaro61/254 ed esempi TUI12/58.
-Formatter, analisi statica e stile sono verdi. Restano la revisione del codice
-e il passaggio delle PR coordinate da draft a ready; l'indice non dichiara
-conclusa quella revisione. I dettagli sono nel ticket08.
+core 237 test/2327 asserzioni, TUI 262/1226, Solaro 61/254 ed esempi TUI 12/58.
+Formatter, analisi statica e stile sono verdi. La revisione di standard e spec
+è completata e tutti i rilievi sono risolti. I dettagli sono nel ticket 08.
+
+PR coordinate per la revisione umana: [core #8](https://github.com/asterixcapri/neuron-interaction/pull/8),
+[TUI #25](https://github.com/asterixcapri/neuron-tui/pull/25) e
+[Solaro #11](https://github.com/asterixcapri/solaro/pull/11).
 
 L'utente ha successivamente autorizzato i push («i push li puoi fare»). La nota
 precedente sulla pubblicazione dei ticket descrive la fase di pianificazione,

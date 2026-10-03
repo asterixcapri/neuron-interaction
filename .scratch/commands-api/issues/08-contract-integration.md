@@ -30,10 +30,10 @@ Non pubblicare revisioni intermedie e non creare bridge pubblici fuori dallo spe
 ## Comments
 
 
-Implementazione e integrazione completate il 2026-10-03. Revisione del codice e
-stato ready delle PR restano i passaggi successivi del workflow implement-spec.
+Implementazione, integrazione e revisione completate il 2026-10-03.
+Le PR coordinate consegnano il risultato per la revisione umana.
 
-Validazione locale con PHP8.5.8: core237 test/2327 asserzioni, TUI261/1217,
+Validazione locale con PHP8.5.8: core237 test/2327 asserzioni, TUI262/1226,
 Solaro61/254; esempi TUI12/58. Formatter, PHPStan e check stile superati nei tre
 repository; PHPStan degli esempi core e TUI superato. Gli esempi senza provider
 00-input e08-portable-selection eseguiti; gli esempi con provider remoto sono
@@ -54,3 +54,13 @@ Autorizzazione successiva dell'utente: «i push li puoi fare» consente push e P
 remote coordinate dopo la validazione, superando l'esclusione storica nello spec.
 Questo ticket non esegue push; pubblicazione delle PR e review sono curate nel
 workflow di integrazione. Nessun rilascio è richiesto.
+
+Revisione finale: nessuna violazione documentata degli standard; una duplicazione
+di completamento e una regressione P2 nella presentazione di una risposta senza
+chunk sono risolte nel commit TUI `7ab51d7`, integrato in `17ee7be`. Il test pubblico
+con risposta visibile seguita da risposta vuota preserva il primo messaggio; i
+Command senza prompt restano inerti. Verifica puntuale della correzione superata.
+
+Suite finali: core 237/2327, TUI 262/1226, Solaro 61/254; esempi TUI 12/58.
+La CI dei branch core e TUI supera PHP 8.4 e 8.5. PR coordinate: core #8, TUI #25,
+Solaro #11. Nessun rilascio o merge nelle linee di destinazione eseguito.
