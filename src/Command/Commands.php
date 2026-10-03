@@ -5,42 +5,29 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use InvalidArgumentException;
-use Throwable;
 
-use function is_array;
-use function str_starts_with;
+use function array_values;
 
-/** Mounted Commands in order, with the first matching identifier winning. */
+/** Immutable registry of uniquely named Commands in registration order. */
 final class Commands
 {
     /** @var list<CommandInterface> */
-    private array $commands = [];
+    private readonly array $commands;
 
-    /**
-     * Mount Commands before running the Adapter. Mutates this collection.
-     *
-     * @param CommandInterface|array<array-key, mixed> $commands
-     */
-    public function addCommand(CommandInterface|array $commands): self
+    public function __construct(CommandInterface ...$commands)
     {
-        foreach (is_array($commands) ? $commands : [$commands] as $command) {
-            $this->commands[] = self::requireCommand($command);
+        $names = [];
+        foreach ($commands as $command) {
+            $name = $command->name();
+            if (!CommandInput::isIdentifier($name)) {
+                throw new InvalidArgumentException('A Command identifier must be a slash followed by letters, digits, underscores or hyphens.');
+            }
+            if (isset($names[$name])) {
+                throw new InvalidArgumentException('Duplicate Command identifier: ' . $name);
+            }
+            $names[$name] = true;
         }
-
-        return $this;
-    }
-
-    private static function requireCommand(mixed $command): CommandInterface
-    {
-        if (!$command instanceof CommandInterface) {
-            throw new InvalidArgumentException('A mounted Command must implement CommandInterface.');
-        }
-
-        if (!str_starts_with($command->name(), '/')) {
-            throw new InvalidArgumentException('A mounted Command identifier must start with a slash.');
-        }
-
-        return $command;
+        $this->commands = array_values($commands);
     }
 
     /** @return list<CommandInterface> */
@@ -56,38 +43,6 @@ final class Commands
                 return $command;
             }
         }
-
         return null;
-    }
-
-    /**
-     * @template TOutput
-     * @param CommandAdapterInterface<TOutput> $adapter
-     * @return TOutput|null Null is also returned when admission refuses the Command.
-     */
-    public function run(
-        string $identifier,
-        string $value,
-        CommandAdapterInterface $adapter,
-    ): mixed {
-        $command = $this->named($identifier);
-
-        if ($command === null) {
-            return $adapter->afterExecution(CommandExecution::unknown($identifier));
-        }
-
-        if (!$adapter->admit($command)) {
-            return null;
-        }
-
-        try {
-            $command->run($adapter, $value);
-
-            $execution = CommandExecution::completed($identifier);
-        } catch (Throwable $exception) {
-            $execution = CommandExecution::failed($identifier, $exception);
-        }
-
-        return $adapter->afterExecution($execution);
     }
 }
