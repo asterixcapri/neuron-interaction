@@ -5,11 +5,17 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use DateTimeImmutable;
+use NeuronAI\Agent\Agent;
+use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Command\SelectionOption;
+use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
+
+use function iterator_to_array;
 
 final class ResumeCommandTest extends TestCase
 {
@@ -30,13 +36,13 @@ final class ResumeCommandTest extends TestCase
             'userId' => 'alice',
             'lastUsedAt' => $lastUsedAt->format('Y-m-d\TH:i:s.uP'),
         ]);
-        $adapter = new FakeCommandAdapter(collection: new SessionStore($storage, 'alice'));
+        $conversation = new Conversation(new Agent(), new SessionStore($storage, 'alice'), commands: new Commands(new ResumeCommand()));
+        $events = iterator_to_array($conversation->submitInput('/resume'));
 
-        (new ResumeCommand())->run($adapter, '');
-
-        self::assertCount(1, $adapter->selections);
-        self::assertCount(1, $adapter->selections[0]->options);
-        $option = $adapter->selections[0]->options[0];
+        self::assertCount(1, $events);
+        self::assertInstanceOf(SelectionRequest::class, $events[0]);
+        self::assertCount(1, $events[0]->options);
+        $option = $events[0]->options[0];
         self::assertSame($document->key, $option->value);
 
         return $option;

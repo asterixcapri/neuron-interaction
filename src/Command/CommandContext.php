@@ -25,6 +25,7 @@ final class CommandContext
     public function useAgent(Agent $agent): void
     {
         $this->conversation->useAgent($agent);
+        ($this->registerRequest)(new AgentChanged($this->conversation->agent()));
     }
 
     public function session(): Session
@@ -35,6 +36,7 @@ final class CommandContext
     public function useSession(Session $session): void
     {
         $this->conversation->useSession($session);
+        ($this->registerRequest)(new SessionChanged($this->conversation->session()));
     }
 
     public function sessionStore(): SessionStore

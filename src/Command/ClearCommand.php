@@ -7,7 +7,7 @@ namespace NeuronInteraction\Command;
 /**
  * Starts a new Session, leaving the previous one where it is stored.
  *
- * A Host Application mounts it under `clear` or a name of its own.
+ * A Host Application registers it under `clear` or a name of its own.
  *
  * Starting a Session binds an Agent copy to a new conversation.
  * Nothing here deletes the conversation the new Session replaced.
@@ -27,10 +27,9 @@ final readonly class ClearCommand implements CommandInterface
         return 'Starts a new Session, leaving the current one stored.';
     }
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, string $value): void
+    public function run(CommandContext $context, string $value): void
     {
-        $session = $adapter->sessionStore()->create();
-        $adapter->useSession($session);
+        $session = $context->sessionStore()->create();
+        $context->useSession($session);
     }
 }
