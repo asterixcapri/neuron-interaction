@@ -10,13 +10,13 @@ Repository: neuron-tui
 
 Status: ready-for-agent
 
-- [ ] Tui costruisce ancora la Conversation internamente e le passa registro, configurazione e politica di admission; gli input passano da submitInput.
-- [ ] Notifiche, SelectionRequest, ExitRequest e cambi di Agent/Session vengono presentati o gestiti senza TuiCommandAdapter, dispatch diretto o hook di completamento.
-- [ ] Il picker sottopone CommandInput con command e value; Escape chiude il picker senza chiamare Conversation; etichette, descrizioni e valori opachi sono preservati.
-- [ ] Mentre lavora, la TUI conserva help e uscita disponibili e rifiuta i Command ordinari tramite propria politica, senza ConcurrentCommandInterface.
-- [ ] I prompt dei Command vengono eseguiti nel relativo stream: nessuna seconda coda, doppia preparazione o reinvio al motore.
-- [ ] Sono mantenuti coda umana, draft, InputHistory, proiezione History, allegati, approval, title scheduling, response stop e rilascio delle risorse, senza introdurre eventi dei prompt.
-- [ ] I test esistenti delle interazioni e la documentazione TUI vengono adattati; si registrano esplicitamente le revisioni delle decisioni architetturali coinvolte.
+- [x] Tui costruisce ancora la Conversation internamente e le passa registro, configurazione e politica di admission; gli input passano da submitInput.
+- [x] Notifiche, SelectionRequest, ExitRequest e cambi di Agent/Session vengono presentati o gestiti senza TuiCommandAdapter, dispatch diretto o hook di completamento.
+- [x] Il picker sottopone CommandInput con command e value; Escape chiude il picker senza chiamare Conversation; etichette, descrizioni e valori opachi sono preservati.
+- [x] Mentre lavora, la TUI conserva help e uscita disponibili e rifiuta i Command ordinari tramite propria politica, senza ConcurrentCommandInterface.
+- [x] I prompt dei Command vengono eseguiti nel relativo stream: nessuna seconda coda, doppia preparazione o reinvio al motore.
+- [x] Sono mantenuti coda umana, draft, InputHistory, proiezione History, allegati, approval, title scheduling, response stop e rilascio delle risorse, senza introdurre eventi dei prompt.
+- [x] I test esistenti delle interazioni e la documentazione TUI vengono adattati; si registrano esplicitamente le revisioni delle decisioni architetturali coinvolte.
 
 ## Strategia di migrazione
 
@@ -28,3 +28,5 @@ Non pubblicare revisioni intermedie e non creare bridge pubblici fuori dallo spe
 
 ## Comments
 
+Implementato nel commit `7586f26` sul branch coordinato `feat/commands-api`.
+Validazione completa e revisione finale nel ticket 08.
