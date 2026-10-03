@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace NeuronInteractionDemo;
 
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInterface;
+use NeuronInteraction\Command\NotificationLevel;
 
 use function trim;
 
@@ -22,14 +23,13 @@ final class ExplainCommand implements CommandInterface
         return 'Ask the Agent to explain a topic in two short sentences.';
     }
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, string $value): void
+    public function run(CommandContext $context, string $value): void
     {
         if (trim($value) === '') {
-            $adapter->error('Specify a topic: /explain PHP generators');
+            $context->notify('Specify a topic: /explain PHP generators', NotificationLevel::Error);
             return;
         }
 
-        $adapter->promptAgent(new UserMessage('Explain ' . $value . ' in two short sentences.'));
+        $context->promptAgent(new UserMessage('Explain ' . $value . ' in two short sentences.'));
     }
 }

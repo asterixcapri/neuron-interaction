@@ -153,13 +153,18 @@ final class Conversation
         } catch (Throwable $exception) {
             $failure = $exception;
         }
+        $lastState = null;
         foreach ($requests as $request) {
-            yield $request;
+            if ($request instanceof UserMessage) {
+                $lastState = yield from $this->submitInput($request);
+            } else {
+                yield $request;
+            }
         }
         if ($failure !== null) {
             throw $failure;
         }
-        return null;
+        return $lastState;
     }
 
     public function requestInterruption(): bool
