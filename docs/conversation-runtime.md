@@ -220,3 +220,35 @@ Durable pending queues, workers, reconnect and replay are outside this delivery.
 
 The evidence behind the client-queue decision is recorded in
 [the web queue research](../.scratch/conversation-runtime/research-web-message-queue.md).
+
+## Unified input and Command notifications
+
+`submitInput(string|UserMessage|CommandInput)` is the public submission method.
+Strings such as `/echo hello` dispatch the registered `/echo` Command with `hello`
+as its argument. The argument remains opaque, including slash-prefixed values.
+An explicit `UserMessage` always reaches the Agent, even when its text starts with
+slash. Blank strings produce an empty stream; explicit empty messages retain
+message preparation validation.
+
+Construct a registry with `new Commands($first, $second)`. Identifiers consist of
+`/` followed by letters, digits, underscores or hyphens; invalid and duplicate
+identifiers throw at registration. The default registry is empty. `all()` and
+`named()` provide consultation; the host submits input through Conversation.
+
+Commands implement `run(CommandContext $context, string $value): void`. The
+context supplies Agent, Session, their stores and a consultation list of Commands.
+`notify($text, NotificationLevel::Info)` registers feedback; Warning and Error
+use the same method. The host consumes `Notification` objects alongside native
+Agent events and decides how to present their `text` and `level`.
+
+Message preparation happens when submitted; Agent execution and Command dispatch
+happen when the returned stream is consumed. Native event objects, keys and
+`AgentState` are preserved. A Command without prompts returns null. Unknown
+Commands emit an Error notification. Requests registered before a Command throws
+are emitted before the original exception propagates; state changes remain.
+
+An omitted ConfigurationStore uses isolated memory storage for each Conversation.
+A supplied store is reused, allowing the host to persist its preferences.
+
+Run `php examples/bin/00-input.php` for a minimal Command notification example
+without provider credentials.

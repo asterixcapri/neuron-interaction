@@ -33,9 +33,9 @@ final class UserMessagePreparationTest extends TestCase
         $conversation = new Conversation((new Agent())->setAiProvider($provider), new SessionStore(new InMemoryStorage(), 'local'), userMessageProcessors: $processors);
         $original = new UserMessage('First');
         $original->addMetadata('origin', 'human');
-        $firstStream = $conversation->submitMessage($original);
-        $secondStream = $conversation->submitMessage(new UserMessage('Second'));
-        $promptStream = $conversation->submitMessage(new UserMessage('Raw command'));
+        $firstStream = $conversation->submitInput($original);
+        $secondStream = $conversation->submitInput(new UserMessage('Second'));
+        $promptStream = $conversation->submitInput(new UserMessage('Raw command'));
         self::assertSame($processors, $conversation->userMessageProcessors());
         self::assertSame('First', $original->getContent());
         $before = $provider->getRecorded();
@@ -73,7 +73,7 @@ final class UserMessagePreparationTest extends TestCase
         foreach (['fail', 'empty'] as $text) {
             $original = new UserMessage($text);
             try {
-                $conversation->submitMessage($original);
+                $conversation->submitInput($original);
                 self::fail('Expected rejection');
             } catch (InvalidArgumentException|RuntimeException $exception) {
                 self::assertSame($text === 'fail' ? 'Preparation failed' : 'The prepared user message is empty.', $exception->getMessage());
@@ -101,10 +101,10 @@ final class UserMessagePreparationTest extends TestCase
         $otherStream = null;
         $processor->onPrepare = static function () use ($conversation, $processor, &$otherStream): void {
             $processor->onPrepare = null;
-            $otherStream = $conversation->submitMessage(new UserMessage('Other'));
+            $otherStream = $conversation->submitInput(new UserMessage('Other'));
             $otherStream->rewind();
         };
-        $preparedStream = $conversation->submitMessage(new UserMessage('Preparing'));
+        $preparedStream = $conversation->submitInput(new UserMessage('Preparing'));
         self::assertNotNull($otherStream);
         iterator_to_array($otherStream);
         $processor->onPrepare = null;
@@ -119,7 +119,7 @@ final class UserMessagePreparationTest extends TestCase
         $image = (new ImageContent('https://example.com/image.png', SourceType::URL))->addMetadata('image', 'original');
         $message = new UserMessage($image);
         $message->addMetadata('origin', 'attachment');
-        iterator_to_array($conversation->submitMessage($message));
+        iterator_to_array($conversation->submitInput($message));
         self::assertSame($message->jsonSerialize(), $provider->getRecorded()[0]->messages[0]->jsonSerialize());
     }
 }
