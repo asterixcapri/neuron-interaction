@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction;
 
+use Closure;
 use Generator;
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
@@ -12,6 +13,7 @@ use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInput;
+use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\Notification;
 use NeuronInteraction\Command\NotificationLevel;
@@ -39,6 +41,7 @@ final class Conversation
 
     private bool $responseStopRequested = false;
 
+    /** @param (Closure(CommandInterface): bool)|null $admitCommand */
     public function __construct(
         Agent $agent,
         private readonly SessionStore $sessionStore,
@@ -47,6 +50,7 @@ final class Conversation
         private readonly UserMessageProcessorInterface $userMessageProcessors = new UserMessageProcessors(),
         private readonly Commands $commands = new Commands(),
         ?ConfigurationStore $configurationStore = null,
+        private readonly ?Closure $admitCommand = null,
     ) {
         $this->configurationStore = $configurationStore ?? new ConfigurationStore(new InMemoryStorage(), 'local');
 
@@ -141,6 +145,13 @@ final class Conversation
         $command = $this->commands->named($input->identifier);
         if ($command === null) {
             yield new Notification('Unknown Command: ' . $input->identifier, NotificationLevel::Error);
+            return null;
+        }
+        if ($this->admitCommand !== null && !($this->admitCommand)($command)) {
+            yield new Notification(
+                $input->identifier . ' is refused by the Host Application.',
+                NotificationLevel::Warning,
+            );
             return null;
         }
         $requests = [];

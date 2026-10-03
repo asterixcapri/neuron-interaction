@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Command;
 
-/** Requests that the Adapter stop its interaction. */
-final readonly class LeaveCommand implements ConcurrentCommandInterface
+/** Requests that the Host Application leave its interaction. */
+final readonly class LeaveCommand implements CommandInterface
 {
     /**
      * @param string $name the name it answers to, including the leading slash
@@ -22,9 +22,8 @@ final readonly class LeaveCommand implements ConcurrentCommandInterface
         return 'Stops the interaction.';
     }
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, string $value): void
+    public function run(CommandContext $context, string $value): void
     {
-        $adapter->stop();
+        $context->requestExit();
     }
 }

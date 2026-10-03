@@ -53,6 +53,11 @@ final class CommandContext
         return $this->conversation->commands()->all();
     }
 
+    public function requestExit(): void
+    {
+        ($this->registerRequest)(new ExitRequest());
+    }
+
     public function notify(string $text, NotificationLevel $level = NotificationLevel::Info): void
     {
         ($this->registerRequest)(new Notification($text, $level));
