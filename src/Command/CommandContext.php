@@ -6,6 +6,7 @@ namespace NeuronInteraction\Command;
 
 use Closure;
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\Session;
@@ -51,6 +52,11 @@ final class CommandContext
     public function commands(): array
     {
         return $this->conversation->commands()->all();
+    }
+
+    public function promptAgent(UserMessage $message): void
+    {
+        ($this->registerRequest)($message);
     }
 
     public function notify(string $text, NotificationLevel $level = NotificationLevel::Info): void

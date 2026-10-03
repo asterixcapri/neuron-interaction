@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
+use NeuronInteraction\Command\Notification;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
@@ -12,10 +14,8 @@ use NeuronInteraction\Storage\FileStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use NeuronInteractionDemo\DemoAgent;
 use NeuronInteractionDemo\ExplainCommand;
-use NeuronInteractionDemo\TerminalCommandAdapter;
 use Symfony\Component\Dotenv\Dotenv;
 
-use function NeuronInteractionDemo\execTurn;
 use function NeuronInteractionDemo\showMessages;
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -28,36 +28,46 @@ $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 $storage = new FileStorage(\dirname(__DIR__) . '/.storage/commands');
 $sessionStore = new SessionStore($storage, 'demo-user');
 
-$conversation = new Conversation($agent, $sessionStore);
-
-$session = $conversation->session();
-$session->setTitle('Meeting Ada');
-
-execTurn($conversation, 'My name is Ada. Acknowledge in one short sentence.');
-
-$commands = (new Commands())->addCommand([
+$conversation = new Conversation($agent, $sessionStore, commands: new Commands(
     new HelpCommand(),
     new ClearCommand(),
     new ResumeCommand(),
     new ExplainCommand(),
-]);
+));
 
-$adapter = new TerminalCommandAdapter($conversation, $commands);
+$session = $conversation->session();
+$session->setTitle('Meeting Ada');
 
-echo '=== /help lists the mounted Commands ===' . \PHP_EOL;
-$commands->run('/help', '', $adapter);
+execInput($conversation, 'My name is Ada. Acknowledge in one short sentence.');
+
+echo '=== /help lists the registered Commands ===' . \PHP_EOL;
+execInput($conversation, '/help');
 
 echo \PHP_EOL . '=== A custom Command prompts the Agent ===' . \PHP_EOL;
-$commands->run('/explain', 'PHP generators', $adapter);
+execInput($conversation, '/explain PHP generators');
 
 echo '=== /clear starts an empty Session ===' . \PHP_EOL;
-$commands->run('/clear', '', $adapter);
+execInput($conversation, '/clear');
 
 showMessages($conversation->session());
 
 echo '=== /resume returns to the original Session ===' . \PHP_EOL;
-$commands->run('/resume', $session->getKey(), $adapter);
+execInput($conversation, '/resume ' . $session->getKey());
 
 showMessages($conversation->session());
 
-execTurn($conversation, 'What is my name? Answer with just the name.');
+execInput($conversation, 'What is my name? Answer with just the name.');
+
+function execInput(Conversation $conversation, string $input): void
+{
+    echo 'Input: ' . $input . \PHP_EOL;
+    foreach ($conversation->submitInput($input) as $event) {
+        if ($event instanceof TextChunk) {
+            echo $event->content;
+            \flush();
+        } elseif ($event instanceof Notification) {
+            echo $event->text . \PHP_EOL;
+        }
+    }
+    echo \PHP_EOL . \PHP_EOL;
+}
