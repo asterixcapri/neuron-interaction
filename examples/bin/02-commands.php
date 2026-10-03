@@ -27,9 +27,12 @@ $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
 $storage = new FileStorage(\dirname(__DIR__) . '/.storage/commands');
 $sessionStore = new SessionStore($storage, 'demo-user');
+
 $conversation = new Conversation($agent, $sessionStore);
+
 $session = $conversation->session();
 $session->setTitle('Meeting Ada');
+
 execTurn($conversation, 'My name is Ada. Acknowledge in one short sentence.');
 
 $commands = (new Commands())->addCommand([
@@ -38,6 +41,7 @@ $commands = (new Commands())->addCommand([
     new ResumeCommand(),
     new ExplainCommand(),
 ]);
+
 $adapter = new TerminalCommandAdapter($conversation, $commands);
 
 echo '=== /help lists the mounted Commands ===' . \PHP_EOL;
@@ -48,9 +52,12 @@ $commands->run('/explain', 'PHP generators', $adapter);
 
 echo '=== /clear starts an empty Session ===' . \PHP_EOL;
 $commands->run('/clear', '', $adapter);
+
 showMessages($conversation->session());
 
 echo '=== /resume returns to the original Session ===' . \PHP_EOL;
 $commands->run('/resume', $session->getKey(), $adapter);
+
 showMessages($conversation->session());
+
 execTurn($conversation, 'What is my name? Answer with just the name.');

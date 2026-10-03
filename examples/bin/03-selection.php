@@ -22,14 +22,21 @@ require_once __DIR__ . '/../vendor/autoload.php';
 $agent = DemoAgent::make();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
-$sessionStore = new SessionStore(new InMemoryStorage(), 'demo-user');
+$storage = new InMemoryStorage();
+$sessionStore = new SessionStore($storage, 'demo-user');
+
 $conversation = new Conversation($agent, $sessionStore);
-$conversation->session()->setTitle('Trip to Lisbon');
+
+$session = $conversation->session();
+$session->setTitle('Trip to Lisbon');
+
 execTurn($conversation, 'My destination is Lisbon. Acknowledge in one short sentence.');
 
 $kyoto = $sessionStore->create();
 $kyoto->setTitle('Trip to Kyoto');
+
 $conversation->useSession($kyoto);
+
 execTurn($conversation, 'My destination is Kyoto. Acknowledge in one short sentence.');
 
 $commands = (new Commands())->addCommand(new ResumeCommand());
