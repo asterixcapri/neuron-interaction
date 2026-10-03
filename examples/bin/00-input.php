@@ -6,6 +6,8 @@ use NeuronAI\Agent\Agent;
 use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\ExitRequest;
+use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\Notification;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
@@ -33,11 +35,17 @@ $echo = new class implements CommandInterface {
 $conversation = new Conversation(
     new Agent(),
     new SessionStore(new InMemoryStorage(), 'demo-user'),
-    commands: new Commands($echo),
+    commands: new Commands($echo, new LeaveCommand()),
 );
 
-foreach ($conversation->submitInput('/echo Hello from Conversation') as $event) {
-    if ($event instanceof Notification) {
-        echo $event->text . \PHP_EOL;
+// The terminal host decides to leave when it receives an ExitRequest.
+foreach (['/echo Hello from Conversation', '/exit', '/echo Unreached'] as $input) {
+    foreach ($conversation->submitInput($input) as $event) {
+        if ($event instanceof Notification) {
+            echo $event->text . \PHP_EOL;
+        } elseif ($event instanceof ExitRequest) {
+            echo 'The terminal host leaves.' . \PHP_EOL;
+            break 2;
+        }
     }
 }
