@@ -1,7 +1,7 @@
 # Conversation and the frontend/backend boundary
 
-Conversation executes one message in a Session and returns Neuron's
-response stream. React and Neuron TUI are frontends: they own input, pending
+Conversation executes messages and Commands in a Session and returns native
+Neuron and interaction events in a single stream. React and Neuron TUI are frontends: they own input, pending
 messages, presentation and the policy for starting the next turn.
 
 Every Conversation requires an Agent and a SessionStore. Without an explicit
@@ -23,7 +23,7 @@ use NeuronInteraction\Conversation;
 
 // $agent is configured by the host; $sessionStore belongs to the current user.
 $conversation = new Conversation($agent, $sessionStore, session: $session);
-$stream = $conversation->submitMessage(new UserMessage('Analyse this file'));
+$stream = $conversation->submitInput(new UserMessage('Analyse this file'));
 foreach ($stream as $chunk) {
     if ($chunk instanceof TextChunk) {
         echo $chunk->content;
@@ -33,7 +33,7 @@ $state = $stream->getReturn(); // Neuron AgentState, including approval interrup
 ```
 
 There is no subscribe/executeNext pair. Preparation and rejection happen in
-submitMessage(), before it returns. Iteration starts the Agent; each object is
+submitInput(), before it returns. Iteration starts the Agent; each object is
 delivered as it arrives. Text, tools, reasoning and other native output retain
 identity and ordering. If the host configures a Neuron stream adapter, its output
 also passes through without a second conversion.
@@ -48,8 +48,9 @@ not a stop request. Release an abandoned stream (`unset($stream)`) and its other
 references so Neuron can release its native execution resources. An unstarted
 stream can be discarded without Agent execution.
 
-submitMessage() is the only submission API, including for Command-generated
-prompts. All submissions go through the configured processors once; processors
+submitInput() is the only submission API. Commands register prompts through
+CommandContext::promptAgent. Each message goes through the configured processors
+once, with generated prompts prepared when their request is reached; processors
 preserve content they recognize as already expanded. There is no public
 preparation step. The frontend immediately shows original human input; when
 reopening a conversation it projects saved native messages with forDisplay().
@@ -141,7 +142,7 @@ $conversation = new Conversation(
     session: $session,
     stopSignal: $stopSignal,
 );
-$stream = $conversation->submitMessage(new UserMessage($text));
+$stream = $conversation->submitInput(new UserMessage($text));
 $adapter = new AgentChunkAdapter();
 
 // Inside the framework's streaming-response callback:
@@ -199,17 +200,18 @@ See [response stop](response-stop.md) for native HTTP setup and limits.
 
 ## Commands and concurrent requests
 
-UI commands (picker, notices, exit) operate on the frontend Adapter. Conversation
-commands delegate Session and Agent operations to the core. Command prompts enter
-the client's pending queue and use submitMessage() when their turn starts.
-Collections remain explicitly mounted and invoke Commands::run() with a client
-Adapter. Availability belongs to the frontend: TUI suggestions hide ordinary
-Commands while busy and its Adapter checks current state before dispatch, including
-later Selection choices. TUI counts its locally reserved turn as busy before
-consumption. Conversation exposes no Command dispatch or availability
-methods or busy flag; it validates Session ownership directly.
-An active stream retains its captured Agent/Session even if a supported operation
-selects a replacement for later execution.
+Conversation dispatches Commands and executes their prompts in the current stream.
+The host presents Notification, SelectionRequest, ExitRequest, SessionChanged and
+AgentChanged alongside native events. It does not queue generated prompts or
+create a preview of a generated UserMessage. A chosen option is a later CommandInput;
+closing a picker without a choice submits nothing.
+
+Availability belongs to the host, through Conversation's admitCommand closure.
+The TUI keeps help and exit available while busy and refuses ordinary Commands,
+including selection responses. Human inputs remain in its FIFO. State-changing
+commands immediately bind the selected owned Session or Agent; already started
+responses retain their captured Agent and Session. See [Commands](commands.md)
+for request ordering, errors and portable HTTP selection.
 
 The runtime provides no session execution lock. If multiple tabs or clients can
 write the same Session, the web application chooses concurrency admission. It can
