@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Command;
 
-/** A named operation whose effects use the active Adapter. */
+/** A named operation whose effects use the supplied context. */
 interface CommandInterface
 {
     /**
@@ -17,9 +17,6 @@ interface CommandInterface
      */
     public function describe(): string;
 
-    /**
-     * @param CommandAdapterInterface<mixed> $adapter
-     * @param string $value Raw text supplied by the Adapter, preserved by dispatch.
-     */
-    public function run(CommandAdapterInterface $adapter, string $value): void;
+    /** Raw argument text is interpreted by the Command itself. */
+    public function run(CommandContext $context, string $value): void;
 }

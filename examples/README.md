@@ -18,6 +18,7 @@ are independent modules and do not require an Agent or credentials.
 
 | Order | Run | What to observe |
 | --- | --- | --- |
+| 00 | `php bin/00-input.php` | Submit a Command, then let the terminal host handle an exit request without credentials. |
 | 01 | `composer sessions` | Switch between two Sessions, view their messages and continue with each one's context. |
 | 02 | `composer commands` | Shared Commands list themselves, clear a conversation and resume it; a custom Command prompts the Agent. |
 | 03 | `composer selection` | Choose a Session from the options returned by `/resume`, then continue the selected conversation. |
@@ -25,6 +26,15 @@ are independent modules and do not require an Agent or credentials.
 | 05 | `composer processors` | Expand `@trip.txt` for the Agent and show the compact original message when displaying History. |
 | 06 | `composer input-history` | Recall original inputs, including Command syntax, and restore the current draft. |
 | 07 | `composer preferences -- Italian` | Save a user preference; run `composer preferences` again to read it in another process. |
+| 08 | `composer portable-selection` | Present labeled choices and submit an opaque value without an AI provider. |
+
+## 00 — Input and host exit
+
+The script submits `/echo` through `Conversation::submitInput()` and prints its
+Notification. `/exit` emits an `ExitRequest`; the terminal host stops its own input
+loop. Conversation remains usable, so a web host can ignore the same request.
+An exit request does not stop an Agent response: `requestInterruption()` is the
+separate operation used for response stopping in example 04.
 
 ## 01 — Multiple Sessions
 
@@ -38,25 +48,25 @@ Files live in `.storage/multiple-sessions/`; every run creates two more Sessions
 
 ## 02 — Commands
 
-A real exchange introduces Ada. `/help` prints the mounted Commands, and the
+A real exchange introduces Ada. `/help` prints the registered Commands, and the
 custom `/explain` Command asks the Agent about PHP generators. `/clear` selects
 an empty Session; `/resume` with the original key restores the saved exchange.
 The final question asks the Agent for the name Ada.
 
-`src/ExplainCommand.php` defines behaviour through the neutral Command controls.
-`src/TerminalCommandAdapter.php` prints notices and streams Command-generated
-prompts through the Host's Conversation. The same Commands can be mounted by
-another Adapter. No callback or input queue is introduced.
+`src/ExplainCommand.php` receives CommandContext and registers a UserMessage with
+promptAgent. Conversation executes it in the same stream; the host displays native
+TextChunk output and Notification feedback.
 
 ## 03 — Selection
 
 Two exchanges prepare Lisbon and Kyoto Sessions. `/resume` without arguments
-requests a Selection, and the Adapter displays numbered options. Enter a number
+emits SelectionRequest, and the host displays numbered options. Enter a number
 to choose, or press Enter to cancel. After selection, the script prints the saved
 messages and asks for the destination in that context.
 
-The Host reads the choice and invokes `selection->command` again with the chosen
-`option->value`. The Selection does not depend on terminal input: another Host
+The host reads the choice and submits CommandInput with `selection->command` and
+the chosen `option->value`. Cancelling submits nothing. SelectionRequest has no
+pending state in Conversation: another Host
 could present it in a web UI and submit the same value in its next request.
 To supply input from a pipe, invoke `php bin/03-selection.php` directly.
 
@@ -117,3 +127,10 @@ Run `composer stan` here to analyse the scripts and shared example code. The
 repository's `composer stan` analyses the library and its tests separately.
 The implementation order and decisions are recorded in the
 [approved plan](../.scratch/rebuild-examples/spec.md).
+
+## 08 — Portable selection without a provider
+
+Run `composer portable-selection` to present labeled choices and submit their
+opaque value through CommandInput. Unlike the Session picker in example03, this
+example needs no API key. The Command validates and persists the chosen preference;
+the host has no adapter or hidden continuation.

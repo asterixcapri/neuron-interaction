@@ -50,7 +50,7 @@ final class ConversationTest extends TestCase
             }
         };
         $conversation = new Conversation($agent, new SessionStore(new InMemoryStorage(), 'local'));
-        $stream = $conversation->submitMessage(new UserMessage('Hello'));
+        $stream = $conversation->submitInput(new UserMessage('Hello'));
         self::assertSame($chunks, iterator_to_array($stream));
         self::assertSame($state, $stream->getReturn());
     }
@@ -59,13 +59,13 @@ final class ConversationTest extends TestCase
     {
         $provider = new FakeAIProvider(new AssistantMessage('One'), new AssistantMessage('Two'));
         $conversation = new Conversation((new Agent())->setAiProvider($provider), new SessionStore(new InMemoryStorage(), 'local'));
-        $stream = $conversation->submitMessage(new UserMessage('First'));
+        $stream = $conversation->submitInput(new UserMessage('First'));
         $before = $provider->getRecorded();
         self::assertSame([], $before);
         $historyBefore = $conversation->agent()->getChatHistory()->getMessages();
         self::assertSame([], $historyBefore);
         unset($stream);
-        iterator_to_array($conversation->submitMessage(new UserMessage('Second')));
+        iterator_to_array($conversation->submitInput(new UserMessage('Second')));
         self::assertCount(1, $provider->getRecorded());
         self::assertSame('Second', $conversation->agent()->getChatHistory()->getMessages()[0]->getContent());
     }
@@ -84,11 +84,11 @@ final class ConversationTest extends TestCase
             }
         };
         $conversation = new Conversation($agent, new SessionStore(new InMemoryStorage(), 'local'));
-        $first = $conversation->submitMessage(new UserMessage('First'));
-        $second = $conversation->submitMessage(new UserMessage('Second'));
+        $first = $conversation->submitInput(new UserMessage('First'));
+        $second = $conversation->submitInput(new UserMessage('Second'));
         $first->rewind();
         $second->rewind();
-        $third = $conversation->submitMessage(new UserMessage('Third'));
+        $third = $conversation->submitInput(new UserMessage('Third'));
         $third->rewind();
 
         foreach ([$first, $second, $third] as $index => $stream) {
@@ -103,14 +103,15 @@ final class ConversationTest extends TestCase
     public function testDestroyingAPartiallyConsumedStreamReleasesNativeExecution(): void
     {
         $conversation = new Conversation($this->agent('Partial', 'Next'), new SessionStore(new InMemoryStorage(), 'local'));
-        $stream = $conversation->submitMessage(new UserMessage('First'));
+        $stream = $conversation->submitInput(new UserMessage('First'));
         foreach ($stream as $chunk) {
             self::assertInstanceOf(TextChunk::class, $chunk);
             break;
         }
         unset($stream);
-        $next = $conversation->submitMessage(new UserMessage('Next'));
+        $next = $conversation->submitInput(new UserMessage('Next'));
         iterator_to_array($next);
+        self::assertInstanceOf(AgentState::class, $next->getReturn());
         self::assertSame('Next', $next->getReturn()->getMessage()?->getContent());
     }
 
@@ -135,7 +136,7 @@ final class ConversationTest extends TestCase
         $conversation = new Conversation((new Agent())->setAiProvider($provider), new SessionStore(new InMemoryStorage(), 'local'));
         $text = '';
         try {
-            foreach ($conversation->submitMessage(new UserMessage('Fail')) as $chunk) {
+            foreach ($conversation->submitInput(new UserMessage('Fail')) as $chunk) {
                 if ($chunk instanceof TextChunk) {
                     $text .= $chunk->content;
                 }
@@ -145,8 +146,9 @@ final class ConversationTest extends TestCase
             self::assertSame($failure, $error);
         }
         self::assertSame('Partial answer', $text);
-        $next = $conversation->submitMessage(new UserMessage('Continue'));
+        $next = $conversation->submitInput(new UserMessage('Continue'));
         iterator_to_array($next);
+        self::assertInstanceOf(AgentState::class, $next->getReturn());
         self::assertSame('Recovered', $next->getReturn()->getMessage()?->getContent());
         self::assertCount(2, $provider->getRecorded());
     }
@@ -157,13 +159,14 @@ final class ConversationTest extends TestCase
         $original = $store->create();
         $selected = $store->create();
         $conversation = new Conversation($this->agent('Original response'), $store, session: $original);
-        $stream = $conversation->submitMessage(new UserMessage('Question'));
+        $stream = $conversation->submitInput(new UserMessage('Question'));
         $conversation->useSession($selected);
         $conversation->useAgent($this->agent('Selected response'));
         $stream->rewind();
         $conversation->useSession($original);
         $conversation->useAgent($this->agent('Replacement'));
         iterator_to_array($stream);
+        self::assertInstanceOf(AgentState::class, $stream->getReturn());
         self::assertSame('Selected response', $stream->getReturn()->getMessage()?->getContent());
         self::assertSame([], $conversation->agent()->getChatHistory()->getMessages());
         $saved = $store->get($selected->getKey());
@@ -178,7 +181,7 @@ final class ConversationTest extends TestCase
     {
         $signal = new StopSignal(new InMemoryStorage(), 'stop');
         $conversation = new Conversation($this->agent('Partial', 'Next'), new SessionStore(new InMemoryStorage(), 'local'), stopSignal: $signal);
-        $stream = $conversation->submitMessage(new UserMessage('Stop'));
+        $stream = $conversation->submitInput(new UserMessage('Stop'));
         $stream->rewind();
         self::assertTrue($conversation->requestInterruption());
         self::assertFalse($conversation->requestInterruption());
@@ -187,7 +190,7 @@ final class ConversationTest extends TestCase
         self::assertTrue($conversation->responseWasStopped());
         iterator_to_array($stream);
         self::assertTrue($conversation->responseStopRequested());
-        $next = $conversation->submitMessage(new UserMessage('Next'));
+        $next = $conversation->submitInput(new UserMessage('Next'));
         $next->rewind();
         self::assertFalse($conversation->responseStopRequested());
         self::assertFalse($conversation->responseWasStopped());
@@ -199,14 +202,14 @@ final class ConversationTest extends TestCase
         $signal = new StopSignal(new InMemoryStorage(), 'pending');
         $signal->request();
         $conversation = new Conversation($this->agent('Completed', 'Next'), new SessionStore(new InMemoryStorage(), 'local'), stopSignal: $signal);
-        $stream = $conversation->submitMessage(new UserMessage('Question'));
+        $stream = $conversation->submitInput(new UserMessage('Question'));
         $stream->rewind();
         self::assertFalse($signal->isRequested());
         self::assertTrue($conversation->requestInterruption());
         iterator_to_array($stream);
         self::assertTrue($conversation->responseStopRequested());
         self::assertFalse($conversation->responseWasStopped());
-        iterator_to_array($conversation->submitMessage(new UserMessage('Next')));
+        iterator_to_array($conversation->submitInput(new UserMessage('Next')));
         self::assertFalse($signal->isRequested());
         self::assertFalse($conversation->responseStopRequested());
     }
@@ -220,7 +223,7 @@ final class ConversationTest extends TestCase
         self::assertTrue($conversation->responseStopRequested());
         self::assertFalse($conversation->requestInterruption());
 
-        $stream = $conversation->submitMessage(new UserMessage('Question'));
+        $stream = $conversation->submitInput(new UserMessage('Question'));
         self::assertTrue($signal->isRequested());
         $stream->rewind();
         self::assertFalse($signal->isRequested());

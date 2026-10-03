@@ -20,7 +20,7 @@ function execTurn(Conversation $conversation, string $message): void
     echo 'You: ' . $message . PHP_EOL;
     echo 'Agent: ';
 
-    $handler = $conversation->submitMessage(new UserMessage($message));
+    $handler = $conversation->submitInput(new UserMessage($message));
 
     foreach ($handler as $event) {
         if ($event instanceof TextChunk) {
