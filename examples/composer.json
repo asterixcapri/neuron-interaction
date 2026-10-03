@@ -33,7 +33,8 @@
         "interruption": "php bin/04-interruption.php",
         "processors": "php bin/05-processors.php",
         "input-history": "php bin/06-input-history.php",
-        "preferences": "php bin/07-preferences.php"
+        "preferences": "php bin/07-preferences.php",
+        "portable-selection": "php bin/08-portable-selection.php"
     },
     "config": {
         "sort-packages": true

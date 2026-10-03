@@ -9,6 +9,8 @@ use NeuronInteraction\Formatting\RelativeTimeFormatter;
 use NeuronInteraction\Formatting\SizeFormatter;
 use NeuronInteraction\Session\SessionSummary;
 
+use function trim;
+
 /**
  * Offers the stored Sessions so a person can resume one.
  *
@@ -35,6 +37,7 @@ final readonly class ResumeCommand implements CommandInterface
 
     public function run(CommandContext $context, string $value): void
     {
+        $value = trim($value);
         if ($value !== '') {
             $session = $context->sessionStore()->get($value);
 

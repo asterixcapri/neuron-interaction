@@ -31,7 +31,7 @@ $conversation->session()->setTitle('An interrupted answer');
 
 echo '=== Request a long answer, then stop it ===' . \PHP_EOL;
 echo 'You: Count from 1 to 1000, separated by commas.' . \PHP_EOL . 'Agent: ';
-foreach ($conversation->submitMessage(new UserMessage('Count from 1 to 1000, separated by commas.')) as $event) {
+foreach ($conversation->submitInput(new UserMessage('Count from 1 to 1000, separated by commas.')) as $event) {
     if ($event instanceof TextChunk) {
         echo $event->content;
         \flush();

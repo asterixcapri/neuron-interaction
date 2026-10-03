@@ -30,3 +30,15 @@ devono essere verdi alla chiusura di 08. Non si pubblicano revisioni intermedie
 incompatibili e non si introducono bridge pubblici fuori dallo spec.
 
 La pubblicazione dei ticket non avvia implementazione, commit, PR o push.
+
+## Stato dell'implementazione
+
+Gli otto ticket sono implementati e la validazione congiunta è completata:
+core237 test/2327 asserzioni, TUI261/1217, Solaro61/254 ed esempi TUI12/58.
+Formatter, analisi statica e stile sono verdi. Restano la revisione del codice
+e il passaggio delle PR coordinate da draft a ready; l'indice non dichiara
+conclusa quella revisione. I dettagli sono nel ticket08.
+
+L'utente ha successivamente autorizzato i push («i push li puoi fare»). La nota
+precedente sulla pubblicazione dei ticket descrive la fase di pianificazione,
+non limita il workflow di implementazione e PR ora autorizzato.

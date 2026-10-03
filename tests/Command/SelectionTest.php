@@ -50,6 +50,21 @@ final class SelectionTest extends TestCase
         self::assertSame($stored->getKey(), $conversation->session()->getKey());
     }
 
+    public function testResumeNormalizesItsOwnWhitespaceArguments(): void
+    {
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $stored = $store->create();
+        SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
+        $conversation = new Conversation(new Agent(), $store, commands: new Commands(new ResumeCommand()));
+        $selection = iterator_to_array($conversation->submitInput('/resume   '));
+        self::assertCount(1, $selection);
+        self::assertInstanceOf(SelectionRequest::class, $selection[0]);
+        $events = iterator_to_array($conversation->submitInput('/resume  ' . $stored->getKey() . ' '));
+        self::assertCount(1, $events);
+        self::assertInstanceOf(SessionChanged::class, $events[0]);
+        self::assertSame($stored->getKey(), $conversation->session()->getKey());
+    }
+
     public function testResumeWithAKeyNeedsNoPriorSelectionAndUnknownKeysLeaveTheSessionUnchanged(): void
     {
         $storage = new InMemoryStorage();

@@ -310,13 +310,13 @@ Questo documento consolida il confronto e sostituisce le proposte precedenti
 su adapter, Selection pendente, prompt rinviati ed eventi aggiuntivi dei prompt.
 Il vecchio handoff è storico e non definisce un contratto alternativo.
 
-Le otto issue già create sono bozze antecedenti alla chiusura del confronto.
-Non sono ancora il task graph definitivo: to-tickets deve riscriverle in slice
-verificabili, con dipendenze esplicite tra i tre repository e strategia di
-migrazione compatibile. Lo stato ready-for-agent dello spec indica che la sintesi
-è pronta; non rende automaticamente eseguibili quelle vecchie issue e non
-avvia l’implementazione.
+Nota storica della fase di sintesi: le otto issue allora presenti erano bozze
+antecedenti alla chiusura del confronto. Questa fase chiedeva soltanto la
+riscrittura dei ticket, senza modifiche PHP o commit. Il task graph definitivo è
+stato successivamente approvato e registrato nell'indice README di questa cartella;
+il workflow implement-spec ne ha autorizzato implementazione, commit e PR.
 
-Nel checkout sono presenti modifiche precedenti a glossario, esempi e ADR.
-L’implementazione deve integrarle senza sovrascriverle. Questa fase modifica
-soltanto documentazione e non esegue commit, push o modifiche PHP.
+Le modifiche precedenti dell'utente a glossario, esempi e ADR vanno preservate.
+L'autorizzazione successiva «i push li puoi fare» consente push e PR remote
+coordinate dopo la validazione, superando l'esclusione storica di push e
+pubblicazione remota. Non autorizza un rilascio dei pacchetti.
