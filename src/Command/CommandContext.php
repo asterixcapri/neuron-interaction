@@ -53,6 +53,11 @@ final class CommandContext
         return $this->conversation->commands()->all();
     }
 
+    public function requestSelection(SelectionRequest $request): void
+    {
+        ($this->registerRequest)($request);
+    }
+
     public function notify(string $text, NotificationLevel $level = NotificationLevel::Info): void
     {
         ($this->registerRequest)(new Notification($text, $level));
