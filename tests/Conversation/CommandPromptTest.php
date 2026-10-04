@@ -222,6 +222,8 @@ final class CommandPromptTest extends TestCase
                 return yield from ($this->stream)($messages);
             }
         };
-        return new Conversation($agent, (new SessionStore(new InMemoryStorage(), 'owner'))->create(), stopSignal: $stopSignal, userMessageProcessors: $processors ?? new UserMessageProcessors(), commands: new Commands($command));
+        $conversation = new Conversation($agent, (new SessionStore(new InMemoryStorage(), 'owner'))->create(), stopSignal: $stopSignal, userMessageProcessors: $processors ?? new UserMessageProcessors());
+        $conversation->setCommands(new Commands($command));
+        return $conversation;
     }
 }

@@ -36,9 +36,35 @@ final class CommandsTest extends TestCase
         }
     }
 
-    public function testDuplicatesAreRejectedRatherThanShadowed(): void
+    public function testLastRegistrationWinsWithoutChangingTheCommandsPosition(): void
     {
+        $original = new HelpCommand('/review');
+        $other = new HelpCommand('/other');
+        $replacement = new HelpCommand('/review');
+        $commands = new Commands($original, $other, $replacement);
+
+        self::assertSame([$replacement, $other], $commands->all());
+        self::assertSame($replacement, $commands->named('/review'));
+    }
+
+    public function testCommandsCanBeAddedOneAtATimeOrTogether(): void
+    {
+        $first = new HelpCommand('/first');
+        $second = new HelpCommand('/second');
+        $third = new HelpCommand('/third');
+        $replacement = new HelpCommand('/first');
+        $commands = new Commands();
+        self::assertSame($commands, $commands->addCommand($first));
+        $commands->addCommand($second, $third, $replacement);
+
+        self::assertSame([$replacement, $second, $third], $commands->all());
+        self::assertSame($replacement, $commands->named('/first'));
+    }
+
+    public function testAddedCommandsMustHaveValidIdentifiers(): void
+    {
+        $commands = new Commands();
         $this->expectException(InvalidArgumentException::class);
-        new Commands(new HelpCommand('/review'), new HelpCommand('/review'));
+        $commands->addCommand(new HelpCommand('invalid'));
     }
 }

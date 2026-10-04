@@ -33,7 +33,8 @@ final class SelectionRequestTest extends TestCase
         $sessions = new SessionStore($storage, 'owner');
         $configuration = new ConfigurationStore($storage, 'owner');
         $configuration->write('account', 'original owner');
-        $first = new Conversation(new Agent(), $sessions->create(), commands: new Commands(new HttpSelectionCommand()), configurationStore: $configuration);
+        $first = new Conversation(new Agent(), $sessions->create(), configurationStore: $configuration);
+        $first->setCommands(new Commands(new HttpSelectionCommand()));
         $first->session()->setTitle('Original Session');
         $events = iterator_to_array($first->sendInput('/choose'));
         self::assertCount(1, $events);
@@ -59,9 +60,9 @@ final class SelectionRequestTest extends TestCase
         $second = new Conversation(
             new Agent(),
             $session,
-            commands: new Commands(new HttpSelectionCommand()),
             configurationStore: new ConfigurationStore($storage, 'owner'),
         );
+        $second->setCommands(new Commands(new HttpSelectionCommand()));
         foreach ([' raw value ', '/help/not-an-option'] as $value) {
             $stream = $second->sendInput(new CommandInput($identifier, $value));
             $events = iterator_to_array($stream);
@@ -105,7 +106,8 @@ final class SelectionRequestTest extends TestCase
                 }
             }
         };
-        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create(), commands: new Commands($command));
+        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $conversation->setCommands(new Commands($command));
         $events = iterator_to_array($conversation->sendInput('/steps'));
         self::assertCount(3, $events);
         self::assertSame($first, $events[0]);

@@ -2,11 +2,17 @@
 
 declare(strict_types=1);
 
+use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInput;
+use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
-use NeuronInteraction\Command\ResumeCommand;
+use NeuronInteraction\Command\ExitRequest;
+use NeuronInteraction\Command\LeaveCommand;
+use NeuronInteraction\Command\Notification;
+use NeuronInteraction\Command\NotificationLevel;
+use NeuronInteraction\Command\SelectionOption;
 use NeuronInteraction\Command\SelectionRequest;
-use NeuronInteraction\Command\SessionChanged;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -14,71 +20,120 @@ use NeuronInteractionDemo\AIProviderFactory;
 use NeuronInteractionDemo\DemoAgent;
 use Symfony\Component\Dotenv\Dotenv;
 
-use function NeuronInteractionDemo\execTurn;
-use function NeuronInteractionDemo\showMessages;
-
 require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
+
+// A Command can request a choice and handle its value on a later invocation.
+final class LanguageCommand implements CommandInterface
+{
+    public function name(): string
+    {
+        return '/language';
+    }
+
+    public function describe(): string
+    {
+        return 'Choose the language used by the Agent.';
+    }
+
+    public function run(CommandContext $context, string $value): void
+    {
+        if ($value === '') {
+            $context->requestSelection(new SelectionRequest(
+                $this->name(),
+                'Choose a response language',
+                [
+                    new SelectionOption('Italian', 'Italiano'),
+                    new SelectionOption('English', 'English'),
+                    new SelectionOption('Spanish', 'Español'),
+                ],
+            ));
+
+            return;
+        }
+
+        if (!\in_array($value, ['Italian', 'English', 'Spanish'], true)) {
+            $context->notify('Unknown language.', NotificationLevel::Error);
+
+            return;
+        }
+
+        // This demo Agent uses only these instructions; setInstructions replaces them.
+        $context->agent()->setInstructions(
+            'Always reply in ' . $value . ', even when the user writes in another language.',
+        );
+        $context->notify('Response language: ' . $value);
+    }
+}
 
 $agent = DemoAgent::make();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
 $storage = new InMemoryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
-
 $session = $sessionStore->create();
-$conversation = new Conversation($agent, $session, commands: new Commands(new ResumeCommand($sessionStore)));
 
-$session = $conversation->session();
-$session->setTitle('Trip to Lisbon');
+$conversation = new Conversation($agent, $session);
+$commands = new Commands();
+$commands->addCommand(new LanguageCommand(), new LeaveCommand());
+$conversation->setCommands($commands);
 
-execTurn($conversation, 'My destination is Lisbon. Acknowledge in one short sentence.');
+echo 'Enter a message or use /language to choose a response language.' . \PHP_EOL;
+echo 'Try /language Italian or /exit.' . \PHP_EOL . \PHP_EOL;
 
-$kyoto = $sessionStore->create();
-$kyoto->setTitle('Trip to Kyoto');
+$input = null;
 
-$conversation->useSession($kyoto);
-
-execTurn($conversation, 'My destination is Kyoto. Acknowledge in one short sentence.');
-
-echo '=== /resume requests a SelectionRequest ===' . \PHP_EOL;
-$selection = null;
-$stream = $conversation->sendInput('/resume');
-foreach ($stream as $event) {
-    if ($event instanceof SelectionRequest) {
-        $selection = $event;
-        echo $event->prompt . \PHP_EOL;
-        foreach ($event->options as $index => $option) {
-            echo ($index + 1) . '. ' . $option->label . ' — ' . $option->description
-                . ' (' . $event->command . ' ' . $option->value . ')' . \PHP_EOL;
+while (true) {
+    if ($input === null) {
+        echo '> ';
+        $input = \fgets(\STDIN);
+        if ($input === false) {
+            return;
+        }
+        $input = \trim($input);
+        if ($input === '') {
+            $input = null;
+            continue;
         }
     }
-}
-$selection ??= throw new RuntimeException('No SelectionRequest was requested.');
 
-// The Host presents the options and sends the chosen value back to the Command.
-echo 'Choose a Session number (Enter to cancel): ';
-$input = \fgets(\STDIN);
-if ($input === false || \trim($input) === '') {
-    // Cancellation closes the host picker without submitting any input.
-    echo 'Selection cancelled.' . \PHP_EOL;
-    exit(0);
-}
-$number = \filter_var(\trim($input), \FILTER_VALIDATE_INT, [
-    'options' => ['min_range' => 1, 'max_range' => \count($selection->options)],
-]);
-if ($number === false) {
-    echo 'Invalid Session number.' . \PHP_EOL;
-    exit(1);
-}
-$option = $selection->options[$number - 1];
-$stream = $conversation->sendInput(new CommandInput($selection->command, $option->value));
-foreach ($stream as $event) {
-    if ($event instanceof SessionChanged) {
-        echo 'Selected Session: ' . $event->session->getTitle() . \PHP_EOL;
+    $stream = $conversation->sendInput($input);
+    $input = null;
+
+    echo \PHP_EOL;
+
+    foreach ($stream as $event) {
+        if ($event instanceof TextChunk) {
+            echo $event->content;
+        } elseif ($event instanceof Notification) {
+            echo $event->text . \PHP_EOL;
+        } elseif ($event instanceof SelectionRequest) {
+            echo $event->prompt . \PHP_EOL;
+            foreach ($event->options as $index => $option) {
+                echo ($index + 1) . '. ' . $option->label . \PHP_EOL;
+            }
+
+            echo 'Choose an option number (Enter to cancel): ';
+            $choice = \intval(\fgets(\STDIN));
+            if ($choice === 0) {
+                echo 'Selection cancelled.' . \PHP_EOL;
+                continue;
+            }
+
+            $option = $event->options[$choice - 1] ?? null;
+            if ($option === null) {
+                echo 'Invalid option number.' . \PHP_EOL;
+                continue;
+            }
+
+            // Send the choice on the next iteration, after consuming this stream.
+            $input = new CommandInput($event->command, $option->value);
+        } elseif ($event instanceof ExitRequest) {
+            echo 'Host exit requested.' . \PHP_EOL;
+            return;
+        }
     }
-}
 
-showMessages($conversation->session());
-execTurn($conversation, 'What is my destination? Answer with just the city name.');
+    echo \PHP_EOL . \PHP_EOL;
+}

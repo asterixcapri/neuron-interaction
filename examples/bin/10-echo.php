@@ -38,8 +38,8 @@ $session = $sessionStore->create();
 $conversation = new Conversation(
     new Agent(),
     $session,
-    commands: new Commands($echo, new LeaveCommand()),
 );
+$conversation->setCommands(new Commands($echo, new LeaveCommand()));
 
 // The terminal host decides to leave when it receives an ExitRequest.
 foreach (['/echo Hello from Conversation', '/exit', '/echo Unreached'] as $input) {

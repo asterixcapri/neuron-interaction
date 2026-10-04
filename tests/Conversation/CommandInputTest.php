@@ -114,15 +114,14 @@ final class CommandInputTest extends TestCase
         self::assertSame($store, $provided->configurationStore());
     }
 
-    public function testRegistryPreservesOrderAndRejectsDuplicateNames(): void
+    public function testRegistryPreservesOrderAndReplacesDuplicateNames(): void
     {
         $command = $this->command();
         $registry = new Commands($command);
         self::assertSame([$command], $registry->all());
         self::assertSame($command, $registry->named('/echo'));
         self::assertNull($registry->named('/absent'));
-        $this->expectException(InvalidArgumentException::class);
-        new Commands($command, $command);
+        self::assertSame([$command], (new Commands($command, $command))->all());
     }
 
     public function testInvalidIdentifierIsRejectedByRegistry(): void
@@ -145,9 +144,37 @@ final class CommandInputTest extends TestCase
         self::assertSame("value\nnext", $input->value);
     }
 
+    public function testRegistryCanBeReplacedAndExtendedBeforeStreamConsumption(): void
+    {
+        $original = $this->command('/old');
+        $replacement = $this->command();
+        $conversation = $this->conversation(new Commands($original));
+        $stream = $conversation->sendInput('/echo first');
+        $commands = new Commands($replacement);
+        $conversation->setCommands($commands);
+        iterator_to_array($stream);
+
+        self::assertSame([], $original->values);
+        self::assertSame(['first'], $replacement->values);
+        $events = iterator_to_array($conversation->sendInput('/old'));
+        self::assertInstanceOf(Notification::class, $events[0]);
+        self::assertSame(NotificationLevel::Error, $events[0]->level);
+
+        $latest = $this->command();
+        $stream = $conversation->sendInput('/echo second');
+        $commands->addCommand($latest);
+        iterator_to_array($stream);
+
+        self::assertSame(['first'], $replacement->values);
+        self::assertSame(['second'], $latest->values);
+        self::assertSame($commands, $conversation->commands());
+    }
+
     private function conversation(Commands $commands = new Commands()): Conversation
     {
-        return new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create(), commands: $commands);
+        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $conversation->setCommands($commands);
+        return $conversation;
     }
 
     private function command(string $name = '/echo'): EchoInputTestCommand

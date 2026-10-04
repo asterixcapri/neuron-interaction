@@ -35,7 +35,8 @@ final class StateCommandTest extends TestCase
         $original = $store->create();
         $original->setTitle('Previous subject');
         SessionHistory::of($original)->addMessage(new UserMessage('Saved history'));
-        $conversation = new Conversation(new Agent(), $original, commands: new Commands(new ClearCommand($store, '/fresh'), new ResumeCommand($store)));
+        $conversation = new Conversation(new Agent(), $original);
+        $conversation->setCommands(new Commands(new ClearCommand($store, '/fresh'), new ResumeCommand($store)));
         $events = iterator_to_array($conversation->sendInput('/fresh'));
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
@@ -79,7 +80,8 @@ final class StateCommandTest extends TestCase
                 throw $this->failure;
             }
         };
-        $conversation = new Conversation(new Agent(), $store->create(), commands: new Commands($command));
+        $conversation = new Conversation(new Agent(), $store->create());
+        $conversation->setCommands(new Commands($command));
         $events = [];
         try {
             foreach ($conversation->sendInput('/change') as $event) {
@@ -111,7 +113,8 @@ final class StateCommandTest extends TestCase
         $selected = (new SessionStore(new InMemoryStorage(), 'other'))->create();
         $replacement = new Agent();
         $command = $this->switchCommand($selected, $replacement);
-        $conversation = new Conversation(new Agent(), $store->create(), commands: new Commands($command));
+        $conversation = new Conversation(new Agent(), $store->create());
+        $conversation->setCommands(new Commands($command));
 
         $events = iterator_to_array($conversation->sendInput('/switch'));
 
@@ -130,7 +133,8 @@ final class StateCommandTest extends TestCase
         $selected = $store->create();
         $newAgent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Selected answer')));
         $oldAgent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Original answer')));
-        $conversation = new Conversation($oldAgent, $original, commands: new Commands($this->switchCommand($selected, $newAgent)));
+        $conversation = new Conversation($oldAgent, $original);
+        $conversation->setCommands(new Commands($this->switchCommand($selected, $newAgent)));
         $running = $conversation->sendInput('Question before switch');
         $running->rewind();
         $events = iterator_to_array($conversation->sendInput('/switch'));

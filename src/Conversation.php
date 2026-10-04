@@ -38,6 +38,8 @@ final class Conversation
 
     private Session $session;
 
+    private Commands $commands;
+
     private bool $responseStopRequested = false;
 
     /** @param (Closure(CommandInterface): bool)|null $admitCommand */
@@ -46,11 +48,11 @@ final class Conversation
         Session $session,
         private readonly ?StopSignal $stopSignal = null,
         private readonly UserMessageProcessorInterface $userMessageProcessors = new UserMessageProcessors(),
-        private readonly Commands $commands = new Commands(),
         ?ConfigurationStore $configurationStore = null,
         private readonly ?Closure $admitCommand = null,
     ) {
         $this->configurationStore = $configurationStore ?? new ConfigurationStore(new InMemoryStorage(), 'local');
+        $this->commands = new Commands();
 
         $this->session = $session;
         $this->agent = $session->bindToAgent($agent);
@@ -69,6 +71,11 @@ final class Conversation
     public function commands(): Commands
     {
         return $this->commands;
+    }
+
+    public function setCommands(Commands $commands): void
+    {
+        $this->commands = $commands;
     }
 
     public function configurationStore(): ConfigurationStore

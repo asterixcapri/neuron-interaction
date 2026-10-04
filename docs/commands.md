@@ -1,10 +1,15 @@
 # Commands and unified input
 
-Configure `Conversation` with an immutable `Commands` registry and consume
+Configure `Conversation` with `setCommands($commands)` and consume
 `sendInput(string|UserMessage|CommandInput)`. No commands are registered by
-default. `new Commands($first, $second)` preserves order and rejects duplicate or
-invalid identifiers. Identifiers start with slash followed by letters, digits,
+default. Build a registry with `new Commands($first, $second)` or add Commands
+later with `addCommand($first, $second)`. A later Command with the same name
+replaces the earlier one in its original position. Invalid identifiers are rejected.
+Identifiers start with slash followed by letters, digits,
 underscores or hyphens; lookup is exact. `all()` and `named()` provide consultation.
+setCommands() replaces the entire registry. Changes to the supplied registry
+are visible to Conversation, and dispatch uses the registry when the stream is
+consumed. A Command already executing continues normally.
 
 Strings matching slash syntax dispatch a Command; other nonblank strings become
 UserMessage. An explicit UserMessage is always a message, even with slash text.
@@ -31,7 +36,8 @@ final class ExplainCommand implements CommandInterface
     }
 }
 
-$conversation = new Conversation($agent, $session, commands: new Commands(new ExplainCommand()));
+$conversation = new Conversation($agent, $session);
+$conversation->setCommands(new Commands(new ExplainCommand()));
 foreach ($conversation->sendInput('/explain PHP generators') as $event) {
     // Present notifications and native Neuron events here, in stream order.
 }
@@ -128,8 +134,9 @@ inject a SessionStore into Commands that need one. Construct the built-ins with
 
 
 Replace the separate message and command execution paths with sendInput.
-Construct Commands variadically, resolving host name collisions before
-registration. Replace host command adapters with concrete CommandContext in
+Pass the registry through Conversation::setCommands(), rather than the
+constructor. Construct Commands variadically or extend the same registry with
+addCommand(). Later registrations replace Commands with the same name. Replace host command adapters with concrete CommandContext in
 run methods and stream event presentation in the host. Replace separate warning
 and error operations with notify and a NotificationLevel. Replace selection
 callbacks with a later CommandInput; replace stop controls with requestExit.

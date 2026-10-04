@@ -8,41 +8,38 @@ use InvalidArgumentException;
 
 use function array_values;
 
-/** Immutable registry of uniquely named Commands in registration order. */
+/** Registry of Commands by name; later registrations replace earlier ones. */
 final class Commands
 {
-    /** @var list<CommandInterface> */
-    private readonly array $commands;
+    /** @var array<string, CommandInterface> */
+    private array $commands = [];
 
     public function __construct(CommandInterface ...$commands)
     {
-        $names = [];
+        $this->addCommand(...$commands);
+    }
+
+    public function addCommand(CommandInterface ...$commands): self
+    {
         foreach ($commands as $command) {
             $name = $command->name();
             if (!CommandInput::isIdentifier($name)) {
                 throw new InvalidArgumentException('A Command identifier must be a slash followed by letters, digits, underscores or hyphens.');
             }
-            if (isset($names[$name])) {
-                throw new InvalidArgumentException('Duplicate Command identifier: ' . $name);
-            }
-            $names[$name] = true;
+            $this->commands[$name] = $command;
         }
-        $this->commands = array_values($commands);
+
+        return $this;
     }
 
     /** @return list<CommandInterface> */
     public function all(): array
     {
-        return $this->commands;
+        return array_values($this->commands);
     }
 
     public function named(string $identifier): ?CommandInterface
     {
-        foreach ($this->commands as $command) {
-            if ($command->name() === $identifier) {
-                return $command;
-            }
-        }
-        return null;
+        return $this->commands[$identifier] ?? null;
     }
 }

@@ -233,10 +233,12 @@ An explicit `UserMessage` always reaches the Agent, even when its text starts wi
 slash. Blank strings produce an empty stream; explicit empty messages retain
 message preparation validation.
 
-Construct a registry with `new Commands($first, $second)`. Identifiers consist of
-`/` followed by letters, digits, underscores or hyphens; invalid and duplicate
-identifiers throw at registration. The default registry is empty. `all()` and
-`named()` provide consultation; the host submits input through Conversation.
+Construct a registry with `new Commands($first, $second)` or extend it with
+`addCommand($first, $second)`. A later Command replaces an earlier one with the
+same name. Identifiers consist of `/` followed by letters, digits, underscores or
+hyphens; invalid identifiers throw at registration. The default registry is empty.
+Supply it with Conversation::setCommands(). `all()` and `named()` provide
+consultation; the host sends input through Conversation.
 
 Commands implement `run(CommandContext $context, string $value): void`. The
 context supplies Agent, Session, their stores and a consultation list of Commands.

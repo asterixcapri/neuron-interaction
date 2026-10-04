@@ -14,7 +14,7 @@ and presentation live in `src/`.
 Examples 01 and 02 use a plain `Agent`; the other Agent examples use `DemoAgent`.
 They configure their provider through `AIProviderFactory` and use the real
 OpenAI model `openai:gpt-5.4-nano`. To change the model, edit the identifier in the
-script. Every response is printed in streaming. Input history and preferences
+script. Responses are printed in streaming. Input history and preferences
 are independent modules and do not require an Agent or credentials.
 
 | Order | Run | What to observe |
@@ -22,7 +22,7 @@ are independent modules and do not require an Agent or credentials.
 | 01 | `composer input` | Submit a normal message and print the Agent's response in streaming. |
 | 02 | `composer sessions` | Switch between two Sessions, view their messages and continue with each one's context. |
 | 03 | `composer commands` | Shared Commands list themselves, clear a conversation and resume it; a custom Command prompts the Agent. |
-| 04 | `composer selection` | Choose a Session from the options returned by `/resume`, then continue the selected conversation. |
+| 04 | `composer selection` | Build a custom `/language` Command and choose the Agent's response language interactively. |
 | 05 | `composer interruption` | Stop a streamed answer, inspect the saved partial message and start a new turn. |
 | 06 | `composer processors` | Expand `@trip.txt` for the Agent and show the compact original message when displaying History. |
 | 07 | `composer input-history` | Recall original inputs, including Command syntax, and restore the current draft. |
@@ -52,26 +52,40 @@ Its streaming presentation helper is defined in the same file.
 
 ## 03 — Commands
 
-A real exchange introduces Ada. `/help` prints the registered Commands, and the
-custom `/explain` Command asks the Agent about PHP generators. `/clear` selects
-an empty Session; `/resume` with the original key restores the saved exchange.
-The final question asks the Agent for the name Ada.
+This interactive terminal example reads a message or Command on each turn.
+Try a normal message, `/help`, `/explain PHP generators`, `/clear`, `/resume`
+and `/exit`. The script builds its registry with `addCommand()` and supplies it
+through `Conversation::setCommands()`.
 
-`src/ExplainCommand.php` receives CommandContext and registers a UserMessage with
-promptAgent. Conversation executes it in the same stream; the host displays native
-TextChunk output and Notification feedback.
+The main loop simulates a consumer: it reads input, calls `sendInput()`
+and displays events as the stream yields them. A backend can forward those
+events to its client, for example via SSE. The example handles TextChunks,
+Notifications, SessionChanged, AgentChanged, SelectionRequest and ExitRequest.
+For SelectionRequest, the client reads a numbered choice and creates a
+CommandInput. It sends that input as a new backend request on its next
+iteration, after the preceding stream has been fully consumed. Enter cancels;
+an invalid number cancels that choice. `/resume` also accepts a key directly.
+`/exit` or end of input closes the client loop. The registered Commands do not
+emit AgentChanged; its branch illustrates where the client would refresh its UI.
+To provide input from a pipe, run `php bin/03-commands.php` directly.
+
+`src/ExplainCommand.php` registers a UserMessage through `promptAgent()`.
+Conversation executes that prompt and streams its response in the same turn.
+FileStorage keeps previous conversations under `.storage/commands/`; each run
+creates one new Session, and `/clear` creates another without deleting history.
 
 ## 04 — Selection
 
-Two exchanges prepare Lisbon and Kyoto Sessions. `/resume` without arguments
-emits SelectionRequest, and the host displays numbered options. Enter a number
-to choose, or press Enter to cancel. After selection, the script prints the saved
-messages and asks for the destination in that context.
+This interactive, self-contained example defines a custom `/language` Command. Without an
+argument it emits SelectionRequest with three response languages. With a selected
+value it replaces the demo Agent's instructions and emits a Notification.
+Try `/language`, `/language Italian`, then a normal message to see the selected
+language in use. `/exit` or end of input closes the example.
 
-The host reads the choice and submits CommandInput with `selection->command` and
-the chosen `option->value`. Cancelling submits nothing. SelectionRequest has no
-pending state in Conversation: another Host
-could present it in a web UI and submit the same value in its next request.
+The consumer displays the options, reads a number and sends a new CommandInput
+using the event's command and the chosen option's value. Enter cancels and returns
+to the normal prompt. The choice is sent on the next loop iteration, after the
+current stream is fully consumed. Conversation has no pending selection state.
 To supply input from a pipe, invoke `php bin/04-selection.php` directly.
 
 ## 05 — Interruption

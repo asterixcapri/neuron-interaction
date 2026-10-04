@@ -29,8 +29,8 @@ final class HelpAndLeaveTest extends TestCase
         $conversation = new Conversation(
             new Agent(),
             (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
-            commands: new Commands(new HelpCommand('/guide'), new LeaveCommand('/quit')),
         );
+        $conversation->setCommands(new Commands(new HelpCommand('/guide'), new LeaveCommand('/quit')));
         $stream = $conversation->sendInput('/guide');
         $events = iterator_to_array($stream);
         self::assertCount(2, $events);
@@ -49,8 +49,8 @@ final class HelpAndLeaveTest extends TestCase
             (new Agent())->setAiProvider($provider),
             (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             stopSignal: $stop,
-            commands: new Commands(new LeaveCommand(), new HelpCommand()),
         );
+        $conversation->setCommands(new Commands(new LeaveCommand(), new HelpCommand()));
         $session = $conversation->session();
         $events = iterator_to_array($conversation->sendInput('/exit'));
         self::assertCount(1, $events);
@@ -86,8 +86,8 @@ final class HelpAndLeaveTest extends TestCase
         $conversation = new Conversation(
             new Agent(),
             (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
-            commands: new Commands($command),
         );
+        $conversation->setCommands(new Commands($command));
         $events = iterator_to_array($conversation->sendInput('/ordered'));
         self::assertCount(3, $events);
         self::assertInstanceOf(Notification::class, $events[0]);

@@ -171,7 +171,8 @@ use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Conversation;
 
 $session = $sessionStore->create();
-$conversation = new Conversation($agent, $session, commands: new Commands(
+$conversation = new Conversation($agent, $session);
+$conversation->setCommands(new Commands(
     new ClearCommand($sessionStore), new ResumeCommand($sessionStore), new HelpCommand(), new LeaveCommand(),
 ));
 foreach ($conversation->sendInput('/resume') as $event) {

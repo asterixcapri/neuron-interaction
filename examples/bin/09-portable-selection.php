@@ -45,7 +45,8 @@ $agent = new Agent();
 $storage = new InMemoryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
-$conversation = new Conversation($agent, $session, commands: new Commands($languageCommand));
+$conversation = new Conversation($agent, $session);
+$conversation->setCommands(new Commands($languageCommand));
 
 $stream = $conversation->sendInput('/language');
 

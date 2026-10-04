@@ -37,7 +37,8 @@ final class ResumeCommandTest extends TestCase
             'lastUsedAt' => $lastUsedAt->format('Y-m-d\TH:i:s.uP'),
         ]);
         $store = new SessionStore($storage, 'alice');
-        $conversation = new Conversation(new Agent(), $store->create(), commands: new Commands(new ResumeCommand($store)));
+        $conversation = new Conversation(new Agent(), $store->create());
+        $conversation->setCommands(new Commands(new ResumeCommand($store)));
         $events = iterator_to_array($conversation->sendInput('/resume'));
 
         self::assertCount(1, $events);
