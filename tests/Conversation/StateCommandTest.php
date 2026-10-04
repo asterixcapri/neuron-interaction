@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Conversation;
 
-use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Agent\AgentState;
 use NeuronAI\Chat\Messages\AssistantMessage;
@@ -36,8 +35,8 @@ final class StateCommandTest extends TestCase
         $original = $store->create();
         $original->setTitle('Previous subject');
         SessionHistory::of($original)->addMessage(new UserMessage('Saved history'));
-        $conversation = new Conversation(new Agent(), $store, $original, commands: new Commands(new ClearCommand('/fresh'), new ResumeCommand()));
-        $events = iterator_to_array($conversation->submitInput('/fresh'));
+        $conversation = new Conversation(new Agent(), $original, commands: new Commands(new ClearCommand($store, '/fresh'), new ResumeCommand($store)));
+        $events = iterator_to_array($conversation->sendInput('/fresh'));
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame($conversation->session(), $events[0]->session);
@@ -45,7 +44,7 @@ final class StateCommandTest extends TestCase
         self::assertSame($conversation->session()->getKey(), $conversation->agent()->getThreadId());
         self::assertSame([], $conversation->session()->getMessages());
         self::assertSame('Saved history', $store->get($original->getKey())?->getMessages()[0]->getContent());
-        iterator_to_array($conversation->submitInput('/resume ' . $original->getKey()));
+        iterator_to_array($conversation->sendInput('/resume ' . $original->getKey()));
         self::assertSame($original->getKey(), $conversation->session()->getKey());
         self::assertSame('Previous subject', $conversation->session()->getTitle());
     }
@@ -80,10 +79,10 @@ final class StateCommandTest extends TestCase
                 throw $this->failure;
             }
         };
-        $conversation = new Conversation(new Agent(), $store, commands: new Commands($command));
+        $conversation = new Conversation(new Agent(), $store->create(), commands: new Commands($command));
         $events = [];
         try {
-            foreach ($conversation->submitInput('/change') as $event) {
+            foreach ($conversation->sendInput('/change') as $event) {
                 $events[] = $event;
             }
             self::fail('Expected original command exception');
@@ -99,37 +98,29 @@ final class StateCommandTest extends TestCase
         self::assertInstanceOf(Notification::class, $events[3]);
         self::assertSame('Selected:' . $selected->getKey(), $events[3]->text);
         self::assertSame('yes', $store->get($selected->getKey())?->getMetadata()['changed']);
-        $stream = $conversation->submitInput('Next question');
+        $stream = $conversation->sendInput('Next question');
         iterator_to_array($stream);
         self::assertInstanceOf(AgentState::class, $stream->getReturn());
         self::assertSame('New answer', $stream->getReturn()->getMessage()?->getContent());
         self::assertCount(2, $conversation->session()->getMessages());
     }
 
-    public function testFailedSessionSelectionDoesNotRegisterAChangeOrReplaceState(): void
+    public function testCommandCanSelectASessionProvidedByItsOwnStore(): void
     {
-        $storage = new InMemoryStorage();
-        $store = new SessionStore($storage, 'owner');
-        $foreign = (new SessionStore($storage, 'other'))->create();
-        $missing = $store->create();
-        $store->delete($missing->getKey());
-        foreach ([$foreign, $missing] as $invalid) {
-            $command = $this->switchCommand($invalid, new Agent());
-            $conversation = new Conversation(new Agent(), $store, commands: new Commands($command));
-            $session = $conversation->session();
-            $agent = $conversation->agent();
-            $events = [];
-            try {
-                foreach ($conversation->submitInput('/switch') as $event) {
-                    $events[] = $event;
-                }
-                self::fail('Expected ownership error');
-            } catch (InvalidArgumentException) {
-                self::assertSame([], $events);
-                self::assertSame($session, $conversation->session());
-                self::assertSame($agent, $conversation->agent());
-            }
-        }
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $selected = (new SessionStore(new InMemoryStorage(), 'other'))->create();
+        $replacement = new Agent();
+        $command = $this->switchCommand($selected, $replacement);
+        $conversation = new Conversation(new Agent(), $store->create(), commands: new Commands($command));
+
+        $events = iterator_to_array($conversation->sendInput('/switch'));
+
+        self::assertCount(2, $events);
+        self::assertInstanceOf(SessionChanged::class, $events[0]);
+        self::assertSame($selected, $events[0]->session);
+        self::assertSame($selected, $conversation->session());
+        self::assertInstanceOf(AgentChanged::class, $events[1]);
+        self::assertSame($selected->getKey(), $conversation->agent()->getThreadId());
     }
 
     public function testAnAlreadyStartedResponseRetainsItsAgentAndSessionWhenACommandSwitchesThem(): void
@@ -139,10 +130,10 @@ final class StateCommandTest extends TestCase
         $selected = $store->create();
         $newAgent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Selected answer')));
         $oldAgent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Original answer')));
-        $conversation = new Conversation($oldAgent, $store, $original, commands: new Commands($this->switchCommand($selected, $newAgent)));
-        $running = $conversation->submitInput('Question before switch');
+        $conversation = new Conversation($oldAgent, $original, commands: new Commands($this->switchCommand($selected, $newAgent)));
+        $running = $conversation->sendInput('Question before switch');
         $running->rewind();
-        $events = iterator_to_array($conversation->submitInput('/switch'));
+        $events = iterator_to_array($conversation->sendInput('/switch'));
         self::assertCount(2, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertInstanceOf(AgentChanged::class, $events[1]);
@@ -151,7 +142,7 @@ final class StateCommandTest extends TestCase
         self::assertSame('Original answer', $running->getReturn()->getMessage()?->getContent());
         self::assertCount(2, $store->get($original->getKey())?->getMessages() ?? []);
         self::assertSame([], $conversation->session()->getMessages());
-        $next = $conversation->submitInput('Question after switch');
+        $next = $conversation->sendInput('Question after switch');
         iterator_to_array($next);
         self::assertInstanceOf(AgentState::class, $next->getReturn());
         self::assertSame('Selected answer', $next->getReturn()->getMessage()?->getContent());

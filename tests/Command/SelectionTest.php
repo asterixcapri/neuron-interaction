@@ -29,8 +29,8 @@ final class SelectionTest extends TestCase
         $stored = $store->create();
         SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
         $active = $store->create();
-        $conversation = new Conversation(new Agent(), $store, $active, commands: new Commands(new ResumeCommand('/return')));
-        $events = iterator_to_array($conversation->submitInput('/return'));
+        $conversation = new Conversation(new Agent(), $active, commands: new Commands(new ResumeCommand($store, '/return')));
+        $events = iterator_to_array($conversation->sendInput('/return'));
 
         self::assertSame($active->getKey(), $conversation->agent()->getThreadId());
         self::assertSame($active->getKey(), $conversation->session()->getKey());
@@ -42,7 +42,7 @@ final class SelectionTest extends TestCase
         self::assertSame('New session', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
-        $events = iterator_to_array($conversation->submitInput(new CommandInput($request->command, $request->options[0]->value)));
+        $events = iterator_to_array($conversation->sendInput(new CommandInput($request->command, $request->options[0]->value)));
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame($conversation->session(), $events[0]->session);
@@ -55,11 +55,11 @@ final class SelectionTest extends TestCase
         $store = new SessionStore(new InMemoryStorage(), 'owner');
         $stored = $store->create();
         SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
-        $conversation = new Conversation(new Agent(), $store, commands: new Commands(new ResumeCommand()));
-        $selection = iterator_to_array($conversation->submitInput('/resume   '));
+        $conversation = new Conversation(new Agent(), $store->create(), commands: new Commands(new ResumeCommand($store)));
+        $selection = iterator_to_array($conversation->sendInput('/resume   '));
         self::assertCount(1, $selection);
         self::assertInstanceOf(SelectionRequest::class, $selection[0]);
-        $events = iterator_to_array($conversation->submitInput('/resume  ' . $stored->getKey() . ' '));
+        $events = iterator_to_array($conversation->sendInput('/resume  ' . $stored->getKey() . ' '));
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame($stored->getKey(), $conversation->session()->getKey());
@@ -72,8 +72,8 @@ final class SelectionTest extends TestCase
         $stored = $store->create();
         SessionHistory::of($stored)->addMessage(new UserMessage('Direct resume'));
         $foreign = (new SessionStore($storage, 'other'))->create();
-        $conversation = new Conversation(new Agent(), $store, commands: new Commands(new ResumeCommand()));
-        $events = iterator_to_array($conversation->submitInput(new CommandInput('/resume', $stored->getKey())));
+        $conversation = new Conversation(new Agent(), $store->create(), commands: new Commands(new ResumeCommand($store)));
+        $events = iterator_to_array($conversation->sendInput(new CommandInput('/resume', $stored->getKey())));
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame('Direct resume', $conversation->agent()->getChatHistory()->getMessages()[0]->getContent());
@@ -82,7 +82,7 @@ final class SelectionTest extends TestCase
         foreach (['unknown', $foreign->getKey()] as $key) {
             $session = $conversation->session();
             $agent = $conversation->agent();
-            $events = iterator_to_array($conversation->submitInput(new CommandInput('/resume', $key)));
+            $events = iterator_to_array($conversation->sendInput(new CommandInput('/resume', $key)));
             self::assertCount(1, $events);
             self::assertInstanceOf(Notification::class, $events[0]);
             self::assertSame(NotificationLevel::Error, $events[0]->level);
@@ -94,8 +94,9 @@ final class SelectionTest extends TestCase
 
     public function testResumeWithoutStoredHistoryNotifiesInsteadOfRequestingAnEmptySelection(): void
     {
-        $conversation = new Conversation(new Agent(), new SessionStore(new InMemoryStorage(), 'owner'), commands: new Commands(new ResumeCommand()));
-        $events = iterator_to_array($conversation->submitInput('/resume'));
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $conversation = new Conversation(new Agent(), $store->create(), commands: new Commands(new ResumeCommand($store)));
+        $events = iterator_to_array($conversation->sendInput('/resume'));
         self::assertCount(1, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Warning, $events[0]->level);

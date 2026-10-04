@@ -22,7 +22,6 @@ use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Message\UserMessageProcessorInterface;
 use NeuronInteraction\Message\UserMessageProcessors;
 use NeuronInteraction\Session\Session;
-use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use Throwable;
 
@@ -44,8 +43,7 @@ final class Conversation
     /** @param (Closure(CommandInterface): bool)|null $admitCommand */
     public function __construct(
         Agent $agent,
-        private readonly SessionStore $sessionStore,
-        ?Session $session = null,
+        Session $session,
         private readonly ?StopSignal $stopSignal = null,
         private readonly UserMessageProcessorInterface $userMessageProcessors = new UserMessageProcessors(),
         private readonly Commands $commands = new Commands(),
@@ -54,23 +52,8 @@ final class Conversation
     ) {
         $this->configurationStore = $configurationStore ?? new ConfigurationStore(new InMemoryStorage(), 'local');
 
-        if ($session === null) {
-            if ($agent->getThreadId() !== null && $agent->getChatHistory()->getMessages() !== []) {
-                throw new InvalidArgumentException('An Agent with existing messages requires an explicit Session.');
-            }
-
-            $session = $this->sessionStore->create();
-        } else {
-            $session = $this->ownedSession($session);
-        }
-
         $this->session = $session;
         $this->agent = $session->bindToAgent($agent);
-    }
-
-    public function sessionStore(): SessionStore
-    {
-        return $this->sessionStore;
     }
 
     public function agent(): Agent
@@ -103,7 +86,7 @@ final class Conversation
      *
      * @return Generator<int, object, mixed, AgentState|null>
      */
-    public function submitInput(string|UserMessage|CommandInput $input): Generator
+    public function sendInput(string|UserMessage|CommandInput $input): Generator
     {
         if (is_string($input)) {
             if (trim($input) === '') {
@@ -167,7 +150,7 @@ final class Conversation
         $lastState = null;
         foreach ($requests as $request) {
             if ($request instanceof UserMessage) {
-                $lastState = yield from $this->submitInput($request);
+                $lastState = yield from $this->sendInput($request);
             } else {
                 yield $request;
             }
@@ -212,7 +195,6 @@ final class Conversation
 
     public function useSession(Session $session): void
     {
-        $session = $this->ownedSession($session);
         $this->agent = $session->bindToAgent($this->agent);
         $this->session = $session;
     }
@@ -224,12 +206,6 @@ final class Conversation
         $this->resetResponseStop();
 
         return yield from $agent->stream($message);
-    }
-
-    private function ownedSession(Session $session): Session
-    {
-        return $this->sessionStore->get($session->getKey())
-            ?? throw new InvalidArgumentException('The selected Session does not belong to this SessionStore.');
     }
 
     private function resetResponseStop(): void

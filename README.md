@@ -170,10 +170,11 @@ use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Conversation;
 
-$conversation = new Conversation($agent, $sessionStore, commands: new Commands(
-    new ClearCommand(), new ResumeCommand(), new HelpCommand(), new LeaveCommand(),
+$session = $sessionStore->create();
+$conversation = new Conversation($agent, $session, commands: new Commands(
+    new ClearCommand($sessionStore), new ResumeCommand($sessionStore), new HelpCommand(), new LeaveCommand(),
 ));
-foreach ($conversation->submitInput('/resume') as $event) {
+foreach ($conversation->sendInput('/resume') as $event) {
     // Present native Agent events and interaction events here.
 }
 ```
@@ -289,8 +290,8 @@ use NeuronInteraction\Conversation;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 
-$conversation = new Conversation($agent, $sessionStore, userMessageProcessors: $processors);
-$stream = $conversation->submitInput(new UserMessage('Hello'));
+$conversation = new Conversation($agent, $session, userMessageProcessors: $processors);
+$stream = $conversation->sendInput(new UserMessage('Hello'));
 foreach ($stream as $chunk) {
     if ($chunk instanceof TextChunk) {
         echo $chunk->content;
@@ -309,8 +310,8 @@ Pending inputs, queue policy, rendering and scheduling belong to the client:
 React in a web app, or Neuron TUI in a terminal. Command-generated prompts use
 the same processing pipeline when reached in the stream; processors preserve
 recognized expanded content. Each client registers its own Commands and decides
-visibility and admission through the Conversation admission closure. The runtime validates
-Session ownership and binds Agent/Session replacements.
+visibility and admission through the Conversation admission closure. The runtime
+binds Agent/Session replacements; the backend controller authorizes Session access.
 
 With `stopSignal:`, `requestInterruption()` requests the existing HTTP response
 stop during execution. The host must wire the same signal into Neuron's stoppable

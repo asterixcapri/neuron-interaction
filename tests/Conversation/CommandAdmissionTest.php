@@ -32,14 +32,14 @@ final class CommandAdmissionTest extends TestCase
         $provider = new FakeAIProvider(new AssistantMessage('Unused'));
         $conversation = new Conversation(
             (new Agent())->setAiProvider($provider),
-            new SessionStore(new InMemoryStorage(), 'owner'),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             commands: new Commands($command),
             admitCommand: static function (CommandInterface $candidate) use (&$allowed, $admission): bool {
                 $admission->record($candidate);
                 return $allowed;
             },
         );
-        $stream = $conversation->submitInput('/probe rejected');
+        $stream = $conversation->sendInput('/probe rejected');
         self::assertSame([], $admission->commands());
         self::assertSame([], $command->values);
         $events = iterator_to_array($stream);
@@ -53,12 +53,12 @@ final class CommandAdmissionTest extends TestCase
         self::assertNotSame('', $events[0]->text);
         self::assertNull($stream->getReturn());
         $allowed = true;
-        iterator_to_array($conversation->submitInput(new CommandInput('/probe', 'selected')));
+        iterator_to_array($conversation->sendInput(new CommandInput('/probe', 'selected')));
         self::assertSame([$command, $command], $admission->commands());
         self::assertSame(['selected'], $command->values);
         self::assertSame('selected', $conversation->configurationStore()->read('effect'));
         $allowed = false;
-        iterator_to_array($conversation->submitInput(new CommandInput('/probe', 'second choice')));
+        iterator_to_array($conversation->sendInput(new CommandInput('/probe', 'second choice')));
         self::assertSame(['selected'], $command->values);
         self::assertCount(3, $admission->commands());
     }
@@ -68,10 +68,10 @@ final class CommandAdmissionTest extends TestCase
         $command = new AdmissionProbeCommand();
         $conversation = new Conversation(
             new Agent(),
-            new SessionStore(new InMemoryStorage(), 'owner'),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             commands: new Commands($command),
         );
-        iterator_to_array($conversation->submitInput('/probe ordinary'));
+        iterator_to_array($conversation->sendInput('/probe ordinary'));
         self::assertSame(['ordinary'], $command->values);
     }
 
@@ -79,11 +79,11 @@ final class CommandAdmissionTest extends TestCase
     {
         $conversation = new Conversation(
             new Agent(),
-            new SessionStore(new InMemoryStorage(), 'owner'),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             commands: new Commands(new HelpCommand()),
             admitCommand: static fn(CommandInterface $command): bool => false,
         );
-        $events = iterator_to_array($conversation->submitInput('/help'));
+        $events = iterator_to_array($conversation->sendInput('/help'));
         self::assertCount(1, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Warning, $events[0]->level);
@@ -95,14 +95,14 @@ final class CommandAdmissionTest extends TestCase
         $failure = new RuntimeException('Authorization unavailable');
         $conversation = new Conversation(
             new Agent(),
-            new SessionStore(new InMemoryStorage(), 'owner'),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             commands: new Commands($command),
             admitCommand: static function (CommandInterface $candidate) use ($failure): bool {
                 throw $failure;
             },
         );
         try {
-            iterator_to_array($conversation->submitInput('/probe'));
+            iterator_to_array($conversation->sendInput('/probe'));
             self::fail('Expected the admission exception');
         } catch (RuntimeException $exception) {
             self::assertSame($failure, $exception);
@@ -115,12 +115,12 @@ final class CommandAdmissionTest extends TestCase
     {
         $conversation = new Conversation(
             new Agent(),
-            new SessionStore(new InMemoryStorage(), 'owner'),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             admitCommand: static function (CommandInterface $candidate): bool {
                 self::fail('An unknown Command has nothing to admit');
             },
         );
-        $events = iterator_to_array($conversation->submitInput('/missing'));
+        $events = iterator_to_array($conversation->sendInput('/missing'));
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Error, $events[0]->level);
     }

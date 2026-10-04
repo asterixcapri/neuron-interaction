@@ -26,15 +26,17 @@
         }
     ],
     "scripts": {
-        "sessions": "php bin/01-multiple-sessions.php",
+        "input": "php bin/01-input.php",
+        "sessions": "php bin/02-sessions.php",
         "stan": "phpstan analyse --no-progress --memory-limit=512M",
-        "commands": "php bin/02-commands.php",
-        "selection": "php bin/03-selection.php",
-        "interruption": "php bin/04-interruption.php",
-        "processors": "php bin/05-processors.php",
-        "input-history": "php bin/06-input-history.php",
-        "preferences": "php bin/07-preferences.php",
-        "portable-selection": "php bin/08-portable-selection.php"
+        "commands": "php bin/03-commands.php",
+        "selection": "php bin/04-selection.php",
+        "interruption": "php bin/05-interruption.php",
+        "processors": "php bin/06-processors.php",
+        "input-history": "php bin/07-input-history.php",
+        "preferences": "php bin/08-preferences.php",
+        "portable-selection": "php bin/09-portable-selection.php",
+        "echo": "php bin/10-echo.php"
     },
     "config": {
         "sort-packages": true

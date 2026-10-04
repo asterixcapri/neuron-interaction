@@ -9,7 +9,7 @@ public function forDisplay(UserMessage $message): UserMessage;
 ```
 
 The Host Application supplies the processing module to `Conversation`
-with `userMessageProcessors:`. `submitInput()` invokes `forAgent()` exactly
+with `userMessageProcessors:`. `sendInput()` invokes `forAgent()` exactly
 once synchronously for ordinary messages, before returning the lazy response stream. Frontend queue
 entries are original input; they are prepared when the frontend submits them.
 Command-generated prompts use the same processing pipeline once, when their
@@ -41,8 +41,8 @@ use NeuronInteraction\Message\UserMessageProcessors;
 $processing = (new UserMessageProcessors())
     ->addProcessor($first)
     ->addProcessor([$second]);
-$conversation = new Conversation($agent, $sessionStore, userMessageProcessors: $processing);
-$stream = $conversation->submitInput($submitted);
+$conversation = new Conversation($agent, $session, userMessageProcessors: $processing);
+$stream = $conversation->sendInput($submitted);
 foreach ($stream as $chunk) {
     // Present the native Neuron output.
 }
@@ -53,7 +53,7 @@ Preparation applies `$first`, then `$second`. Display applies `$second`, then
 preparation and execution; pending client input is not yet prepared.
 
 There is no public preparation step or alternate prompt submission method.
-Clients show the original input, then call `submitInput()` and consume its
+Clients show the original input, then call `sendInput()` and consume its
 native stream. When reopening a conversation, project the saved Agent History
 with `forDisplay()`. If preparation transforms content or attachments, the
 reopened presentation can differ from the original live preview.

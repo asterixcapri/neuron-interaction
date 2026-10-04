@@ -20,9 +20,9 @@ function execTurn(Conversation $conversation, string $message): void
     echo 'You: ' . $message . PHP_EOL;
     echo 'Agent: ';
 
-    $handler = $conversation->submitInput(new UserMessage($message));
+    $stream = $conversation->sendInput(new UserMessage($message));
 
-    foreach ($handler as $event) {
+    foreach ($stream as $event) {
         if ($event instanceof TextChunk) {
             echo $event->content;
             flush();

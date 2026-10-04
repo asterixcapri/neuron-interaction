@@ -1,7 +1,7 @@
 # Commands and unified input
 
 Configure `Conversation` with an immutable `Commands` registry and consume
-`submitInput(string|UserMessage|CommandInput)`. No commands are registered by
+`sendInput(string|UserMessage|CommandInput)`. No commands are registered by
 default. `new Commands($first, $second)` preserves order and rejects duplicate or
 invalid identifiers. Identifiers start with slash followed by letters, digits,
 underscores or hyphens; lookup is exact. `all()` and `named()` provide consultation.
@@ -31,8 +31,8 @@ final class ExplainCommand implements CommandInterface
     }
 }
 
-$conversation = new Conversation($agent, $sessionStore, commands: new Commands(new ExplainCommand()));
-foreach ($conversation->submitInput('/explain PHP generators') as $event) {
+$conversation = new Conversation($agent, $session, commands: new Commands(new ExplainCommand()));
+foreach ($conversation->sendInput('/explain PHP generators') as $event) {
     // Present notifications and native Neuron events here, in stream order.
 }
 ```
@@ -40,9 +40,10 @@ foreach ($conversation->submitInput('/explain PHP generators') as $event) {
 ## Context and ordered effects
 
 Every invocation receives a new concrete final CommandContext. `agent()`,
-`session()`, `sessionStore()`, `configurationStore()` and `commands()` expose
-current state and a consultation list. `useSession()` verifies ownership and
-binds the selected Session; `useAgent()` binds the selected Agent to that Session.
+`session()`, `configurationStore()` and `commands()` expose current state and
+a consultation list. Commands that need a SessionStore receive it through their
+constructor, as ClearCommand and ResumeCommand do. `useSession()` binds the
+supplied Session; `useAgent()` binds the selected Agent to that Session.
 Both change state immediately and register SessionChanged or AgentChanged.
 Explicitly call useAgent after changing an Agent property when the host needs an
 AgentChanged event. The context exposes no Conversation or executable dispatcher.
@@ -79,13 +80,13 @@ keeping pending selection state.
 use NeuronInteraction\Command\CommandInput;
 use NeuronInteraction\Command\SelectionRequest;
 
-foreach ($conversation->submitInput('/resume') as $event) {
+foreach ($conversation->sendInput('/resume') as $event) {
     if ($event instanceof SelectionRequest) {
         // The host presents label/description and retains command + option value.
     }
 }
 // A later submission, possibly in a new HTTP request and Conversation instance:
-foreach ($conversation->submitInput(new CommandInput($command, $chosenValue)) as $event) {
+foreach ($conversation->sendInput(new CommandInput($command, $chosenValue)) as $event) {
     // Consume the new stream.
 }
 ```
@@ -112,13 +113,21 @@ the five interaction events alongside native Neuron objects.
 Mount built-ins explicitly: HelpCommand lists registered names/descriptions;
 LeaveCommand requests exit; ClearCommand selects a new empty Session without
 deleting the old one; ResumeCommand presents stored history or selects a key.
-Their constructors support custom identifiers. An omitted ConfigurationStore is
+Their constructors support custom identifiers. ClearCommand and ResumeCommand
+require a SessionStore as their first constructor argument. An omitted ConfigurationStore is
 isolated in-memory storage per Conversation; provide persistent storage when
 preferences must survive requests or processes.
 
 ## Migration
 
-Replace the separate message and command execution paths with submitInput.
+Create or retrieve a Session before constructing Conversation, and pass it as the
+second argument instead of SessionStore. Conversation no longer creates an initial
+Session or checks its ownership. Remove sessionStore() calls from CommandContext;
+inject a SessionStore into Commands that need one. Construct the built-ins with
+`new ClearCommand($sessionStore)` and `new ResumeCommand($sessionStore)`.
+
+
+Replace the separate message and command execution paths with sendInput.
 Construct Commands variadically, resolving host name collisions before
 registration. Replace host command adapters with concrete CommandContext in
 run methods and stream event presentation in the host. Replace separate warning

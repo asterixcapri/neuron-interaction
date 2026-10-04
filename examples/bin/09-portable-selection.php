@@ -41,9 +41,15 @@ $languageCommand = new class implements CommandInterface {
         $context->notify('Saved language: ' . $value);
     }
 };
-$conversation = new Conversation(new Agent(), new SessionStore(new InMemoryStorage(), 'demo-user'), commands: new Commands($languageCommand));
+$agent = new Agent();
+$storage = new InMemoryStorage();
+$sessionStore = new SessionStore($storage, 'demo-user');
+$session = $sessionStore->create();
+$conversation = new Conversation($agent, $session, commands: new Commands($languageCommand));
 
-foreach ($conversation->submitInput('/language') as $event) {
+$stream = $conversation->sendInput('/language');
+
+foreach ($stream as $event) {
     if (!$event instanceof SelectionRequest) {
         continue;
     }
@@ -67,7 +73,7 @@ foreach ($conversation->submitInput('/language') as $event) {
     $option = $event->options[$number - 1];
     // A browser sends these two strings in a later HTTP request. Its backend
     // restores the Session and stores and submits this input to a new Conversation.
-    foreach ($conversation->submitInput(new CommandInput($event->command, $option->value)) as $response) {
+    foreach ($conversation->sendInput(new CommandInput($event->command, $option->value)) as $response) {
         if ($response instanceof Notification) {
             echo $response->text . \PHP_EOL;
         }

@@ -28,10 +28,10 @@ final class HelpAndLeaveTest extends TestCase
     {
         $conversation = new Conversation(
             new Agent(),
-            new SessionStore(new InMemoryStorage(), 'owner'),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             commands: new Commands(new HelpCommand('/guide'), new LeaveCommand('/quit')),
         );
-        $stream = $conversation->submitInput('/guide');
+        $stream = $conversation->sendInput('/guide');
         $events = iterator_to_array($stream);
         self::assertCount(2, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
@@ -47,19 +47,19 @@ final class HelpAndLeaveTest extends TestCase
         $provider = new FakeAIProvider(new AssistantMessage('Still available'));
         $conversation = new Conversation(
             (new Agent())->setAiProvider($provider),
-            new SessionStore(new InMemoryStorage(), 'owner'),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             stopSignal: $stop,
             commands: new Commands(new LeaveCommand(), new HelpCommand()),
         );
         $session = $conversation->session();
-        $events = iterator_to_array($conversation->submitInput('/exit'));
+        $events = iterator_to_array($conversation->sendInput('/exit'));
         self::assertCount(1, $events);
         self::assertInstanceOf(ExitRequest::class, $events[0]);
         self::assertFalse($stop->isRequested());
         self::assertFalse($conversation->responseStopRequested());
         self::assertSame($session, $conversation->session());
-        self::assertCount(2, iterator_to_array($conversation->submitInput('/help')));
-        iterator_to_array($conversation->submitInput('Continue after exit'));
+        self::assertCount(2, iterator_to_array($conversation->sendInput('/help')));
+        iterator_to_array($conversation->sendInput('Continue after exit'));
         self::assertCount(1, $provider->getRecorded());
     }
 
@@ -85,10 +85,10 @@ final class HelpAndLeaveTest extends TestCase
         };
         $conversation = new Conversation(
             new Agent(),
-            new SessionStore(new InMemoryStorage(), 'owner'),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             commands: new Commands($command),
         );
-        $events = iterator_to_array($conversation->submitInput('/ordered'));
+        $events = iterator_to_array($conversation->sendInput('/ordered'));
         self::assertCount(3, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame('Before', $events[0]->text);

@@ -4,9 +4,11 @@ Conversation executes messages and Commands in a Session and returns native
 Neuron and interaction events in a single stream. React and Neuron TUI are frontends: they own input, pending
 messages, presentation and the policy for starting the next turn.
 
-Every Conversation requires an Agent and a SessionStore. Without an explicit
-initial Session, construction creates a new Session in that Store. Use a
-SessionStore backed by InMemoryStorage for process-local conversations.
+Every Conversation requires an Agent and an explicit Session. The host creates
+the Session with SessionStore::create() or retrieves it with get($key) before
+constructing Conversation. Conversation neither creates Sessions nor holds a
+SessionStore. The backend controller authorizes access to the supplied Session.
+Use a SessionStore backed by InMemoryStorage for process-local conversations.
 
 History presentation follows the same boundary. Core stores and returns native
 Neuron messages; each frontend chooses visible content and correlates tools for
@@ -21,9 +23,9 @@ use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Conversation;
 
-// $agent is configured by the host; $sessionStore belongs to the current user.
-$conversation = new Conversation($agent, $sessionStore, session: $session);
-$stream = $conversation->submitInput(new UserMessage('Analyse this file'));
+// $agent is configured by the host; $session is created or retrieved by the host.
+$conversation = new Conversation($agent, $session);
+$stream = $conversation->sendInput(new UserMessage('Analyse this file'));
 foreach ($stream as $chunk) {
     if ($chunk instanceof TextChunk) {
         echo $chunk->content;
@@ -33,7 +35,7 @@ $state = $stream->getReturn(); // Neuron AgentState, including approval interrup
 ```
 
 There is no subscribe/executeNext pair. Preparation and rejection happen in
-submitInput(), before it returns. Iteration starts the Agent; each object is
+sendInput(), before it returns. Iteration starts the Agent; each object is
 delivered as it arrives. Text, tools, reasoning and other native output retain
 identity and ordering. If the host configures a Neuron stream adapter, its output
 also passes through without a second conversion.
@@ -48,7 +50,7 @@ not a stop request. Release an abandoned stream (`unset($stream)`) and its other
 references so Neuron can release its native execution resources. An unstarted
 stream can be discarded without Agent execution.
 
-submitInput() is the only submission API. Commands register prompts through
+sendInput() is the only submission API. Commands register prompts through
 CommandContext::promptAgent. Each message goes through the configured processors
 once, with generated prompts prepared when their request is reached; processors
 preserve content they recognize as already expanded. There is no public
@@ -66,9 +68,9 @@ Tui::make($agent)
     ->run();
 ```
 
-The TUI constructs its Conversation at startup, using a default in-memory
-SessionStore unless `setSessionStore()` supplies one. An explicit initial Session
-requires an explicit Store. Initial Session, stop signal and message processing
+The TUI constructs its Conversation at startup with an explicit Session. It uses
+`setSession()` when supplied, otherwise creates a Session in the configured or
+default in-memory SessionStore. A supplied Session needs no matching Store. Initial Session, stop signal and message processing
 are configured through `setSession()`,
 `setStopSignal()` and `setUserMessageProcessors()` before `run()`. The host
 does not construct or retain the TUI-owned Conversation.
@@ -138,11 +140,10 @@ use NeuronInteraction\Conversation;
 
 $conversation = new Conversation(
     $agent,
-    $sessionStore,
-    session: $session,
+    $session,
     stopSignal: $stopSignal,
 );
-$stream = $conversation->submitInput(new UserMessage($text));
+$stream = $conversation->sendInput(new UserMessage($text));
 $adapter = new AgentChunkAdapter();
 
 // Inside the framework's streaming-response callback:
@@ -209,7 +210,7 @@ closing a picker without a choice submits nothing.
 Availability belongs to the host, through Conversation's admitCommand closure.
 The TUI keeps help and exit available while busy and refuses ordinary Commands,
 including selection responses. Human inputs remain in its FIFO. State-changing
-commands immediately bind the selected owned Session or Agent; already started
+commands immediately bind the supplied Session or Agent; already started
 responses retain their captured Agent and Session. See [Commands](commands.md)
 for request ordering, errors and portable HTTP selection.
 
@@ -225,7 +226,7 @@ The evidence behind the client-queue decision is recorded in
 
 ## Unified input and Command notifications
 
-`submitInput(string|UserMessage|CommandInput)` is the public submission method.
+`sendInput(string|UserMessage|CommandInput)` is the public submission method.
 Strings such as `/echo hello` dispatch the registered `/echo` Command with `hello`
 as its argument. The argument remains opaque, including slash-prefixed values.
 An explicit `UserMessage` always reaches the Agent, even when its text starts with
@@ -252,5 +253,6 @@ are emitted before the original exception propagates; state changes remain.
 An omitted ConfigurationStore uses isolated memory storage for each Conversation.
 A supplied store is reused, allowing the host to persist its preferences.
 
-Run `php examples/bin/00-input.php` for a minimal Command notification example
-without provider credentials.
+Run `php examples/bin/01-input.php` for a minimal message and streaming response
+example with a configured provider. See `examples/bin/03-commands.php` for Command
+notifications.

@@ -27,7 +27,8 @@ $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 $storage = new InMemoryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
 
-$conversation = new Conversation($agent, $sessionStore, commands: new Commands(new ResumeCommand()));
+$session = $sessionStore->create();
+$conversation = new Conversation($agent, $session, commands: new Commands(new ResumeCommand($sessionStore)));
 
 $session = $conversation->session();
 $session->setTitle('Trip to Lisbon');
@@ -43,7 +44,8 @@ execTurn($conversation, 'My destination is Kyoto. Acknowledge in one short sente
 
 echo '=== /resume requests a SelectionRequest ===' . \PHP_EOL;
 $selection = null;
-foreach ($conversation->submitInput('/resume') as $event) {
+$stream = $conversation->sendInput('/resume');
+foreach ($stream as $event) {
     if ($event instanceof SelectionRequest) {
         $selection = $event;
         echo $event->prompt . \PHP_EOL;
@@ -71,7 +73,8 @@ if ($number === false) {
     exit(1);
 }
 $option = $selection->options[$number - 1];
-foreach ($conversation->submitInput(new CommandInput($selection->command, $option->value)) as $event) {
+$stream = $conversation->sendInput(new CommandInput($selection->command, $option->value));
+foreach ($stream as $event) {
     if ($event instanceof SessionChanged) {
         echo 'Selected Session: ' . $event->session->getTitle() . \PHP_EOL;
     }

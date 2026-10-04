@@ -30,7 +30,7 @@ final class CommandInputTest extends TestCase
     {
         $command = $this->command();
         $conversation = $this->conversation(new Commands($command));
-        $stream = $conversation->submitInput('/echo  /help ');
+        $stream = $conversation->sendInput('/echo  /help ');
         self::assertSame([], $command->values);
         $events = iterator_to_array($stream);
         self::assertSame([' /help '], $command->values);
@@ -40,27 +40,27 @@ final class CommandInputTest extends TestCase
         self::assertInstanceOf(Notification::class, $events[1]);
         self::assertSame(NotificationLevel::Warning, $events[1]->level);
         self::assertNull($stream->getReturn());
-        iterator_to_array($conversation->submitInput(new CommandInput('/echo', '/help')));
+        iterator_to_array($conversation->sendInput(new CommandInput('/echo', '/help')));
         self::assertSame([' /help ', '/help'], $command->values);
     }
 
     public function testExplicitUserMessageIsNeverParsedAndBlankStringsDoNothing(): void
     {
         $provider = new FakeAIProvider(new AssistantMessage('Literal slash'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), new SessionStore(new InMemoryStorage(), 'owner'));
-        $blank = $conversation->submitInput('   ');
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $blank = $conversation->sendInput('   ');
         self::assertSame([], iterator_to_array($blank));
         self::assertNull($blank->getReturn());
         $before = $provider->getRecorded();
         self::assertSame([], $before);
-        iterator_to_array($conversation->submitInput(new UserMessage('/echo')));
+        iterator_to_array($conversation->sendInput(new UserMessage('/echo')));
         $recorded = $provider->getRecorded();
         self::assertSame('/echo', $recorded[0]->messages[0]->getContent());
     }
 
     public function testUnknownCommandIsAnErrorWithoutAgentExecution(): void
     {
-        $events = iterator_to_array($this->conversation()->submitInput('/missing'));
+        $events = iterator_to_array($this->conversation()->sendInput('/missing'));
         self::assertCount(1, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Error, $events[0]->level);
@@ -89,7 +89,7 @@ final class CommandInputTest extends TestCase
             }
         };
         $conversation = $this->conversation(new Commands($command));
-        $stream = $conversation->submitInput('/fail fail');
+        $stream = $conversation->sendInput('/fail fail');
         $stream->rewind();
         self::assertInstanceOf(Notification::class, $stream->current());
         self::assertSame('fail', $stream->current()->text);
@@ -100,7 +100,7 @@ final class CommandInputTest extends TestCase
         } catch (RuntimeException $exception) {
             self::assertSame($failure, $exception);
         }
-        self::assertCount(1, iterator_to_array($conversation->submitInput('/fail success')));
+        self::assertCount(1, iterator_to_array($conversation->sendInput('/fail success')));
     }
 
     public function testConfigurationDefaultsAreIsolatedAndSuppliedStoreIsReused(): void
@@ -110,7 +110,7 @@ final class CommandInputTest extends TestCase
         $first->configurationStore()->write('key', 'first');
         self::assertNull($second->configurationStore()->read('key'));
         $store = new ConfigurationStore(new InMemoryStorage(), 'owner');
-        $provided = new Conversation(new Agent(), new SessionStore(new InMemoryStorage(), 'owner'), configurationStore: $store);
+        $provided = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create(), configurationStore: $store);
         self::assertSame($store, $provided->configurationStore());
     }
 
@@ -147,7 +147,7 @@ final class CommandInputTest extends TestCase
 
     private function conversation(Commands $commands = new Commands()): Conversation
     {
-        return new Conversation(new Agent(), new SessionStore(new InMemoryStorage(), 'owner'), commands: $commands);
+        return new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create(), commands: $commands);
     }
 
     private function command(string $name = '/echo'): EchoInputTestCommand

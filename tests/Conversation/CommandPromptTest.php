@@ -54,7 +54,7 @@ final class CommandPromptTest extends TestCase
                 return $states[$index];
             },
         );
-        $stream = $conversation->submitInput('/prompt');
+        $stream = $conversation->sendInput('/prompt');
         self::assertSame([], $calls);
         $events = iterator_to_array($stream, false);
         self::assertCount(5, $events);
@@ -103,7 +103,7 @@ final class CommandPromptTest extends TestCase
             },
             $processor,
         );
-        $stream = $conversation->submitInput('/prompt');
+        $stream = $conversation->sendInput('/prompt');
         $stream->rewind();
         self::assertSame(0, $processor->calls);
         $stream->next();
@@ -128,7 +128,7 @@ final class CommandPromptTest extends TestCase
                 return new AgentState();
             },
         );
-        $stream = $conversation->submitInput('/prompt');
+        $stream = $conversation->sendInput('/prompt');
         $stream->rewind();
         self::assertSame($event, $stream->current());
         try {
@@ -157,7 +157,7 @@ final class CommandPromptTest extends TestCase
             },
         );
         try {
-            iterator_to_array($conversation->submitInput('/prompt'));
+            iterator_to_array($conversation->sendInput('/prompt'));
             self::fail('Expected Agent failure');
         } catch (RuntimeException $exception) {
             self::assertSame($requestFailure, $exception);
@@ -184,7 +184,7 @@ final class CommandPromptTest extends TestCase
             },
             stopSignal: new StopSignal(new InMemoryStorage(), 'prompts'),
         );
-        self::assertSame([$approval, $approval], iterator_to_array($conversation->submitInput('/prompt'), false));
+        self::assertSame([$approval, $approval], iterator_to_array($conversation->sendInput('/prompt'), false));
         self::assertSame(2, $calls);
     }
 
@@ -222,6 +222,6 @@ final class CommandPromptTest extends TestCase
                 return yield from ($this->stream)($messages);
             }
         };
-        return new Conversation($agent, new SessionStore(new InMemoryStorage(), 'owner'), stopSignal: $stopSignal, userMessageProcessors: $processors ?? new UserMessageProcessors(), commands: new Commands($command));
+        return new Conversation($agent, (new SessionStore(new InMemoryStorage(), 'owner'))->create(), stopSignal: $stopSignal, userMessageProcessors: $processors ?? new UserMessageProcessors(), commands: new Commands($command));
     }
 }

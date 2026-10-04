@@ -10,7 +10,6 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\Session;
-use NeuronInteraction\Session\SessionStore;
 
 /** State access and ordered requests for one Command invocation. */
 final class CommandContext
@@ -38,11 +37,6 @@ final class CommandContext
     {
         $this->conversation->useSession($session);
         ($this->registerRequest)(new SessionChanged($this->conversation->session()));
-    }
-
-    public function sessionStore(): SessionStore
-    {
-        return $this->conversation->sessionStore();
     }
 
     public function configurationStore(): ConfigurationStore

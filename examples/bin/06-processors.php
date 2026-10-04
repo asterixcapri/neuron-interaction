@@ -24,9 +24,12 @@ $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 $agent->setTools([]);
 
 $processor = new FileReferenceProcessor(\dirname(__DIR__) . '/fixtures');
+$storage = new InMemoryStorage();
+$sessionStore = new SessionStore($storage, 'demo-user');
+$session = $sessionStore->create();
 $conversation = new Conversation(
     $agent,
-    new SessionStore(new InMemoryStorage(), 'demo-user'),
+    $session,
     userMessageProcessors: $processor,
 );
 $conversation->session()->setTitle('A trip described in a file');

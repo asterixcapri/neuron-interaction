@@ -24,8 +24,9 @@ Host Applications explicitly bind a Session from `create()` or `get($key)`
 to the Agent when they want that conversation managed by this SessionStore.
 Interaction Adapters keep that Session explicitly: replacing the Agent preserves
 it, while selecting another Session changes the conversation. Neuron TUI creates
-an empty Session from startup by default; reopening one requires passing both
-`session` and its matching `sessionStore` to Tui.
+an empty Session at startup by default; reopening one requires passing it with
+`setSession()`. Conversation requires an explicit Session and never creates one.
+The host authorizes access before supplying a Session.
 SessionStore does not import arbitrary Agent conversations or automatically select the
 latest conversation. Only Histories managed through this Store appear in
 its listing, subject to the existing title rules.

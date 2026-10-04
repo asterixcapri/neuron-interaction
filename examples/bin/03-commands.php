@@ -28,10 +28,11 @@ $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 $storage = new FileStorage(\dirname(__DIR__) . '/.storage/commands');
 $sessionStore = new SessionStore($storage, 'demo-user');
 
-$conversation = new Conversation($agent, $sessionStore, commands: new Commands(
+$session = $sessionStore->create();
+$conversation = new Conversation($agent, $session, commands: new Commands(
     new HelpCommand(),
-    new ClearCommand(),
-    new ResumeCommand(),
+    new ClearCommand($sessionStore),
+    new ResumeCommand($sessionStore),
     new ExplainCommand(),
 ));
 
@@ -61,7 +62,8 @@ execInput($conversation, 'What is my name? Answer with just the name.');
 function execInput(Conversation $conversation, string $input): void
 {
     echo 'Input: ' . $input . \PHP_EOL;
-    foreach ($conversation->submitInput($input) as $event) {
+    $stream = $conversation->sendInput($input);
+    foreach ($stream as $event) {
         if ($event instanceof TextChunk) {
             echo $event->content;
             \flush();

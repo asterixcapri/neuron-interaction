@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use InvalidArgumentException;
-use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
 use PHPUnit\Framework\TestCase;
@@ -14,7 +13,7 @@ final class CommandsTest extends TestCase
 {
     public function testRegistryPreservesOrderAndLookupIsExact(): void
     {
-        $first = new ClearCommand('/review');
+        $first = new HelpCommand('/review');
         $second = new HelpCommand('/Review');
         $commands = new Commands($first, $second);
         self::assertSame([$first, $second], $commands->all());
@@ -29,7 +28,7 @@ final class CommandsTest extends TestCase
     {
         foreach (['review', '', '/', '//review', '/two words', '/review!'] as $name) {
             try {
-                new Commands(new ClearCommand($name));
+                new Commands(new HelpCommand($name));
                 self::fail('Invalid identifier must be rejected');
             } catch (InvalidArgumentException $exception) {
                 self::assertStringContainsString('identifier', $exception->getMessage());
@@ -40,6 +39,6 @@ final class CommandsTest extends TestCase
     public function testDuplicatesAreRejectedRatherThanShadowed(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        new Commands(new ClearCommand('/review'), new HelpCommand('/review'));
+        new Commands(new HelpCommand('/review'), new HelpCommand('/review'));
     }
 }

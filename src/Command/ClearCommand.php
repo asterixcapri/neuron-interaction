@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Command;
 
+use NeuronInteraction\Session\SessionStore;
+
 /**
  * Starts a new Session, leaving the previous one where it is stored.
  *
@@ -15,7 +17,7 @@ namespace NeuronInteraction\Command;
 final readonly class ClearCommand implements CommandInterface
 {
     /** @param string $name the presentation-neutral identifier */
-    public function __construct(private string $name = '/clear') {}
+    public function __construct(private SessionStore $sessionStore, private string $name = '/clear') {}
 
     public function name(): string
     {
@@ -29,7 +31,7 @@ final readonly class ClearCommand implements CommandInterface
 
     public function run(CommandContext $context, string $value): void
     {
-        $session = $context->sessionStore()->create();
+        $session = $this->sessionStore->create();
         $context->useSession($session);
     }
 }

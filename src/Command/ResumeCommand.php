@@ -7,6 +7,7 @@ namespace NeuronInteraction\Command;
 use DateTimeImmutable;
 use NeuronInteraction\Formatting\RelativeTimeFormatter;
 use NeuronInteraction\Formatting\SizeFormatter;
+use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
 
 use function trim;
@@ -23,7 +24,7 @@ use function trim;
 final readonly class ResumeCommand implements CommandInterface
 {
     /** @param string $name the presentation-neutral identifier */
-    public function __construct(private string $name = '/resume') {}
+    public function __construct(private SessionStore $sessionStore, private string $name = '/resume') {}
 
     public function name(): string
     {
@@ -39,7 +40,7 @@ final readonly class ResumeCommand implements CommandInterface
     {
         $value = trim($value);
         if ($value !== '') {
-            $session = $context->sessionStore()->get($value);
+            $session = $this->sessionStore->get($value);
 
             if ($session === null) {
                 $context->notify('No Session is named by that key.', NotificationLevel::Error);
@@ -52,7 +53,7 @@ final readonly class ResumeCommand implements CommandInterface
             return;
         }
 
-        $sessions = $context->sessionStore()->list();
+        $sessions = $this->sessionStore->list();
 
         if ($sessions === []) {
             $context->notify('There is no earlier Session to return to yet.', NotificationLevel::Warning);

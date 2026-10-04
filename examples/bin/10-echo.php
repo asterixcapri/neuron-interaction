@@ -13,7 +13,7 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 
-require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 $echo = new class implements CommandInterface {
     public function name(): string
@@ -32,15 +32,19 @@ $echo = new class implements CommandInterface {
     }
 };
 
+$storage = new InMemoryStorage();
+$sessionStore = new SessionStore($storage, 'demo-user');
+$session = $sessionStore->create();
 $conversation = new Conversation(
     new Agent(),
-    new SessionStore(new InMemoryStorage(), 'demo-user'),
+    $session,
     commands: new Commands($echo, new LeaveCommand()),
 );
 
 // The terminal host decides to leave when it receives an ExitRequest.
 foreach (['/echo Hello from Conversation', '/exit', '/echo Unreached'] as $input) {
-    foreach ($conversation->submitInput($input) as $event) {
+    $stream = $conversation->sendInput($input);
+    foreach ($stream as $event) {
         if ($event instanceof Notification) {
             echo $event->text . \PHP_EOL;
         } elseif ($event instanceof ExitRequest) {

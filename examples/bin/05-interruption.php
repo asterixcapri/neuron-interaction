@@ -26,12 +26,15 @@ $stopSignal = new StopSignal($storage, 'demo-response');
 $httpClient = new StoppableHttpClient(new AmpHttpClient(), $stopSignal->stopCallback());
 $agent = DemoAgent::make();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano', $httpClient));
-$conversation = new Conversation($agent, new SessionStore($storage, 'demo-user'), stopSignal: $stopSignal);
+$sessionStore = new SessionStore($storage, 'demo-user');
+$session = $sessionStore->create();
+$conversation = new Conversation($agent, $session, stopSignal: $stopSignal);
 $conversation->session()->setTitle('An interrupted answer');
 
 echo '=== Request a long answer, then stop it ===' . \PHP_EOL;
 echo 'You: Count from 1 to 1000, separated by commas.' . \PHP_EOL . 'Agent: ';
-foreach ($conversation->submitInput(new UserMessage('Count from 1 to 1000, separated by commas.')) as $event) {
+$stream = $conversation->sendInput(new UserMessage('Count from 1 to 1000, separated by commas.'));
+foreach ($stream as $event) {
     if ($event instanceof TextChunk) {
         echo $event->content;
         \flush();
