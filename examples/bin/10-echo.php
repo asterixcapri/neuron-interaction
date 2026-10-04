@@ -6,8 +6,8 @@ use NeuronAI\Agent\Agent;
 use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\ExitCommand;
 use NeuronInteraction\Command\ExitRequest;
-use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\Notification;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
@@ -39,7 +39,7 @@ $conversation = new Conversation(
     new Agent(),
     $session,
 );
-$conversation->setCommands(new Commands($echo, new LeaveCommand()));
+$conversation->setCommands(new Commands($echo, new ExitCommand()));
 
 // The terminal host decides to leave when it receives an ExitRequest.
 foreach (['/echo Hello from Conversation', '/exit', '/echo Unreached'] as $input) {

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
+use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
-use NeuronInteractionDemo\DemoAgent;
 use NeuronInteractionDemo\FileReferenceProcessor;
 use Symfony\Component\Dotenv\Dotenv;
 
@@ -18,10 +18,8 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
-$agent = DemoAgent::make();
+$agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
-// File contents are supplied by the processor in this example.
-$agent->setTools([]);
 
 $processor = new FileReferenceProcessor(\dirname(__DIR__) . '/fixtures');
 $storage = new InMemoryStorage();

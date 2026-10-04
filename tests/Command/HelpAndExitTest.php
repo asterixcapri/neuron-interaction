@@ -10,9 +10,9 @@ use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\ExitCommand;
 use NeuronInteraction\Command\ExitRequest;
 use NeuronInteraction\Command\HelpCommand;
-use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\Notification;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Interruption\StopSignal;
@@ -22,7 +22,7 @@ use PHPUnit\Framework\TestCase;
 
 use function iterator_to_array;
 
-final class HelpAndLeaveTest extends TestCase
+final class HelpAndExitTest extends TestCase
 {
     public function testHelpListsTheRegisteredCommandsInOrder(): void
     {
@@ -30,7 +30,7 @@ final class HelpAndLeaveTest extends TestCase
             new Agent(),
             (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
         );
-        $conversation->setCommands(new Commands(new HelpCommand('/guide'), new LeaveCommand('/quit')));
+        $conversation->setCommands(new Commands(new HelpCommand('/guide'), new ExitCommand('/quit')));
         $stream = $conversation->sendInput('/guide');
         $events = iterator_to_array($stream);
         self::assertCount(2, $events);
@@ -50,7 +50,7 @@ final class HelpAndLeaveTest extends TestCase
             (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
             stopSignal: $stop,
         );
-        $conversation->setCommands(new Commands(new LeaveCommand(), new HelpCommand()));
+        $conversation->setCommands(new Commands(new ExitCommand(), new HelpCommand()));
         $session = $conversation->session();
         $events = iterator_to_array($conversation->sendInput('/exit'));
         self::assertCount(1, $events);

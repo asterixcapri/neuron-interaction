@@ -13,7 +13,7 @@ Status: ready-for-agent
 - [x] La closure facoltativa di admission riceve il Command e viene valutata prima di ogni invocazione; senza closure il Command è ammesso.
 - [x] Il rifiuto produce Notification Warning senza eseguire il Command; un’eccezione della closure propaga senza effetti del Command.
 - [x] HelpCommand usa l’elenco consultabile del context e notify per descrivere i Command registrati.
-- [x] LeaveCommand usa requestExit e produce ExitRequest in ordine, senza terminare Conversation, interrompere l’Agent o annullare altre richieste.
+- [x] ExitCommand usa requestExit e produce ExitRequest in ordine, senza terminare Conversation, interrompere l’Agent o annullare altre richieste.
 - [x] I test dimostrano che un host può ignorare ExitRequest e continuare a sottoporre input e che l’ammissione resta indipendente dalla classe condivisa del Command.
 - [x] Il contratto finale non richiede ConcurrentCommandInterface, request generico, CommandFinished o eventi dedicati ai fallimenti.
 - [x] Un consumer terminale dimostra l’uscita gestita dall’host e documenta la differenza rispetto all’interruzione della risposta.

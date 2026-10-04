@@ -109,7 +109,7 @@ bool before each invocation, including selection responses. False emits a Warnin
 without executing the Command; a closure exception propagates unchanged. Unknown
 identifiers emit Error notifications. Text is human feedback, not an outcome
 protocol. Authorization, queues and busy policy belong to the host. The TUI keeps
-HelpCommand and LeaveCommand available while busy and refuses ordinary Commands.
+HelpCommand and ExitCommand available while busy and refuses ordinary Commands.
 
 ExitRequest asks the host to leave. It does not end Conversation, stop a response,
 close the process or cancel remaining requests. A web host can ignore it.
@@ -117,7 +117,7 @@ Notification, SelectionRequest, ExitRequest, SessionChanged and AgentChanged are
 the five interaction events alongside native Neuron objects.
 
 Mount built-ins explicitly: HelpCommand lists registered names/descriptions;
-LeaveCommand requests exit; ClearCommand selects a new empty Session without
+ExitCommand requests exit; ClearCommand selects a new empty Session without
 deleting the old one; ResumeCommand presents stored history or selects a key.
 Their constructors support custom identifiers. ClearCommand and ResumeCommand
 require a SessionStore as their first constructor argument. An omitted ConfigurationStore is

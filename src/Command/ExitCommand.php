@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 /** Requests that the Host Application leave its interaction. */
-final readonly class LeaveCommand implements CommandInterface
+final readonly class ExitCommand implements CommandInterface
 {
     /**
      * @param string $name the name it answers to, including the leading slash

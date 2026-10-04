@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
+use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Command\AgentChanged;
 use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\CommandInput;
 use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\ExitCommand;
 use NeuronInteraction\Command\ExitRequest;
 use NeuronInteraction\Command\HelpCommand;
-use NeuronInteraction\Command\LeaveCommand;
 use NeuronInteraction\Command\Notification;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Command\SelectionRequest;
@@ -18,7 +19,6 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteractionDemo\AIProviderFactory;
-use NeuronInteractionDemo\DemoAgent;
 use NeuronInteractionDemo\ExplainCommand;
 use Symfony\Component\Dotenv\Dotenv;
 
@@ -26,7 +26,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
-$agent = DemoAgent::make();
+$agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
 $storage = new FileStorage(\dirname(__DIR__) . '/.storage/commands');
@@ -37,15 +37,13 @@ $session->setTitle('Commands example');
 
 $conversation = new Conversation($agent, $session);
 
-$commands = (new Commands())->addCommand(
+$conversation->setCommands(new Commands(
     new HelpCommand(),
     new ClearCommand($sessionStore),
     new ResumeCommand($sessionStore),
     new ExplainCommand(),
-    new LeaveCommand(),
-);
-
-$conversation->setCommands($commands);
+    new ExitCommand(),
+));
 
 echo 'Enter a message or a Command.' . \PHP_EOL;
 echo 'Try /help, /explain PHP generators, /clear, /resume or /exit.' . \PHP_EOL . \PHP_EOL;

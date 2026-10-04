@@ -215,7 +215,7 @@ e tra richieste HTTP separate. Annullare un picker non invia input alla libreria
   Conversation.
 - La migrazione rimuove CommandAdapterInterface, AbstractCommandAdapter,
   afterExecution, generics di output e il vecchio protocollo CommandExecution.
-- HelpCommand, LeaveCommand, ClearCommand e ResumeCommand passano al context.
+- HelpCommand, ExitCommand, ClearCommand e ResumeCommand passano al context.
   Help usa la lista consultabile, Leave richiede uscita, Clear e Resume cambiano
   Session; Resume può chiedere una SelectionRequest prima della scelta.
 - neuron-tui continua a costruire la propria Conversation internamente. Passa

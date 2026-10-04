@@ -11,7 +11,7 @@ Set `OPENAI_API_KEY` in `.env`. If the file is absent, copy `.env.example` and
 fill in the key. Executable examples live in `bin/`; shared Host configuration
 and presentation live in `src/`.
 
-Examples 01 and 02 use a plain `Agent`; the other Agent examples use `DemoAgent`.
+All Agent examples use `new Agent()`.
 They configure their provider through `AIProviderFactory` and use the real
 OpenAI model `openai:gpt-5.4-nano`. To change the model, edit the identifier in the
 script. Responses are printed in streaming. Input history and preferences
@@ -54,7 +54,7 @@ Its streaming presentation helper is defined in the same file.
 
 This interactive terminal example reads a message or Command on each turn.
 Try a normal message, `/help`, `/explain PHP generators`, `/clear`, `/resume`
-and `/exit`. The script builds its registry with `addCommand()` and supplies it
+and `/exit`. The script passes each Command to the `Commands` constructor and supplies the registry
 through `Conversation::setCommands()`.
 
 The main loop simulates a consumer: it reads input, calls `sendInput()`
@@ -106,8 +106,7 @@ including its dates, budget or interests. The script then prints the saved
 expanded message and its compact `forDisplay()` projection.
 
 `FileReferenceProcessor` is adapted from the Neuron TUI example. It preserves
-original input and already expanded references. For this example, the Agent's
-tools are cleared so the file context is supplied by the processor.
+original input and already expanded references. The file context is supplied by the processor.
 
 ## 07 — Input history
 

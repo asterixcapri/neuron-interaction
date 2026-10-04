@@ -165,7 +165,7 @@ Choose which Commands your application offers and register them explicitly:
 ```php
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
-use NeuronInteraction\Command\LeaveCommand;
+use NeuronInteraction\Command\ExitCommand;
 use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Conversation;
@@ -173,7 +173,7 @@ use NeuronInteraction\Conversation;
 $session = $sessionStore->create();
 $conversation = new Conversation($agent, $session);
 $conversation->setCommands(new Commands(
-    new ClearCommand($sessionStore), new ResumeCommand($sessionStore), new HelpCommand(), new LeaveCommand(),
+    new ClearCommand($sessionStore), new ResumeCommand($sessionStore), new HelpCommand(), new ExitCommand(),
 ));
 foreach ($conversation->sendInput('/resume') as $event) {
     // Present native Agent events and interaction events here.

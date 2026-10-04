@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\HttpClient\Amp\AmpHttpClient;
@@ -11,7 +12,6 @@ use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
-use NeuronInteractionDemo\DemoAgent;
 use Symfony\Component\Dotenv\Dotenv;
 
 use function NeuronInteractionDemo\execTurn;
@@ -24,7 +24,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 $storage = new InMemoryStorage();
 $stopSignal = new StopSignal($storage, 'demo-response');
 $httpClient = new StoppableHttpClient(new AmpHttpClient(), $stopSignal->stopCallback());
-$agent = DemoAgent::make();
+$agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano', $httpClient));
 $sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
