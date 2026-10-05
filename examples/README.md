@@ -26,7 +26,7 @@ are independent modules and do not require an Agent or credentials.
 | 05 | `composer custom-selection` | Choose a model and change the Agent through a custom Command. |
 | 06 | `composer interruption` | Stop a streamed answer after a random number of text chunks. |
 | 07 | `composer processors` | Expand `@README.md` into a `<file>` tag for the Agent and restore the reference when displaying History. |
-| 08 | `composer input-history` | Recall original inputs, including Command syntax, and restore the current draft. |
+| 08 | `composer input-history` | Persist original inputs, including Command syntax, and list them later. |
 | 09 | `composer preferences -- Italian` | Save a user preference; run `composer preferences` again to read it in another process. |
 | 10 | `composer portable-selection` | Present labeled choices and submit an opaque value without an AI provider. |
 | 11 | `composer echo` | Run a local `/echo` Command and handle `/exit` without an AI provider. |
@@ -115,10 +115,9 @@ named text file inside the configured directory and returns its contents.
 
 ## 08 — Input history
 
-Original submissions are stored independently of Session messages: a question
-and `/help`. A fresh InputHistory reads them from the same storage. The script
-simulates Up twice and Down twice; the final value is `My unfinished question`.
-Your client supplies the keyboard or button handling.
+Conversation automatically records original submissions through `setInputHistory()`: a question
+and `/help`, independently of Session messages. The script lists the saved inputs. Navigation and draft restoration belong to
+the consumer.
 
 ## 09 — Preferences
 

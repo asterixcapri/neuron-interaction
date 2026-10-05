@@ -19,6 +19,7 @@ use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\Notification;
 use NeuronInteraction\Command\NotificationLevel;
 use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Message\UserMessageProcessors;
 use NeuronInteraction\Session\Session;
@@ -41,6 +42,8 @@ final class Conversation
     private ConfigurationStore $configurationStore;
 
     private UserMessageProcessors $userMessageProcessors;
+
+    private ?InputHistory $inputHistory = null;
 
     private ?StopSignal $stopSignal = null;
 
@@ -130,6 +133,16 @@ final class Conversation
         $this->userMessageProcessors = $userMessageProcessors;
     }
 
+    public function inputHistory(): ?InputHistory
+    {
+        return $this->inputHistory;
+    }
+
+    public function setInputHistory(InputHistory $inputHistory): void
+    {
+        $this->inputHistory = $inputHistory;
+    }
+
     public function stopSignal(): ?StopSignal
     {
         return $this->stopSignal;
@@ -174,6 +187,17 @@ final class Conversation
      */
     public function sendInput(string|UserMessage|CommandInput $input): Generator
     {
+        if ($this->inputHistory !== null) {
+            $original = match (true) {
+                is_string($input) => new UserMessage($input),
+                $input instanceof CommandInput => new UserMessage(
+                    $input->identifier . ($input->value === '' ? '' : ' ' . $input->value),
+                ),
+                default => $input,
+            };
+            $this->inputHistory->append($original);
+        }
+
         if (is_string($input)) {
             if (trim($input) === '') {
                 return $this->emptyStream();
@@ -183,7 +207,12 @@ final class Conversation
         if ($input instanceof CommandInput) {
             return $this->streamCommand($input);
         }
-        $message = $input;
+        return $this->prepareMessage($input);
+    }
+
+    /** @return Generator<int, object, mixed, AgentState> */
+    private function prepareMessage(UserMessage $message): Generator
+    {
         $message = $this->userMessageProcessors->forAgent(clone $message);
 
         $hasText = trim($message->getContent() ?? '') !== '';
@@ -236,7 +265,7 @@ final class Conversation
         $lastState = null;
         foreach ($requests as $request) {
             if ($request instanceof UserMessage) {
-                $lastState = yield from $this->sendInput($request);
+                $lastState = yield from $this->prepareMessage($request);
             } else {
                 yield $request;
             }

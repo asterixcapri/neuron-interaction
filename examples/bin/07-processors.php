@@ -46,8 +46,6 @@ final class FileUserMessageProcessor extends AbstractUserMessageTagProcessor
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
-$processor = new FileUserMessageProcessor(\dirname(__DIR__, 2));
-
 $storage = new InMemoryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
 
@@ -55,8 +53,10 @@ $session = $sessionStore->create();
 $session->setTitle('A README summary');
 
 $conversation = new Conversation($agent, $session);
-$processors = new UserMessageProcessors($processor);
-$conversation->setUserMessageProcessors($processors);
+
+$conversation->setUserMessageProcessors(new UserMessageProcessors(
+    new FileUserMessageProcessor(\dirname(__DIR__, 2))
+));
 
 // Conversation expands @README.md before executing the Agent.
 $input = 'Summarize @README.md in one short sentence.';

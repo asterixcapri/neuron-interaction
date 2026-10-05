@@ -132,21 +132,18 @@ for polling, terminal integration and lifecycle details.
 Record user submissions and recall them later:
 
 ```php
-use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\InputHistory\InputHistory;
 
 $inputs = new InputHistory($storage);
-$inputs->record(new UserMessage('/resume session-key'));
-$inputs->record(new UserMessage('A message exactly as submitted'));
-$submitted = $inputs->entries(); // Oldest first, across sessions.
-
-$recalled = $inputs->older(new UserMessage('Unsubmitted draft'));
-$newer = $inputs->newer(); // Restores the draft past the newest input.
+$conversation->setInputHistory($inputs);
+$stream = $conversation->sendInput('A message exactly as submitted');
+$submitted = $inputs->list(); // Oldest first, across sessions.
 ```
 
-Your application decides when to record input and handles keyboard events.
-A web frontend can use `entries()` and navigate locally. See
-[Input history](docs/input-history.md) for navigation state and storage behavior.
+Conversation records original inputs before processors when InputHistory is configured.
+Your application handles navigation, draft restoration and keyboard events.
+Both terminal and web clients can use `list()` and navigate locally. See
+[Input history](docs/input-history.md) for storage behavior.
 
 ## Commands
 
