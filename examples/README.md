@@ -25,7 +25,7 @@ are independent modules and do not require an Agent or credentials.
 | 04 | `composer selection` | Choose a previous Session with SelectionRequest and CommandInput. |
 | 05 | `composer custom-selection` | Choose a model and change the Agent through a custom Command. |
 | 06 | `composer interruption` | Stop a streamed answer after a random number of text chunks. |
-| 07 | `composer processors` | Expand `@trip.txt` for the Agent and show the compact original message when displaying History. |
+| 07 | `composer processors` | Expand `@README.md` into a `<file>` tag for the Agent and restore the reference when displaying History. |
 | 08 | `composer input-history` | Recall original inputs, including Command syntax, and restore the current draft. |
 | 09 | `composer preferences -- Italian` | Save a user preference; run `composer preferences` again to read it in another process. |
 | 10 | `composer portable-selection` | Present labeled choices and submit an opaque value without an AI provider. |
@@ -48,7 +48,8 @@ The script lists saved Sessions, returns to each one, prints its messages and as
 Neuron AI executes the Agent. Interaction provides the user's collection of
 Sessions, listing, titles, persistence and switching the active context.
 Files live in `.storage/multiple-sessions/`; every run creates two more Sessions.
-The script shows listing, retrieval by key, switching and saved messages directly.
+The script shows listing, retrieval by key and switching directly, then displays
+the saved messages through `Conversation::getDisplayMessages()`.
 Its streaming presentation helper is defined in the same file.
 
 ## 03 — Commands
@@ -78,7 +79,7 @@ Sessions remain in memory for this run.
 The consumer displays each SelectionRequest, reads an option number and sends a
 CommandInput on the next loop iteration, after consuming the previous stream.
 Enter cancels the choice. SessionChanged shows where a client refreshes its
-conversation. To provide input from a pipe, run `php bin/04-selection.php` directly.
+conversation using `getDisplayMessages()`. To provide input from a pipe, run `php bin/04-selection.php` directly.
 
 ## 05 — Custom selection
 
@@ -99,13 +100,18 @@ handler. This interrupts the HTTP response, not the execution of local tools.
 
 ## 07 — Processors
 
-The user submits a reference to `fixtures/trip.txt`. The processor adds its
-contents before execution; the real response should summarize the Lisbon trip,
-including its dates, budget or interests. The script then prints the saved
-expanded message and its compact `forDisplay()` projection.
+The user submits `@README.md`. The processor turns it into a
+`<file name="README.md">` tag containing the repository's existing README before
+execution; the response should summarize the project. The script
+confirms through `Conversation::getMessages()` that the saved message includes
+the README, then prints all Session messages through `getDisplayMessages()`.
+The user message shows the original `@README.md` reference, followed by the
+Agent's response, without dumping the whole file.
 
-`FileReferenceProcessor` is adapted from the Neuron TUI example. It preserves
-original input and already expanded references. The file context is supplied by the processor.
+`FileUserMessageProcessor` is defined in the example file. Its `tagName()`
+method tells `AbstractUserMessageTagProcessor` to produce a `file` tag from `@` references.
+The base class handles replacement and display; the example class resolves any
+named text file inside the configured directory and returns its contents.
 
 ## 08 — Input history
 

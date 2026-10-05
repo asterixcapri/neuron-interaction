@@ -20,18 +20,44 @@ a Turn. The client reports the failure and retains its draft
 and original input recall. Valid attachments and message metadata are preserved.
 
 `forDisplay()` projects saved messages before a frontend renders their
-content blocks. Live human input is shown immediately as submitted, without
+content blocks. `Conversation::getMessages()` returns the saved Session history;
+`getDisplayMessages()` applies `forDisplay()` to its UserMessages and leaves
+other messages unchanged, without changing saved history. Live human input is shown immediately as submitted, without
 applying either processor to its preview. Command-generated prompts have no automatic live human preview. Their saved
 History is projected with `forDisplay()` when the host displays it. It must not alter stored History, perform side effects or depend
 on how often the frontend renders. Repeated calls with the same original message
 must produce the same representation. It need not reverse preparation or be
 idempotent when applied to its own output.
 
+`Session::getMessages()`, `Conversation::getMessages()` and
+`Conversation::getDisplayMessages()` accept optional `limit` and `before`
+parameters. A limit selects the most recent messages, returned in chronological
+order. `before` is the ID of a message excluded from the page; an unknown ID
+returns an empty page. With neither parameter, the complete history is returned.
+
+```php
+$messages = $conversation->getDisplayMessages(limit: 50);
+if ($messages !== []) {
+    $older = $conversation->getDisplayMessages(limit: 50, before: $messages[0]->getId());
+}
+```
+
 Both methods return a new message and must not modify the received message or
 its content blocks. Preserve unaffected attachments, block metadata and message
 metadata. Processors may explicitly add, replace or remove content; the frontend
 renders the returned blocks rather than substituting only the text. Unrecognized
 content remains unchanged.
+
+To expand references into model-readable tags, extend
+`AbstractUserMessageTagProcessor`. Implement `tagName(): string` for the output
+tag name and `contentFor(string $reference): ?string` for its contents. Returning
+`file` from `tagName()` turns `@README.md` into
+`<file name="README.md">...contents...</file>`. The default input prefix is `@`;
+override `referencePrefix(): string` to use `/` for skill references.
+Override `attributesFor(string $reference): array` to supply additional tag
+attributes. The base class restores the original reference in `forDisplay()`.
+Return `null` to leave a reference unchanged; throw to reject the input.
+Already expanded text blocks are not expanded again. See example 07.
 
 Compose processors with `UserMessageProcessors`:
 
@@ -54,8 +80,8 @@ preparation and execution; pending client input is not yet prepared.
 
 There is no public preparation step or alternate prompt submission method.
 Clients show the original input, then call `sendInput()` and consume its
-native stream. When reopening a conversation, project the saved Agent History
-with `forDisplay()`. If preparation transforms content or attachments, the
+native stream. When reopening a conversation, use `getDisplayMessages()` to
+project the saved Agent History. If preparation transforms content or attachments, the
 reopened presentation can differ from the original live preview.
 
 `addProcessor()` accepts a single processor or an

@@ -7,7 +7,6 @@ namespace NeuronInteractionDemo;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Conversation;
-use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 
 use function flush;
@@ -43,11 +42,11 @@ function showSessions(SessionStore $sessionStore): void
     echo PHP_EOL;
 }
 
-function showMessages(Session $session): void
+function showMessages(Conversation $conversation): void
 {
-    echo '=== ' . $session->getTitle() . ' ===' . PHP_EOL . PHP_EOL;
+    echo '=== ' . $conversation->session()->getTitle() . ' ===' . PHP_EOL . PHP_EOL;
 
-    foreach ($session->getMessages() as $message) {
+    foreach ($conversation->getDisplayMessages() as $message) {
         echo ucfirst($message->getRole()) . ': ' . $message->getContent() . PHP_EOL;
     }
 }

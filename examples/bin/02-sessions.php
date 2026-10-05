@@ -8,6 +8,7 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteractionDemo\AIProviderFactory;
+use RuntimeException;
 use Symfony\Component\Dotenv\Dotenv;
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -48,20 +49,22 @@ foreach ($sessionStore->list() as $summary) {
 echo \PHP_EOL;
 
 // Any key from the list can be used to retrieve and resume its Session.
-$conversation->useSession($sessionStore->get($lisbonKey));
+$lisbonSession = $sessionStore->get($lisbonKey) ?? throw new RuntimeException('Lisbon Session not found.');
+$conversation->useSession($lisbonSession);
 
 echo '=== Back to Lisbon: saved messages ===' . \PHP_EOL;
-foreach ($lisbonSession->getMessages() as $message) {
+foreach ($conversation->getDisplayMessages() as $message) {
     echo \ucfirst($message->getRole()) . ': ' . $message->getContent() . \PHP_EOL;
 }
 
 // The Agent now uses Lisbon's History and should answer "Lisbon".
 execTurn($conversation, 'What is my destination? Answer with just the city name.');
 
-$conversation->useSession($sessionStore->get($kyotoKey));
+$kyotoSession = $sessionStore->get($kyotoKey) ?? throw new RuntimeException('Kyoto Session not found.');
+$conversation->useSession($kyotoSession);
 
 echo '=== Back to Kyoto: saved messages ===' . \PHP_EOL;
-foreach ($kyotoSession->getMessages() as $message) {
+foreach ($conversation->getDisplayMessages() as $message) {
     echo \ucfirst($message->getRole()) . ': ' . $message->getContent() . \PHP_EOL;
 }
 

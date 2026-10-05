@@ -69,7 +69,7 @@ while (true) {
             echo $event->text . \PHP_EOL;
         } elseif ($event instanceof SessionChanged) {
             echo 'Session changed: ' . $event->session->getKey() . \PHP_EOL;
-            foreach ($event->session->getMessages() as $message) {
+            foreach ($conversation->getDisplayMessages() as $message) {
                 echo \ucfirst($message->getRole()) . ': ' . $message->getContent() . \PHP_EOL;
             }
         } elseif ($event instanceof SelectionRequest) {

@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Agent\AgentState;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
+use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInput;
@@ -66,6 +67,25 @@ final class Conversation
     public function session(): Session
     {
         return $this->session;
+    }
+
+    /** @return list<Message> */
+    public function getMessages(?int $limit = null, ?string $before = null): array
+    {
+        return $this->session->getMessages($limit, $before);
+    }
+
+    /** @return list<Message> */
+    public function getDisplayMessages(?int $limit = null, ?string $before = null): array
+    {
+        $messages = $this->getMessages($limit, $before);
+        foreach ($messages as $index => $message) {
+            if ($message instanceof UserMessage) {
+                $messages[$index] = $this->userMessageProcessors->forDisplay(clone $message);
+            }
+        }
+
+        return $messages;
     }
 
     public function commands(): Commands

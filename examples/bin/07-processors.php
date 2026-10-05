@@ -3,44 +3,79 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
-use NeuronAI\Chat\Messages\UserMessage;
+use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Conversation;
+use NeuronInteraction\Message\AbstractUserMessageTagProcessor;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
-use NeuronInteractionDemo\FileReferenceProcessor;
+use RuntimeException;
 use Symfony\Component\Dotenv\Dotenv;
-
-use function NeuronInteractionDemo\execTurn;
-use function NeuronInteractionDemo\showMessages;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
+/** Expands @file references into <file> tags with their text contents. */
+final class FileUserMessageProcessor extends AbstractUserMessageTagProcessor
+{
+    public function __construct(private readonly string $directory) {}
+
+    protected function tagName(): string
+    {
+        return 'file';
+    }
+
+    protected function contentFor(string $name): string
+    {
+        $path = \realpath($this->directory . '/' . $name);
+        if ($path === false) {
+            throw new RuntimeException("File {$name} does not exist.");
+        }
+
+        $contents = \file_get_contents($path);
+        if ($contents === false) {
+            throw new RuntimeException("File {$name} could not be read.");
+        }
+
+        return $contents;
+    }
+}
+
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
-$processor = new FileReferenceProcessor(\dirname(__DIR__) . '/fixtures');
+$processor = new FileUserMessageProcessor(\dirname(__DIR__, 2));
+
 $storage = new InMemoryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
+
 $session = $sessionStore->create();
+$session->setTitle('A README summary');
+
 $conversation = new Conversation(
     $agent,
     $session,
     userMessageProcessors: $processor,
 );
-$conversation->session()->setTitle('A trip described in a file');
 
-// Conversation expands the reference before executing the Agent.
-execTurn($conversation, 'Summarize @trip.txt in one short sentence using the referenced file contents.');
+// Conversation expands @README.md before executing the Agent.
+$input = 'Summarize @README.md in one short sentence.';
+echo 'You: ' . $input . \PHP_EOL;
+echo 'Agent: ';
 
-echo '=== Saved messages include the file contents sent to the Agent ===' . \PHP_EOL;
-showMessages($conversation->session());
+$stream = $conversation->sendInput($input);
 
-$saved = $conversation->session()->getMessages()[0];
-if (!$saved instanceof UserMessage) {
-    throw new RuntimeException('Expected a saved user message.');
+foreach ($stream as $event) {
+    if ($event instanceof TextChunk) {
+        echo $event->content;
+        \flush();
+    }
 }
-echo \PHP_EOL . '=== The display projection hides the expanded file ===' . \PHP_EOL;
-echo 'You: ' . $processor->forDisplay($saved)->getContent() . \PHP_EOL;
+
+echo \PHP_EOL . \PHP_EOL;
+
+echo \PHP_EOL . '=== Session messages for display ===' . \PHP_EOL;
+foreach ($conversation->getDisplayMessages() as $message) {
+    echo \ucfirst($message->getRole()) . ': ' . $message->getContent() . \PHP_EOL;
+}
