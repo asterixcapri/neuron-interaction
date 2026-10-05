@@ -7,8 +7,8 @@ user preferences and response stopping for applications built with
 Use it to save and resume conversations, offer reusable commands, ask users
 to choose an option, recall previous inputs and persist their preferences.
 Use the modules independently in a terminal or web application. Your application
-controls the UI, Agent execution and streaming; commands use an Adapter to
-connect to its input and output.
+controls input and presentation; Conversation dispatches commands and executes
+their prompts in one stream.
 
 ## Installation
 
@@ -132,21 +132,18 @@ for polling, terminal integration and lifecycle details.
 Record user submissions and recall them later:
 
 ```php
-use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\InputHistory\InputHistory;
 
 $inputs = new InputHistory($storage);
-$inputs->record(new UserMessage('/resume session-key'));
-$inputs->record(new UserMessage('A message exactly as submitted'));
-$submitted = $inputs->entries(); // Oldest first, across sessions.
-
-$recalled = $inputs->older(new UserMessage('Unsubmitted draft'));
-$newer = $inputs->newer(); // Restores the draft past the newest input.
+$conversation->setInputHistory($inputs);
+$stream = $conversation->sendInput('A message exactly as submitted');
+$submitted = $inputs->list(); // Oldest first, across sessions.
 ```
 
-Your application decides when to record input and handles keyboard events.
-A web frontend can use `entries()` and navigate locally. See
-[Input history](docs/input-history.md) for navigation state and storage behavior.
+Conversation records original inputs before processors when InputHistory is configured.
+Your application handles navigation, draft restoration and keyboard events.
+Both terminal and web clients can use `list()` and navigate locally. See
+[Input history](docs/input-history.md) for storage behavior.
 
 ## Commands
 
@@ -160,67 +157,56 @@ reopening a saved one. The library includes:
 | `/help` | List the available Commands. |
 | `/exit` | Ask the application to end the interaction. |
 
-Choose which Commands your application offers and mount them explicitly:
+Choose which Commands your application offers and register them explicitly:
 
 ```php
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
-use NeuronInteraction\Command\LeaveCommand;
+use NeuronInteraction\Command\ExitCommand;
 use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\ResumeCommand;
+use NeuronInteraction\Conversation;
 
-$commands = (new Commands())->addCommand([
-    new ClearCommand(),
-    new ResumeCommand(),
-    new HelpCommand(),
-    new LeaveCommand(),
-]);
-
-// $adapter connects the Commands to your application.
-$output = $commands->run('/resume', '', $adapter);
+$session = $sessionStore->create();
+$conversation = new Conversation($agent, $session);
+$conversation->setCommands(new Commands(
+    new ClearCommand($sessionStore), new ResumeCommand($sessionStore), new HelpCommand(), new ExitCommand(),
+));
+foreach ($conversation->sendInput('/resume') as $event) {
+    // Present native Agent events and interaction events here.
+}
 ```
 
-The Adapter decides how to display messages, offer choices and end the
-interaction. A terminal Adapter can update the screen; a backend Adapter can
-return response data. The Commands work with either.
-
-To reopen a known Session, pass its key as the arguments:
-
-```php
-$output = $commands->run('/resume', $sessionKey, $adapter);
-```
+The host presents Notification, SelectionRequest, ExitRequest, SessionChanged and
+AgentChanged. A chosen option returns as CommandInput with command and value, even
+across HTTP requests; cancelling submits nothing. Commands have no pending picker
+state. Unknown commands produce Error feedback; the optional commandAdmission
+closure lets the host refuse an invocation with Warning feedback.
 
 ### Write a Command
 
-A Command provides its name, a short description and the action to perform:
+A Command receives the concrete context and returns void. It registers prompts
+for Conversation to execute in the same stream:
 
 ```php
-use NeuronInteraction\Command\CommandAdapterInterface;
+use NeuronAI\Chat\Messages\UserMessage;
+use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInterface;
 
 final class HelloCommand implements CommandInterface
 {
-    public function name(): string
+    public function name(): string { return '/hello'; }
+    public function describe(): string { return 'Say hello.'; }
+    public function run(CommandContext $context, string $value): void
     {
-        return '/hello';
-    }
-
-    public function describe(): string
-    {
-        return 'Say hello.';
-    }
-
-    public function run(CommandAdapterInterface $adapter, string $value): void
-    {
-        $adapter->notify('Hello!');
+        $context->notify('Greeting requested.');
+        $context->promptAgent(new UserMessage('Say hello to ' . $value));
     }
 }
-
-$commands->addCommand(new HelloCommand());
 ```
 
-See the [Command and Adapter reference](docs/commands.md) for custom Adapters,
-mounting, execution outcomes and error handling.
+See the [Command reference and migration guide](docs/commands.md) for request
+ordering, state access, selection, admission and error propagation.
 
 ## Examples
 
@@ -238,8 +224,9 @@ composer --working-dir=examples sessions
 | Run from `examples/` | Demonstrates |
 | --- | --- |
 | `composer sessions` | List Sessions, inspect their messages and switch between independent contexts. |
-| `composer commands` | Mount shared Commands and a custom Command that prompts the Agent. |
+| `composer commands` | Use `/help`, `/clear` and `/exit` in an interactive conversation. |
 | `composer selection` | Choose a Session through presentation-neutral Selection options. |
+| `composer custom-selection` | Define `/model` and choose a model through Selection options. |
 | `composer interruption` | Stop an HTTP response and retain its partial message. |
 | `composer processors` | Expand a file reference for the Agent and project saved content for display. |
 | `composer input-history` | Recall original inputs and recover a draft. |
@@ -271,9 +258,8 @@ complete `UserMessage` objects for the Agent and project them for display.
 `UserMessageProcessors` can be populated like `Commands`:
 
 ```php
-$processors = (new UserMessageProcessors())
-    ->addProcessor($first)
-    ->addProcessor([$second, $third]);
+$processors = new UserMessageProcessors($first, $second);
+$processors->addProcessor($third);
 ```
 
 `addProcessor()` mutates the collection and returns the same instance. Register
@@ -302,8 +288,9 @@ use NeuronInteraction\Conversation;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 
-$conversation = new Conversation($agent, $sessionStore, userMessageProcessors: $processors);
-$stream = $conversation->submitMessage(new UserMessage('Hello'));
+$conversation = new Conversation($agent, $session);
+$conversation->setUserMessageProcessors($processors);
+$stream = $conversation->sendInput(new UserMessage('Hello'));
 foreach ($stream as $chunk) {
     if ($chunk instanceof TextChunk) {
         echo $chunk->content;
@@ -320,11 +307,12 @@ release it with `unset($stream)` when abandoning it.
 
 Pending inputs, queue policy, rendering and scheduling belong to the client:
 React in a web app, or Neuron TUI in a terminal. Command-generated prompts use
-`submitMessage()` as well; processors preserve recognized expanded content. Each client mounts its own Commands
-and decides visibility and admission through its Adapter. The runtime validates
-Session ownership and binds Agent/Session replacements.
+the same processing pipeline when reached in the stream; processors preserve
+recognized expanded content. Each client registers its own Commands and decides
+visibility and admission through the Conversation admission closure. The runtime
+binds Agent/Session replacements; the backend controller authorizes Session access.
 
-With `stopSignal:`, `requestInterruption()` requests the existing HTTP response
+With `setStopSignal()`, `requestInterruption()` requests the existing HTTP response
 stop during execution. The host must wire the same signal into Neuron's stoppable
 HTTP client. Separate requests can signal shared storage directly; disconnecting
 the frontend alone does not guarantee cancellation.

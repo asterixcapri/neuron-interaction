@@ -29,9 +29,9 @@ final readonly class Session
     }
 
     /** @return list<Message> */
-    public function getMessages(): array
+    public function getMessages(?int $limit = null, ?string $before = null): array
     {
-        return array_values($this->store->loadAll($this->key));
+        return array_values($this->store->loadAll($this->key, $limit, $before));
     }
 
     /** Returns an Agent copy bound to this conversation, retaining its context window. */

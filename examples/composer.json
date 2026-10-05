@@ -26,14 +26,17 @@
         }
     ],
     "scripts": {
-        "sessions": "php bin/01-multiple-sessions.php",
+        "input": "php bin/01-input.php",
+        "sessions": "php bin/02-sessions.php",
         "stan": "phpstan analyse --no-progress --memory-limit=512M",
-        "commands": "php bin/02-commands.php",
-        "selection": "php bin/03-selection.php",
-        "interruption": "php bin/04-interruption.php",
-        "processors": "php bin/05-processors.php",
-        "input-history": "php bin/06-input-history.php",
-        "preferences": "php bin/07-preferences.php"
+        "commands": "php bin/03-commands.php",
+        "selection": "php bin/04-selection.php",
+        "custom-selection": "php bin/05-custom-selection.php",
+        "interruption": "php bin/06-interruption.php",
+        "processors": "php bin/07-processors.php",
+        "input-history": "php bin/08-input-history.php",
+        "configuration": "php bin/09-configuration.php",
+        "custom-command": "php bin/10-custom-command.php"
     },
     "config": {
         "sort-packages": true
@@ -41,9 +44,6 @@
     "autoload": {
         "psr-4": {
             "NeuronInteractionDemo\\": "src/"
-        },
-        "files": [
-            "src/functions.php"
-        ]
+        }
     }
 }

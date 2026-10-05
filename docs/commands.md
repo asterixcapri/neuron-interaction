@@ -1,191 +1,145 @@
-# Command and Adapter reference
+# Commands and unified input
 
-For an introduction and runnable examples, see [Commands in the README](../README.md#commands).
-This reference describes the execution contract for custom Commands and Adapters.
+Configure `Conversation` with `setCommands($commands)` and consume
+`sendInput(string|UserMessage|CommandInput)`. No commands are registered by
+default. Build a registry with `new Commands($first, $second)` or add Commands
+later with `addCommand($first, $second)`. A later Command with the same name
+replaces the earlier one in its original position. Invalid identifiers are rejected.
+Identifiers start with slash followed by letters, digits,
+underscores or hyphens; lookup is exact. `all()` and `named()` provide consultation.
+setCommands() replaces the entire registry. Changes to the supplied registry
+are visible to Conversation, and dispatch uses the registry when the stream is
+consumed. A Command already executing continues normally.
 
-## Identifiers and execution
-
-Every mounted identifier includes its leading slash, including aliases. Names
-without a slash are rejected immediately; lookup is exact, with no case or
-prefix normalization. Backend Adapters use the same identifiers.
-
-Commands receive `CommandAdapterInterface`, use its shared operations and return
-`void`. `Commands::run()` owns the whole invocation: it resolves the first matching
-Command, requests Adapter admission, invokes the Command, and passes its technical
-`CommandExecution` outcome to `afterExecution()`. Callers receive the Adapter's
-output from this one call; they do not coordinate completion separately.
-
-## Admission and completion
-
-- An unknown identifier reaches `afterExecution()` with an `unknown` outcome,
-  without admission or Command dispatch.
-- `admit()` receives the resolved Command. Returning `false` skips dispatch and
-  completion, and `run()` returns `null`. The Adapter handles visible refusal.
-- An admitted Command produces `completed` when it returns or `failed` with its
-  original exception when it throws. Both reach `afterExecution()`.
-- Exceptions from `admit()` or `afterExecution()` propagate to the caller.
-  Completion is never retried as a failed Command invocation.
-
-## Adapter output
-
-`afterExecution()` defines the Adapter's output: a backend can return its response
-data or a framework response, while a terminal Adapter may perform presentation
-and return `null`. `CommandAdapterInterface<TOutput>` and the generic `run()`
-method preserve that output type in static analysis; `run()` returns
-`TOutput|null` because admission can refuse. No response format or transport
-dependency is imposed by the shared package.
-
-`CommandExecution` is a technical outcome passed to the Adapter, not a domain
-result. `completed` means the invocation returned; a requested selection or Agent
-response may still be pending. Command failures do not roll back effects already
-performed, including notices, History changes, or immediate Agent replacement.
-
-## Migrating from CommandControlsInterface
-
-Replace `CommandControlsInterface` with `CommandAdapterInterface` in Commands and Adapter
-implementations, add `admit()` and `afterExecution()`, and consume the Adapter's
-output from `run()` instead of expecting `CommandExecution`. Commands can annotate
-their parameter as `CommandAdapterInterface<mixed>`; concrete Adapters declare
-`@implements CommandAdapterInterface<TheirOutputType>`.
-
-## Optional shared Conversation delegation
-
-Commands continue to depend on `CommandAdapterInterface<TOutput>`. An Adapter may
-extend `AbstractCommandAdapter<TOutput>` to share `agent()`, `useAgent()`,
-`session()`, `useSession()` and `sessionStore()` through a protected Conversation.
-It can also implement the interface directly. Subclasses document their output
-with `@extends AbstractCommandAdapter<TheirOutputType>`.
-
-The Conversation is not exposed through a public accessor. `promptAgent()` remains
-a frontend operation: terminal Adapters enqueue the prompt through their scheduler,
-while backend Adapters submit it through the host's configured flow. Session
-selection overrides must preserve any frontend History invalidation.
-
-## Session selection
-
-`/resume` without arguments emits a `Selection` and returns. The Adapter
-presents its options and invokes the request's target Command again with the
-chosen value as a string. `/clear` installs a distinct empty
-conversation while preserving the previous Session. Both Commands call
-`adapter->useSession($session)`. Adapters synchronize
-their presentation with the Agent; Commands do not request a view refresh. Agent prompting,
-presentation and the interaction lifecycle remain Adapter responsibilities.
-
-## Mounting Commands
-
-`Commands::addCommand()` mutates the collection and returns that same instance:
+Strings matching slash syntax dispatch a Command; other nonblank strings become
+UserMessage. An explicit UserMessage is always a message, even with slash text.
+CommandInput carries identifier and opaque value, defaulting to an empty string.
+A slash in its value stays an argument. Commands validate their own arguments.
+Blank strings execute nothing; explicit empty messages retain normal validation.
 
 ```php
+use NeuronAI\Chat\Messages\UserMessage;
+use NeuronInteraction\Command\CommandContext;
+use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
-use NeuronInteraction\Command\HelpCommand;
-use NeuronInteraction\Command\LeaveCommand;
-use NeuronInteraction\Command\ClearCommand;
-use NeuronInteraction\Command\ResumeCommand;
+use NeuronInteraction\Conversation;
 
-$commands = (new Commands())
-    ->addCommand(new HelpCommand())
-    ->addCommand([new ClearCommand(), new ResumeCommand(), new LeaveCommand()]);
+final class ExplainCommand implements CommandInterface
+{
+    public function name(): string { return '/explain'; }
+    public function describe(): string { return 'Explain a topic.'; }
+    public function run(CommandContext $context, string $value): void
+    {
+        $context->notify('Starting explanation.');
+        $context->promptAgent(new UserMessage('Explain ' . $value));
+        $context->notify('Explanation completed.');
+    }
+}
+
+$conversation = new Conversation($agent, $session);
+$conversation->setCommands(new Commands(new ExplainCommand()));
+foreach ($conversation->sendInput('/explain PHP generators') as $event) {
+    // Present notifications and native Neuron events here, in stream order.
+}
 ```
 
-Create an empty collection with `new Commands()`. `addCommand()` accepts an
-individual Command or an array of Commands, preserves order, and rejects invalid
-members or identifiers immediately. The first matching duplicate receives dispatch. Configure Commands
-before running an Adapter; live reconfiguration is outside this contract.
+## Context and ordered effects
 
-## Help and Leave
+Every invocation receives a new concrete final CommandContext. `agent()`,
+`session()`, `configurationStore()` and `commands()` expose current state and
+a consultation list. Commands that need a SessionStore receive it through their
+constructor, as ClearCommand and ResumeCommand do. `useSession()` binds the
+supplied Session; `useAgent()` binds the selected Agent to that Session.
+Both change state immediately and register SessionChanged or AgentChanged.
+Explicitly call useAgent after changing an Agent property when the host needs an
+AgentChanged event. The context exposes no Conversation or executable dispatcher.
 
-Mount `NeuronInteraction\Command\HelpCommand` and
-`NeuronInteraction\Command\LeaveCommand` explicitly, like Session Commands.
-Both implement `CommandInterface` and use `CommandAdapterInterface`. Help lists
-the mounted Commands and descriptions through the Adapter; Leave calls `stop()`.
-The Adapter defines the stop effect. Neither Command depends on a terminal,
-and the shared dispatcher imposes no concurrency policy. Both accept a
-configured identifier in their constructor.
+`notify($text, NotificationLevel::Info)` registers human feedback. Warning and
+Error use the same method. `requestSelection(SelectionRequest)`, `requestExit()`
+and `promptAgent(UserMessage)` register the other effects. Commands return void
+and do not yield or call Agent::stream themselves.
 
-## Messages to the person
+Requests run after the Command invocation in registration order. Notification,
+prompt, notification produces the first Notification, native Agent response
+objects, and the second Notification. A prompt creates no extra event or human
+message preview. Multiple prompts execute sequentially; a normal return,
+including response stop or approval, permits the next request. Each message is
+prepared once, with attachments and metadata preserved. Ordinary input is
+prepared on submission; command prompts are prepared when reached in the sequence.
+Dispatch and Agent execution start only when the returned generator is consumed.
+Native event objects and keys pass through; the generator returns the last
+AgentState, or null when no message executed.
 
-Commands use `notify($text)` for information, `warn($text)` for warnings, and
-`error($text)` for expected failures. The Adapter chooses how to present each
-kind of message. For example, Resume reports an unknown Session key with
-`error()`, while an empty collection of earlier Sessions uses `warn()`.
+A Command exception preserves immediate state changes and registered requests.
+Those requests execute first; then the original exception propagates. A request
+exception propagates immediately and leaves remaining requests unexecuted. There
+is no retry, rollback, automatic failure notification or completion event.
 
-These operations communicate only: they do not interrupt the Command or change
-its technical `CommandExecution` status. A Command that cannot continue must
-return explicitly. Exceptions still produce the existing failed execution.
+## Portable selection
 
-Adapter implementations must replace `say()` with `notify()` and implement
-`error()` separately from `warn()`; there is no compatibility alias for `say()`.
-
-## Backend Adapter
-
-A Host Application can implement `CommandAdapterInterface` to present Command
-effects as backend response data. `afterExecution()` receives the technical
-execution status; the Adapter decides how to expose notices, warnings, errors,
-Selections and the request to leave the interaction.
-
-`promptAgent(UserMessage $prompt)` receives a complete Neuron user message,
-including content blocks and metadata. Submit it through the Host's configured
-`Conversation::submitMessage()` so the same processors apply to ordinary inputs
-and Command-generated prompts. The client decides scheduling and presentation
-of the native response stream.
-
-To offer a Session choice, invoke `/resume` without arguments and present the
-resulting Selection. Send the chosen option's value as arguments to `/resume`
-in a subsequent request. Restore the Host's active Conversation for each request
-and scope the SessionStore to the authenticated user. Cancelling requires no
-second invocation.
-
-Record original submitted input at the Adapter; generated prompts and selection
-continuations are not additional typed submissions.
-
-## Commands during Agent work
-
-`ConcurrentCommandInterface` extends `CommandInterface` without adding methods.
-Implement it when a Command can execute while the Agent is working without
-interfering with state used by that work. Help and Leave implement this marker.
-Neuron TUI uses this marker to keep these Commands visible and admit them during
-a busy Turn. Other clients choose their own presentation and admission policy
-through `CommandAdapterInterface::admit()`. The marker grants no backend permission
-and does not enforce restricted controls.
-
-## Replacing the Agent
-
-Implement `useAgent(Agent $agent): void` and `useSession(Session $session): void`
-in custom Adapters. Keep the current Session explicitly alongside the current
-Agent. Expose it through `session(): Session`, which always returns the selected
-conversation. `useAgent()` binds the replacement to that Session through `bindToAgent()`;
-`useSession()` binds the current Agent to the selected Session. Retain the returned
-Agent copy in both cases. Validate selected Sessions through the Adapter's
-SessionStore before changing state, so absent and other-user keys cannot be used.
-
-The Host creates a `Conversation`, which starts an empty Session unless the Host
-passes `session: $session` together with its matching Store. An Agent with existing
-messages requires an explicit Session, which determines the active conversation.
-Across backend requests, pass that Session again to continue it.
-
-Retrieve the current Agent through `adapter->agent()` after a Command, since
-binding can replace the instance. Neuron TUI exposes the same current instance
-through `Tui::agent()`.
-
-Clients mount their own collections and decide which Commands to show and admit.
-Neuron TUI hides ordinary Commands during a Turn and refuses them if typed or
-selected directly. Its busy state includes a local turn reservation before core
-stream consumption. Exact identifiers and the first mounted duplicate win.
+SelectionRequest contains `command`, `prompt`, a nonempty ordered list of
+SelectionOption (`value`, `label`, optional `description`) and optional request
+description. It has no callback or continuation. Conversation emits it without
+keeping pending selection state.
 
 ```php
-$commands = (new Commands())->addCommand([new ExitCommand(), new ClearCommand()]);
-$commands->run('/clear', '', $adapter);
+use NeuronInteraction\Command\CommandInput;
+use NeuronInteraction\Command\SelectionRequest;
+
+foreach ($conversation->sendInput('/resume') as $event) {
+    if ($event instanceof SelectionRequest) {
+        // The host presents label/description and retains command + option value.
+    }
+}
+// A later submission, possibly in a new HTTP request and Conversation instance:
+foreach ($conversation->sendInput(new CommandInput($command, $chosenValue)) as $event) {
+    // Consume the new stream.
+}
 ```
 
-Commands::run() resolves the identifier and asks the client Adapter to admit the
-Command before dispatch. A refused invocation neither dispatches the Command nor
-calls afterExecution(). Unknown, completed and failed invocations retain their
-usual completion status. Selection continuations invoke Commands::run() through a
-fresh client Adapter, which checks the current interaction state again.
+The host restores the correct stores and Session between HTTP requests. It need
+not persist the request or PHP Conversation. Cancelling a picker submits nothing.
+Values need not be among the displayed options: validation belongs to the Command.
+Multiple selections are allowed; the host decides sensible presentation.
 
-UI commands operate on the frontend Adapter; Session and Agent changes delegate
-to the core. Command prompts enter the client queue before core execution,
-with preparation performed when each prompt is submitted. Conversation has no Command dispatch
-or availability methods, and exposes no busy state. Selected Sessions must belong
-to its SessionStore; execution coordination belongs to the caller. A web backend
-also supplies application-specific authorization and shared concurrency controls.
+## Admission, exit and built-ins
+
+The optional `admitCommand:` closure receives CommandInterface and returns
+bool before each invocation, including selection responses. False emits a Warning
+without executing the Command; a closure exception propagates unchanged. Unknown
+identifiers emit Error notifications. Text is human feedback, not an outcome
+protocol. Authorization, queues and busy policy belong to the host. The TUI keeps
+HelpCommand and ExitCommand available while busy and refuses ordinary Commands.
+
+ExitRequest asks the host to leave. It does not end Conversation, stop a response,
+close the process or cancel remaining requests. A web host can ignore it.
+Notification, SelectionRequest, ExitRequest, SessionChanged and AgentChanged are
+the five interaction events alongside native Neuron objects.
+
+Mount built-ins explicitly: HelpCommand lists registered names/descriptions;
+ExitCommand requests exit; ClearCommand selects a new empty Session without
+deleting the old one; ResumeCommand presents stored history or selects a key.
+Their constructors support custom identifiers. ClearCommand and ResumeCommand
+require a SessionStore as their first constructor argument. An omitted ConfigurationStore is
+isolated in-memory storage per Conversation; provide persistent storage when
+preferences must survive requests or processes.
+
+## Migration
+
+Create or retrieve a Session before constructing Conversation, and pass it as the
+second argument instead of SessionStore. Conversation no longer creates an initial
+Session or checks its ownership. Remove sessionStore() calls from CommandContext;
+inject a SessionStore into Commands that need one. Construct the built-ins with
+`new ClearCommand($sessionStore)` and `new ResumeCommand($sessionStore)`.
+
+
+Replace the separate message and command execution paths with sendInput.
+Pass the registry through Conversation::setCommands(), rather than the
+constructor. Construct Commands variadically or extend the same registry with
+addCommand(). Later registrations replace Commands with the same name. Replace host command adapters with concrete CommandContext in
+run methods and stream event presentation in the host. Replace separate warning
+and error operations with notify and a NotificationLevel. Replace selection
+callbacks with a later CommandInput; replace stop controls with requestExit.
+Completion is consumption of the stream, with AgentState|null as its return.
+The previous adapter, mutable mounting, generic output and technical command
+completion protocols have been removed.

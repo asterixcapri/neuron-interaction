@@ -4,128 +4,105 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Command;
 
+use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Command\CommandAdapterInterface;
-use NeuronInteraction\Command\CommandInterface;
+use NeuronInteraction\Command\CommandInput;
 use NeuronInteraction\Command\Commands;
+use NeuronInteraction\Command\Notification;
+use NeuronInteraction\Command\NotificationLevel;
 use NeuronInteraction\Command\ResumeCommand;
-use NeuronInteraction\Command\Selection;
-use NeuronInteraction\Command\SelectionOption;
+use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Command\SessionChanged;
+use NeuronInteraction\Conversation;
+use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 
-use function json_decode;
-use function json_encode;
-
-use const JSON_THROW_ON_ERROR;
+use function iterator_to_array;
 
 final class SelectionTest extends TestCase
 {
-    public function testSelectionSerializesOrderedOptionsAndReceivesTheValueInANewInvocation(): void
-    {
-        $request = new Selection('/choose', 'Pick a value', [
-            new SelectionOption('007', 'Visible label', 'Detailed description'),
-            new SelectionOption(' raw value ', 'Another label'),
-        ]);
-        $command = new class ($request) implements CommandInterface {
-            public function __construct(private Selection $request) {}
-
-            public function name(): string
-            {
-                return '/choose';
-            }
-
-            public function describe(): string
-            {
-                return 'Select a value.';
-            }
-
-            /** @param CommandAdapterInterface<mixed> $adapter */
-            public function run(CommandAdapterInterface $adapter, string $value): void
-            {
-                if ($value === '') {
-                    $adapter->requestSelection($this->request);
-                    $adapter->notify('First invocation finished.');
-
-                    return;
-                }
-
-                $adapter->notify($value);
-            }
-        };
-        $commands = (new Commands())->addCommand([$command]);
-        $first = new FakeCommandAdapter($commands);
-
-        self::assertSame('completed', $commands->run('/choose', '', $first)?->status);
-        self::assertSame(['First invocation finished.'], $first->notices);
-        self::assertSame([$request], $first->selections);
-        self::assertEquals([
-            'command' => '/choose',
-            'prompt' => 'Pick a value',
-            'options' => [
-                ['value' => '007', 'label' => 'Visible label', 'description' => 'Detailed description'],
-                ['value' => ' raw value ', 'label' => 'Another label', 'description' => null],
-            ],
-            'description' => null,
-        ], json_decode(json_encode($request, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR));
-
-        // A later Adapter invocation has a fresh Adapter, without hidden selection state.
-        $second = new FakeCommandAdapter($commands);
-        $execution = $commands->run($request->command, $request->options[1]->value, $second);
-
-        self::assertNotNull($execution);
-        self::assertSame('completed', $execution->status);
-        self::assertSame([' raw value '], $second->notices);
-        self::assertSame([], $second->selections);
-    }
-
     public function testResumeRequestsSelectionThenInstallsTheChosenHistoryOnlyOnTheSecondInvocation(): void
     {
-        $commands = (new Commands())->addCommand([new ResumeCommand('/return')]);
-        $adapter = new FakeCommandAdapter($commands);
-        $stored = $adapter->sessionStore()->create();
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $stored = $store->create();
         SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
-        $active = $adapter->sessionStore()->create();
-        $adapter->useSession($active);
-        $session = $adapter->sessionStore()->list()[0];
+        $active = $store->create();
+        $conversation = new Conversation(new Agent(), $active);
+        $conversation->setCommands(new Commands(new ResumeCommand($store, '/return')));
+        $events = iterator_to_array($conversation->sendInput('/return'));
 
-        $first = $commands->run('/return', '', $adapter);
-
-        self::assertNotNull($first);
-        self::assertSame('completed', $first->status);
-        self::assertSame($active->getKey(), $adapter->agent()->getChatHistory()->getThreadId());
-        self::assertSame($active->getKey(), $adapter->session()->getKey());
-        self::assertCount(1, $adapter->selections);
-        $request = $adapter->selections[0];
+        self::assertSame($active->getKey(), $conversation->agent()->getThreadId());
+        self::assertSame($active->getKey(), $conversation->session()->getKey());
+        self::assertCount(1, $events);
+        self::assertInstanceOf(SelectionRequest::class, $events[0]);
+        $request = $events[0];
         self::assertSame('/return', $request->command);
-        self::assertSame($session->getKey(), $request->options[0]->value);
+        self::assertSame($stored->getKey(), $request->options[0]->value);
         self::assertSame('New session', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
-        $second = $commands->run('/return', $request->options[0]->value, $adapter);
-
-        self::assertNotNull($second);
-        self::assertSame('completed', $second->status);
-        self::assertSame('Stored subject', $adapter->agent()->getChatHistory()->getMessages()[0]->getContent());
-        self::assertSame($stored->getKey(), $adapter->session()->getKey());
-        self::assertCount(1, $adapter->selections);
+        $events = iterator_to_array($conversation->sendInput(new CommandInput($request->command, $request->options[0]->value)));
+        self::assertCount(1, $events);
+        self::assertInstanceOf(SessionChanged::class, $events[0]);
+        self::assertSame($conversation->session(), $events[0]->session);
+        self::assertSame('Stored subject', $conversation->agent()->getChatHistory()->getMessages()[0]->getContent());
+        self::assertSame($stored->getKey(), $conversation->session()->getKey());
     }
 
-    public function testResumeWithAKeyNeedsNoPriorSelectionAndUnknownKeysFailNormally(): void
+    public function testResumeNormalizesItsOwnWhitespaceArguments(): void
     {
-        $commands = (new Commands())->addCommand([new ResumeCommand()]);
-        $adapter = new FakeCommandAdapter($commands);
-        SessionHistory::of($adapter->sessionStore()->create())->addMessage(new UserMessage('Direct resume'));
-        $key = $adapter->sessionStore()->list()[0]->getKey();
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $stored = $store->create();
+        SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
+        $conversation = new Conversation(new Agent(), $store->create());
+        $conversation->setCommands(new Commands(new ResumeCommand($store)));
+        $selection = iterator_to_array($conversation->sendInput('/resume   '));
+        self::assertCount(1, $selection);
+        self::assertInstanceOf(SelectionRequest::class, $selection[0]);
+        $events = iterator_to_array($conversation->sendInput('/resume  ' . $stored->getKey() . ' '));
+        self::assertCount(1, $events);
+        self::assertInstanceOf(SessionChanged::class, $events[0]);
+        self::assertSame($stored->getKey(), $conversation->session()->getKey());
+    }
 
-        self::assertSame('completed', $commands->run('/resume', $key, $adapter)?->status);
-        self::assertSame('Direct resume', $adapter->agent()->getChatHistory()->getMessages()[0]->getContent());
-        self::assertSame([], $adapter->selections);
+    public function testResumeWithAKeyNeedsNoPriorSelectionAndUnknownKeysLeaveTheSessionUnchanged(): void
+    {
+        $storage = new InMemoryStorage();
+        $store = new SessionStore($storage, 'owner');
+        $stored = $store->create();
+        SessionHistory::of($stored)->addMessage(new UserMessage('Direct resume'));
+        $foreign = (new SessionStore($storage, 'other'))->create();
+        $conversation = new Conversation(new Agent(), $store->create());
+        $conversation->setCommands(new Commands(new ResumeCommand($store)));
+        $events = iterator_to_array($conversation->sendInput(new CommandInput('/resume', $stored->getKey())));
+        self::assertCount(1, $events);
+        self::assertInstanceOf(SessionChanged::class, $events[0]);
+        self::assertSame('Direct resume', $conversation->agent()->getChatHistory()->getMessages()[0]->getContent());
+        self::assertSame($stored->getKey(), $conversation->session()->getKey());
 
-        $history = $adapter->agent()->getChatHistory();
-        self::assertSame('completed', $commands->run('/resume', 'unknown', $adapter)?->status);
-        self::assertSame($history->getThreadId(), $adapter->agent()->getChatHistory()->getThreadId());
-        self::assertSame(['No Session is named by that key.'], $adapter->errors);
-        self::assertSame([], $adapter->warnings);
+        foreach (['unknown', $foreign->getKey()] as $key) {
+            $session = $conversation->session();
+            $agent = $conversation->agent();
+            $events = iterator_to_array($conversation->sendInput(new CommandInput('/resume', $key)));
+            self::assertCount(1, $events);
+            self::assertInstanceOf(Notification::class, $events[0]);
+            self::assertSame(NotificationLevel::Error, $events[0]->level);
+            self::assertSame('No Session is named by that key.', $events[0]->text);
+            self::assertSame($session, $conversation->session());
+            self::assertSame($agent, $conversation->agent());
+        }
+    }
+
+    public function testResumeWithoutStoredHistoryNotifiesInsteadOfRequestingAnEmptySelection(): void
+    {
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $conversation = new Conversation(new Agent(), $store->create());
+        $conversation->setCommands(new Commands(new ResumeCommand($store)));
+        $events = iterator_to_array($conversation->sendInput('/resume'));
+        self::assertCount(1, $events);
+        self::assertInstanceOf(Notification::class, $events[0]);
+        self::assertSame(NotificationLevel::Warning, $events[0]->level);
     }
 }

@@ -7,12 +7,15 @@ namespace NeuronInteraction\Command;
 use DateTimeImmutable;
 use NeuronInteraction\Formatting\RelativeTimeFormatter;
 use NeuronInteraction\Formatting\SizeFormatter;
+use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
+
+use function trim;
 
 /**
  * Offers the stored Sessions so a person can resume one.
  *
- * A Host Application mounts it under `resume` or a name of its own.
+ * A Host Application registers it under `resume` or a name of its own.
  *
  * A list with nothing in it is not worth entering, so it is said in the
  * conversation instead. The Sessions become Selection options here, while their
@@ -21,7 +24,7 @@ use NeuronInteraction\Session\SessionSummary;
 final readonly class ResumeCommand implements CommandInterface
 {
     /** @param string $name the presentation-neutral identifier */
-    public function __construct(private string $name = '/resume') {}
+    public function __construct(private SessionStore $sessionStore, private string $name = '/resume') {}
 
     public function name(): string
     {
@@ -33,27 +36,27 @@ final readonly class ResumeCommand implements CommandInterface
         return 'Lets you choose a stored Session to resume.';
     }
 
-    /** @param CommandAdapterInterface<mixed> $adapter */
-    public function run(CommandAdapterInterface $adapter, string $value): void
+    public function run(CommandContext $context, string $value): void
     {
+        $value = trim($value);
         if ($value !== '') {
-            $session = $adapter->sessionStore()->get($value);
+            $session = $this->sessionStore->get($value);
 
             if ($session === null) {
-                $adapter->error('No Session is named by that key.');
+                $context->notify('No Session is named by that key.', NotificationLevel::Error);
 
                 return;
             }
 
-            $adapter->useSession($session);
+            $context->useSession($session);
 
             return;
         }
 
-        $sessions = $adapter->sessionStore()->list();
+        $sessions = $this->sessionStore->list();
 
         if ($sessions === []) {
-            $adapter->warn('There is no earlier Session to return to yet.');
+            $context->notify('There is no earlier Session to return to yet.', NotificationLevel::Warning);
 
             return;
         }
@@ -69,7 +72,7 @@ final readonly class ResumeCommand implements CommandInterface
             );
         }
 
-        $adapter->requestSelection(new Selection($this->name(), 'Sessions', $options));
+        $context->requestSelection(new SelectionRequest($this->name(), 'Sessions', $options));
     }
 
     private function formatDescription(
