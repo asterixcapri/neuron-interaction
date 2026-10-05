@@ -129,8 +129,9 @@ composer preferences
 The first invocation saves a language choice. The second reads Italian without
 receiving that choice again. A fresh Store for another user still returns its
 English fallback. To change the choice, run `composer preferences -- English`.
-The Host decides how to apply a preference, for example to response language or
-model selection; ConfigurationStore handles its persistence and user scope.
+The Agent answers an English question in the saved language. The Host applies
+the preference through Agent instructions; ConfigurationStore handles its
+persistence and user scope.
 
 ## Dependencies, storage and validation
 
