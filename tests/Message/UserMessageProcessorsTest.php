@@ -21,7 +21,7 @@ final class UserMessageProcessorsTest extends TestCase
         $original->addMetadata('source', 'original input');
         $first = $this->processor('A');
         $second = $this->processor('B');
-        $processing = (new UserMessageProcessors())->addProcessor([$first, $second]);
+        $processing = new UserMessageProcessors($first, $second);
 
         $prepared = $processing->forAgent($original);
         $displayed = $processing->forDisplay($prepared);
@@ -54,10 +54,10 @@ final class UserMessageProcessorsTest extends TestCase
         $second = $this->processor('B');
         $third = $this->processor('C');
         $fourth = $this->processor('D');
-        $processing = (new UserMessageProcessors())->addProcessor($first);
+        $processing = new UserMessageProcessors($first);
 
         self::assertSame($processing, $processing->addProcessor($second));
-        self::assertSame($processing, $processing->addProcessor([$third, $fourth]));
+        self::assertSame($processing, $processing->addProcessor($third, $fourth));
         self::assertSame([$first, $second, $third, $fourth], $processing->all());
 
         $original = new UserMessage('Original text');

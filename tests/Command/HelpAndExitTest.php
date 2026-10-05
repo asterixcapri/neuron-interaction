@@ -48,8 +48,8 @@ final class HelpAndExitTest extends TestCase
         $conversation = new Conversation(
             (new Agent())->setAiProvider($provider),
             (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
-            stopSignal: $stop,
         );
+        $conversation->setStopSignal($stop);
         $conversation->setCommands(new Commands(new ExitCommand(), new HelpCommand()));
         $session = $conversation->session();
         $events = iterator_to_array($conversation->sendInput('/exit'));

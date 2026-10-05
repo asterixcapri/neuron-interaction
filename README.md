@@ -261,9 +261,8 @@ complete `UserMessage` objects for the Agent and project them for display.
 `UserMessageProcessors` can be populated like `Commands`:
 
 ```php
-$processors = (new UserMessageProcessors())
-    ->addProcessor($first)
-    ->addProcessor([$second, $third]);
+$processors = new UserMessageProcessors($first, $second);
+$processors->addProcessor($third);
 ```
 
 `addProcessor()` mutates the collection and returns the same instance. Register
@@ -292,7 +291,8 @@ use NeuronInteraction\Conversation;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 
-$conversation = new Conversation($agent, $session, userMessageProcessors: $processors);
+$conversation = new Conversation($agent, $session);
+$conversation->setUserMessageProcessors($processors);
 $stream = $conversation->sendInput(new UserMessage('Hello'));
 foreach ($stream as $chunk) {
     if ($chunk instanceof TextChunk) {
@@ -315,7 +315,7 @@ recognized expanded content. Each client registers its own Commands and decides
 visibility and admission through the Conversation admission closure. The runtime
 binds Agent/Session replacements; the backend controller authorizes Session access.
 
-With `stopSignal:`, `requestInterruption()` requests the existing HTTP response
+With `setStopSignal()`, `requestInterruption()` requests the existing HTTP response
 stop during execution. The host must wire the same signal into Neuron's stoppable
 HTTP client. Separate requests can signal shared storage directly; disconnecting
 the frontend alone does not guarantee cancellation.

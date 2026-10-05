@@ -29,7 +29,8 @@ $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano', $httpClie
 $session = $sessionStore->create();
 $session->setTitle('An interrupted answer');
 
-$conversation = new Conversation($agent, $session, stopSignal: $stopSignal);
+$conversation = new Conversation($agent, $session);
+$conversation->setStopSignal($stopSignal);
 
 echo '=== Request a long answer, then stop it ===' . \PHP_EOL;
 $input = 'Write 1000 words on London Docklands.';

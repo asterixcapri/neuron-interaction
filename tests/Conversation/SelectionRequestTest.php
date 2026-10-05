@@ -33,7 +33,8 @@ final class SelectionRequestTest extends TestCase
         $sessions = new SessionStore($storage, 'owner');
         $configuration = new ConfigurationStore($storage, 'owner');
         $configuration->write('account', 'original owner');
-        $first = new Conversation(new Agent(), $sessions->create(), configurationStore: $configuration);
+        $first = new Conversation(new Agent(), $sessions->create());
+        $first->setConfigurationStore($configuration);
         $first->setCommands(new Commands(new HttpSelectionCommand()));
         $first->session()->setTitle('Original Session');
         $events = iterator_to_array($first->sendInput('/choose'));
@@ -60,8 +61,8 @@ final class SelectionRequestTest extends TestCase
         $second = new Conversation(
             new Agent(),
             $session,
-            configurationStore: new ConfigurationStore($storage, 'owner'),
         );
+        $second->setConfigurationStore(new ConfigurationStore($storage, 'owner'));
         $second->setCommands(new Commands(new HttpSelectionCommand()));
         foreach ([' raw value ', '/help/not-an-option'] as $value) {
             $stream = $second->sendInput(new CommandInput($identifier, $value));

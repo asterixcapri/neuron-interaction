@@ -9,7 +9,7 @@ public function forDisplay(UserMessage $message): UserMessage;
 ```
 
 The Host Application supplies the processing module to `Conversation`
-with `userMessageProcessors:`. `sendInput()` invokes `forAgent()` exactly
+with `setUserMessageProcessors()`. `sendInput()` invokes `forAgent()` exactly
 once synchronously for ordinary messages, before returning the lazy response stream. Frontend queue
 entries are original input; they are prepared when the frontend submits them.
 Command-generated prompts use the same processing pipeline once, when their
@@ -64,10 +64,9 @@ Compose processors with `UserMessageProcessors`:
 ```php
 use NeuronInteraction\Message\UserMessageProcessors;
 
-$processing = (new UserMessageProcessors())
-    ->addProcessor($first)
-    ->addProcessor([$second]);
-$conversation = new Conversation($agent, $session, userMessageProcessors: $processing);
+$processing = new UserMessageProcessors($first, $second);
+$conversation = new Conversation($agent, $session);
+$conversation->setUserMessageProcessors($processing);
 $stream = $conversation->sendInput($submitted);
 foreach ($stream as $chunk) {
     // Present the native Neuron output.
@@ -84,8 +83,6 @@ native stream. When reopening a conversation, use `getDisplayMessages()` to
 project the saved Agent History. If preparation transforms content or attachments, the
 reopened presentation can differ from the original live preview.
 
-`addProcessor()` accepts a single processor or an
-array, mutates the collection and returns the same instance for chaining. Register
+`addProcessor()` accepts one or more processors, mutates the collection and returns the same instance for chaining. Register
 processors before running the host. `all()` returns them in registration order.
-Create an empty collection with `new UserMessageProcessors()` and register all
-processors through `addProcessor()`.
+Pass processors to the constructor or register them later through `addProcessor()`.

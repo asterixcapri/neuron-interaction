@@ -141,8 +141,8 @@ use NeuronInteraction\Conversation;
 $conversation = new Conversation(
     $agent,
     $session,
-    stopSignal: $stopSignal,
 );
+$conversation->setStopSignal($stopSignal);
 $stream = $conversation->sendInput(new UserMessage($text));
 $adapter = new AgentChunkAdapter();
 

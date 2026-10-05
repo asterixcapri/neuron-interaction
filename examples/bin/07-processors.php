@@ -6,6 +6,7 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Message\AbstractUserMessageTagProcessor;
+use NeuronInteraction\Message\UserMessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
@@ -53,11 +54,9 @@ $sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
 $session->setTitle('A README summary');
 
-$conversation = new Conversation(
-    $agent,
-    $session,
-    userMessageProcessors: $processor,
-);
+$conversation = new Conversation($agent, $session);
+$processors = new UserMessageProcessors($processor);
+$conversation->setUserMessageProcessors($processors);
 
 // Conversation expands @README.md before executing the Agent.
 $input = 'Summarize @README.md in one short sentence.';

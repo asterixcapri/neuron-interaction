@@ -28,9 +28,10 @@ final class UserMessagePreparationTest extends TestCase
     {
         $first = new PreparationRecorder('A');
         $second = new PreparationRecorder('B');
-        $processors = (new UserMessageProcessors())->addProcessor([$first, $second]);
+        $processors = new UserMessageProcessors($first, $second);
         $provider = new FakeAIProvider(new AssistantMessage('One'), new AssistantMessage('Two'), new AssistantMessage('Three'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create(), userMessageProcessors: $processors);
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation->setUserMessageProcessors($processors);
         $original = new UserMessage('First');
         $original->addMetadata('origin', 'human');
         $firstStream = $conversation->sendInput($original);
@@ -69,7 +70,8 @@ final class UserMessagePreparationTest extends TestCase
             }
         };
         $provider = new FakeAIProvider();
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create(), userMessageProcessors: $processor);
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation->setUserMessageProcessors(new UserMessageProcessors($processor));
         foreach (['fail', 'empty'] as $text) {
             $original = new UserMessage($text);
             try {
@@ -97,7 +99,8 @@ final class UserMessagePreparationTest extends TestCase
                 return clone $input;
             }
         };
-        $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), (new SessionStore(new InMemoryStorage(), 'local'))->create(), userMessageProcessors: $processor);
+        $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation->setUserMessageProcessors(new UserMessageProcessors($processor));
         $otherStream = null;
         $processor->onPrepare = static function () use ($conversation, $processor, &$otherStream): void {
             $processor->onPrepare = null;

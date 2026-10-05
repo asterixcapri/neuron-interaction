@@ -20,7 +20,6 @@ use NeuronInteraction\Command\Notification;
 use NeuronInteraction\Command\NotificationLevel;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Interruption\StopSignal;
-use NeuronInteraction\Message\UserMessageProcessorInterface;
 use NeuronInteraction\Message\UserMessageProcessors;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -33,13 +32,17 @@ use function trim;
 /** Executes one conversation turn; pending inputs and scheduling belong to the client. */
 final class Conversation
 {
-    private readonly ConfigurationStore $configurationStore;
-
     private Agent $agent;
 
     private Session $session;
 
     private Commands $commands;
+
+    private ConfigurationStore $configurationStore;
+
+    private UserMessageProcessors $userMessageProcessors;
+
+    private ?StopSignal $stopSignal = null;
 
     private bool $responseStopRequested = false;
 
@@ -47,13 +50,11 @@ final class Conversation
     public function __construct(
         Agent $agent,
         Session $session,
-        private readonly ?StopSignal $stopSignal = null,
-        private readonly UserMessageProcessorInterface $userMessageProcessors = new UserMessageProcessors(),
-        ?ConfigurationStore $configurationStore = null,
         private readonly ?Closure $admitCommand = null,
     ) {
-        $this->configurationStore = $configurationStore ?? new ConfigurationStore(new InMemoryStorage(), 'local');
         $this->commands = new Commands();
+        $this->configurationStore = new ConfigurationStore(new InMemoryStorage(), 'local');
+        $this->userMessageProcessors = new UserMessageProcessors();
 
         $this->session = $session;
         $this->agent = $session->bindToAgent($agent);
@@ -64,9 +65,20 @@ final class Conversation
         return $this->agent;
     }
 
+    public function useAgent(Agent $agent): void
+    {
+        $this->agent = $this->session->bindToAgent($agent);
+    }
+
     public function session(): Session
     {
         return $this->session;
+    }
+
+    public function useSession(Session $session): void
+    {
+        $this->agent = $session->bindToAgent($this->agent);
+        $this->session = $session;
     }
 
     /** @return list<Message> */
@@ -103,9 +115,56 @@ final class Conversation
         return $this->configurationStore;
     }
 
-    public function userMessageProcessors(): UserMessageProcessorInterface
+    public function setConfigurationStore(ConfigurationStore $configurationStore): void
+    {
+        $this->configurationStore = $configurationStore;
+    }
+
+    public function userMessageProcessors(): UserMessageProcessors
     {
         return $this->userMessageProcessors;
+    }
+
+    public function setUserMessageProcessors(UserMessageProcessors $userMessageProcessors): void
+    {
+        $this->userMessageProcessors = $userMessageProcessors;
+    }
+
+    public function stopSignal(): ?StopSignal
+    {
+        return $this->stopSignal;
+    }
+
+    public function setStopSignal(StopSignal $stopSignal): void
+    {
+        $this->stopSignal = $stopSignal;
+    }
+
+    public function supportsResponseStop(): bool
+    {
+        return $this->stopSignal !== null;
+    }
+
+    public function requestInterruption(): bool
+    {
+        if ($this->stopSignal === null || $this->responseStopRequested) {
+            return false;
+        }
+
+        $this->stopSignal->request();
+        $this->responseStopRequested = true;
+
+        return true;
+    }
+
+    public function responseStopRequested(): bool
+    {
+        return $this->responseStopRequested;
+    }
+
+    public function responseWasStopped(): bool
+    {
+        return $this->responseStopRequested && $this->stopSignal?->isRequested() === false;
     }
 
     /**
@@ -188,56 +247,14 @@ final class Conversation
         return $lastState;
     }
 
-    public function requestInterruption(): bool
-    {
-        if ($this->stopSignal === null || $this->responseStopRequested) {
-            return false;
-        }
-
-        $this->stopSignal->request();
-        $this->responseStopRequested = true;
-
-        return true;
-    }
-
-    public function supportsResponseStop(): bool
-    {
-        return $this->stopSignal !== null;
-    }
-
-    public function responseStopRequested(): bool
-    {
-        return $this->responseStopRequested;
-    }
-
-    public function responseWasStopped(): bool
-    {
-        return $this->responseStopRequested && $this->stopSignal?->isRequested() === false;
-    }
-
-    public function useAgent(Agent $agent): void
-    {
-        $this->agent = $this->session->bindToAgent($agent);
-    }
-
-    public function useSession(Session $session): void
-    {
-        $this->agent = $session->bindToAgent($this->agent);
-        $this->session = $session;
-    }
-
     /** @return Generator<int, object, mixed, AgentState> */
     private function streamMessage(UserMessage $message): Generator
     {
         $agent = $this->agent;
-        $this->resetResponseStop();
 
-        return yield from $agent->stream($message);
-    }
-
-    private function resetResponseStop(): void
-    {
         $this->responseStopRequested = false;
         $this->stopSignal?->clear();
+
+        return yield from $agent->stream($message);
     }
 }

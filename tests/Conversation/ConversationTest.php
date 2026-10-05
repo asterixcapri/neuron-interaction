@@ -179,7 +179,8 @@ final class ConversationTest extends TestCase
     public function testConsumedResponseStopResetsAtNextExecution(): void
     {
         $signal = new StopSignal(new InMemoryStorage(), 'stop');
-        $conversation = new Conversation($this->agent('Partial', 'Next'), (new SessionStore(new InMemoryStorage(), 'local'))->create(), stopSignal: $signal);
+        $conversation = new Conversation($this->agent('Partial', 'Next'), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation->setStopSignal($signal);
         $stream = $conversation->sendInput(new UserMessage('Stop'));
         $stream->rewind();
         self::assertTrue($conversation->requestInterruption());
@@ -200,7 +201,8 @@ final class ConversationTest extends TestCase
     {
         $signal = new StopSignal(new InMemoryStorage(), 'pending');
         $signal->request();
-        $conversation = new Conversation($this->agent('Completed', 'Next'), (new SessionStore(new InMemoryStorage(), 'local'))->create(), stopSignal: $signal);
+        $conversation = new Conversation($this->agent('Completed', 'Next'), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation->setStopSignal($signal);
         $stream = $conversation->sendInput(new UserMessage('Question'));
         $stream->rewind();
         self::assertFalse($signal->isRequested());
@@ -216,7 +218,8 @@ final class ConversationTest extends TestCase
     public function testStopCanBeRequestedWithoutALocalExecutionAndIsClearedAtStreamStart(): void
     {
         $signal = new StopSignal(new InMemoryStorage(), 'idle-stop');
-        $conversation = new Conversation($this->agent('Answer'), (new SessionStore(new InMemoryStorage(), 'local'))->create(), stopSignal: $signal);
+        $conversation = new Conversation($this->agent('Answer'), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation->setStopSignal($signal);
         self::assertTrue($conversation->requestInterruption());
         self::assertTrue($signal->isRequested());
         self::assertTrue($conversation->responseStopRequested());

@@ -110,7 +110,8 @@ final class CommandInputTest extends TestCase
         $first->configurationStore()->write('key', 'first');
         self::assertNull($second->configurationStore()->read('key'));
         $store = new ConfigurationStore(new InMemoryStorage(), 'owner');
-        $provided = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create(), configurationStore: $store);
+        $provided = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $provided->setConfigurationStore($store);
         self::assertSame($store, $provided->configurationStore());
     }
 
