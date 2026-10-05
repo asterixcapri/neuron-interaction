@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace NeuronInteraction\Command;
+namespace NeuronInteraction\Event;
 
 use InvalidArgumentException;
+use NeuronInteraction\Command\SelectionOption;
 
 use function array_is_list;
 
 /** A choice the host presents before submitting another CommandInput. */
-final readonly class SelectionRequest
+final readonly class SelectionRequest implements EventInterface
 {
     /** @var non-empty-list<SelectionOption> */
     public array $options;

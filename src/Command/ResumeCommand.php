@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Command;
 
 use DateTimeImmutable;
+use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Formatting\RelativeTimeFormatter;
 use NeuronInteraction\Formatting\SizeFormatter;
 use NeuronInteraction\Session\SessionStore;

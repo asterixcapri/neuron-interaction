@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-namespace NeuronInteraction\Command;
+namespace NeuronInteraction\Event;
 
-final readonly class Notification
+use NeuronInteraction\Command\NotificationLevel;
+
+final readonly class Notification implements EventInterface
 {
     public function __construct(public string $text, public NotificationLevel $level = NotificationLevel::Info) {}
 }

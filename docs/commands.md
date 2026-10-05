@@ -84,7 +84,7 @@ keeping pending selection state.
 
 ```php
 use NeuronInteraction\Command\CommandInput;
-use NeuronInteraction\Command\SelectionRequest;
+use NeuronInteraction\Event\SelectionRequest;
 
 foreach ($conversation->sendInput('/resume') as $event) {
     if ($event instanceof SelectionRequest) {
@@ -114,7 +114,9 @@ HelpCommand and ExitCommand available while busy and refuses ordinary Commands.
 ExitRequest asks the host to leave. It does not end Conversation, stop a response,
 close the process or cancel remaining requests. A web host can ignore it.
 Notification, SelectionRequest, ExitRequest, SessionChanged and AgentChanged are
-the five interaction events alongside native Neuron objects.
+the five interaction events alongside native Neuron objects. They live in
+`NeuronInteraction\Event` and implement `EventInterface`. SelectionOption and
+NotificationLevel remain support types in `NeuronInteraction\Command`.
 
 Mount built-ins explicitly: HelpCommand lists registered names/descriptions;
 ExitCommand requests exit; ClearCommand selects a new empty Session without

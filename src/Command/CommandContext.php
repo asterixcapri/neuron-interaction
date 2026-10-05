@@ -9,6 +9,11 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
+use NeuronInteraction\Event\AgentChanged;
+use NeuronInteraction\Event\ExitRequest;
+use NeuronInteraction\Event\Notification;
+use NeuronInteraction\Event\SelectionRequest;
+use NeuronInteraction\Event\SessionChanged;
 use NeuronInteraction\Session\Session;
 
 /** State access and ordered requests for one Command invocation. */
