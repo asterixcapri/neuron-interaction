@@ -44,9 +44,6 @@
     "autoload": {
         "psr-4": {
             "NeuronInteractionDemo\\": "src/"
-        },
-        "files": [
-            "src/functions.php"
-        ]
+        }
     }
 }
