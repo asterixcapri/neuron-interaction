@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
-use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\HttpClient\Amp\AmpHttpClient;
 use NeuronAI\HttpClient\StoppableHttpClient;
 use NeuronInteraction\Conversation;
@@ -14,39 +13,43 @@ use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
 
-use function NeuronInteractionDemo\execTurn;
-use function NeuronInteractionDemo\showMessages;
-
 require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
 $storage = new InMemoryStorage();
+
 $stopSignal = new StopSignal($storage, 'demo-response');
 $httpClient = new StoppableHttpClient(new AmpHttpClient(), $stopSignal->stopCallback());
+
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano', $httpClient));
+
 $sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
+
 $conversation = new Conversation($agent, $session, stopSignal: $stopSignal);
 $conversation->session()->setTitle('An interrupted answer');
 
 echo '=== Request a long answer, then stop it ===' . \PHP_EOL;
-echo 'You: Count from 1 to 1000, separated by commas.' . \PHP_EOL . 'Agent: ';
-$stream = $conversation->sendInput(new UserMessage('Count from 1 to 1000, separated by commas.'));
+$input = 'Write 1000 words on London Docklands.';
+$stopAfter = \random_int(40, 50);
+$textChunks = 0;
+
+echo 'You: ' . $input . \PHP_EOL;
+echo 'Stop after ' . $stopAfter . ' text chunks.' . \PHP_EOL . 'Agent: ';
+
+$stream = $conversation->sendInput($input);
+
 foreach ($stream as $event) {
     if ($event instanceof TextChunk) {
         echo $event->content;
         \flush();
-        if (!$conversation->responseStopRequested()) {
-            // Simulate the user pressing Stop after receiving the first text chunk.
+        if (++$textChunks === $stopAfter) {
+            // Simulate the user pressing Stop after a random number of text chunks.
             $conversation->requestInterruption();
         }
     }
 }
+
 echo \PHP_EOL . 'Response stopped: ' . ($conversation->responseWasStopped() ? 'yes' : 'no') . \PHP_EOL;
-
-showMessages($conversation->session());
-
-echo \PHP_EOL . '=== Continue after the interrupted response ===' . \PHP_EOL;
-execTurn($conversation, 'Say hello in one short sentence.');

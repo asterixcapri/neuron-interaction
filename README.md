@@ -227,8 +227,9 @@ composer --working-dir=examples sessions
 | Run from `examples/` | Demonstrates |
 | --- | --- |
 | `composer sessions` | List Sessions, inspect their messages and switch between independent contexts. |
-| `composer commands` | Mount shared Commands and a custom Command that prompts the Agent. |
+| `composer commands` | Use `/help`, `/clear` and `/exit` in an interactive conversation. |
 | `composer selection` | Choose a Session through presentation-neutral Selection options. |
+| `composer custom-selection` | Define `/model` and choose a model through Selection options. |
 | `composer interruption` | Stop an HTTP response and retain its partial message. |
 | `composer processors` | Expand a file reference for the Agent and project saved content for display. |
 | `composer input-history` | Recall original inputs and recover a draft. |

@@ -31,12 +31,13 @@
         "stan": "phpstan analyse --no-progress --memory-limit=512M",
         "commands": "php bin/03-commands.php",
         "selection": "php bin/04-selection.php",
-        "interruption": "php bin/05-interruption.php",
-        "processors": "php bin/06-processors.php",
-        "input-history": "php bin/07-input-history.php",
-        "preferences": "php bin/08-preferences.php",
-        "portable-selection": "php bin/09-portable-selection.php",
-        "echo": "php bin/10-echo.php"
+        "custom-selection": "php bin/05-custom-selection.php",
+        "interruption": "php bin/06-interruption.php",
+        "processors": "php bin/07-processors.php",
+        "input-history": "php bin/08-input-history.php",
+        "preferences": "php bin/09-preferences.php",
+        "portable-selection": "php bin/10-portable-selection.php",
+        "echo": "php bin/11-echo.php"
     },
     "config": {
         "sort-packages": true

@@ -21,14 +21,15 @@ are independent modules and do not require an Agent or credentials.
 | --- | --- | --- |
 | 01 | `composer input` | Submit a normal message and print the Agent's response in streaming. |
 | 02 | `composer sessions` | Switch between two Sessions, view their messages and continue with each one's context. |
-| 03 | `composer commands` | Shared Commands list themselves, clear a conversation and resume it; a custom Command prompts the Agent. |
-| 04 | `composer selection` | Build a custom `/language` Command and choose the Agent's response language interactively. |
-| 05 | `composer interruption` | Stop a streamed answer, inspect the saved partial message and start a new turn. |
-| 06 | `composer processors` | Expand `@trip.txt` for the Agent and show the compact original message when displaying History. |
-| 07 | `composer input-history` | Recall original inputs, including Command syntax, and restore the current draft. |
-| 08 | `composer preferences -- Italian` | Save a user preference; run `composer preferences` again to read it in another process. |
-| 09 | `composer portable-selection` | Present labeled choices and submit an opaque value without an AI provider. |
-| 10 | `composer echo` | Run a local `/echo` Command and handle `/exit` without an AI provider. |
+| 03 | `composer commands` | Use `/help`, `/clear` and `/exit` in an interactive conversation. |
+| 04 | `composer selection` | Choose a previous Session with SelectionRequest and CommandInput. |
+| 05 | `composer custom-selection` | Choose a model and change the Agent through a custom Command. |
+| 06 | `composer interruption` | Stop a streamed answer after a random number of text chunks. |
+| 07 | `composer processors` | Expand `@trip.txt` for the Agent and show the compact original message when displaying History. |
+| 08 | `composer input-history` | Recall original inputs, including Command syntax, and restore the current draft. |
+| 09 | `composer preferences -- Italian` | Save a user preference; run `composer preferences` again to read it in another process. |
+| 10 | `composer portable-selection` | Present labeled choices and submit an opaque value without an AI provider. |
+| 11 | `composer echo` | Run a local `/echo` Command and handle `/exit` without an AI provider. |
 
 ## 01 — Input and response
 
@@ -53,52 +54,50 @@ Its streaming presentation helper is defined in the same file.
 ## 03 — Commands
 
 This interactive terminal example reads a message or Command on each turn.
-Try a normal message, `/help`, `/explain PHP generators`, `/clear`, `/resume`
+Try a normal message, `/help`, `/clear`
 and `/exit`. The script passes each Command to the `Commands` constructor and supplies the registry
 through `Conversation::setCommands()`.
 
 The main loop simulates a consumer: it reads input, calls `sendInput()`
 and displays events as the stream yields them. A backend can forward those
 events to its client, for example via SSE. The example handles TextChunks,
-Notifications, SessionChanged, AgentChanged, SelectionRequest and ExitRequest.
-For SelectionRequest, the client reads a numbered choice and creates a
-CommandInput. It sends that input as a new backend request on its next
-iteration, after the preceding stream has been fully consumed. Enter cancels;
-an invalid number cancels that choice. `/resume` also accepts a key directly.
+Notifications, SessionChanged, AgentChanged and ExitRequest.
 `/exit` or end of input closes the client loop. The registered Commands do not
 emit AgentChanged; its branch illustrates where the client would refresh its UI.
 To provide input from a pipe, run `php bin/03-commands.php` directly.
 
-`src/ExplainCommand.php` registers a UserMessage through `promptAgent()`.
-Conversation executes that prompt and streams its response in the same turn.
 FileStorage keeps previous conversations under `.storage/commands/`; each run
 creates one new Session, and `/clear` creates another without deleting history.
 
 ## 04 — Selection
 
-This interactive, self-contained example defines a custom `/language` Command. Without an
-argument it emits SelectionRequest with three response languages. With a selected
-value it replaces the demo Agent's instructions and emits a Notification.
-Try `/language`, `/language Italian`, then a normal message to see the selected
-language in use. `/exit` or end of input closes the example.
+This interactive example registers `/resume`, `/clear` and `/exit`. Send a
+normal message, use `/clear`, then choose the earlier Session with `/resume`.
+Sessions remain in memory for this run.
 
-The consumer displays the options, reads a number and sends a new CommandInput
-using the event's command and the chosen option's value. Enter cancels and returns
-to the normal prompt. The choice is sent on the next loop iteration, after the
-current stream is fully consumed. Conversation has no pending selection state.
-To supply input from a pipe, invoke `php bin/04-selection.php` directly.
+The consumer displays each SelectionRequest, reads an option number and sends a
+CommandInput on the next loop iteration, after consuming the previous stream.
+Enter cancels the choice. SessionChanged shows where a client refreshes its
+conversation. To provide input from a pipe, run `php bin/04-selection.php` directly.
 
-## 05 — Interruption
+## 05 — Custom selection
 
-The script requests a long answer and simulates pressing Stop after its first
-text chunk. Conversation and Neuron's StoppableHttpClient share a StopSignal.
-The script keeps consuming the stream, prints `Response stopped: yes`, displays
-the saved partial response and executes a new turn normally.
+Run `composer custom-selection` or `php bin/05-custom-selection.php`. This separate, self-contained
+example defines `/model`, offers two OpenAI models and changes the Agent after a
+choice. It also shows the AgentChanged event. Try `/model`, select a model, then
+send a normal message.
+
+## 06 — Interruption
+
+The script requests a long answer and picks a random threshold of 40–50 text
+chunks. It simulates pressing Stop when that many chunks have arrived.
+Conversation and Neuron's StoppableHttpClient share a StopSignal. The script
+keeps consuming the stream and prints whether the response stopped.
 
 An application connects `requestInterruption()` to its stop button or input
 handler. This interrupts the HTTP response, not the execution of local tools.
 
-## 06 — Processors
+## 07 — Processors
 
 The user submits a reference to `fixtures/trip.txt`. The processor adds its
 contents before execution; the real response should summarize the Lisbon trip,
@@ -108,14 +107,14 @@ expanded message and its compact `forDisplay()` projection.
 `FileReferenceProcessor` is adapted from the Neuron TUI example. It preserves
 original input and already expanded references. The file context is supplied by the processor.
 
-## 07 — Input history
+## 08 — Input history
 
 Original submissions are stored independently of Session messages: a question
 and `/help`. A fresh InputHistory reads them from the same storage. The script
 simulates Up twice and Down twice; the final value is `My unfinished question`.
 Your client supplies the keyboard or button handling.
 
-## 08 — Preferences
+## 09 — Preferences
 
 ```bash
 composer preferences -- Italian
@@ -145,14 +144,14 @@ repository's `composer stan` analyses the library and its tests separately.
 The implementation order and decisions are recorded in the
 [approved plan](../.scratch/rebuild-examples/spec.md).
 
-## 09 — Portable selection without a provider
+## 10 — Portable selection without a provider
 
 Run `composer portable-selection` to present labeled choices and submit their
 opaque value through CommandInput. Unlike the Session picker in example04, this
 example needs no API key. The Command validates and persists the chosen preference;
 the host has no adapter or hidden continuation.
 
-## 10 — Echo and host exit without a provider
+## 11 — Echo and host exit without a provider
 
 The script submits `/echo` through `Conversation::sendInput()` and prints its
 Notification. `/exit` emits an `ExitRequest`; the terminal host stops its own input
