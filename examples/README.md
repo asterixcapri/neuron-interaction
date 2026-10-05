@@ -27,9 +27,8 @@ are independent modules and do not require an Agent or credentials.
 | 06 | `composer interruption` | Stop a streamed answer after a random number of text chunks. |
 | 07 | `composer processors` | Expand `@README.md` into a `<file>` tag for the Agent and restore the reference when displaying History. |
 | 08 | `composer input-history` | Persist original inputs, including Command syntax, and list them later. |
-| 09 | `composer preferences -- Italian` | Save a user preference; run `composer preferences` again to read it in another process. |
-| 10 | `composer portable-selection` | Present labeled choices and submit an opaque value without an AI provider. |
-| 11 | `composer echo` | Run a local `/echo` Command and handle `/exit` without an AI provider. |
+| 09 | `composer configuration` | Save a language preference and apply it to an Agent response. |
+| 10 | `composer custom-command` | Change the response language through a custom Command and persist the preference. |
 
 ## 01 — Input and response
 
@@ -119,19 +118,12 @@ Conversation automatically records original submissions through `setInputHistory
 and `/help`, independently of Session messages. The script lists the saved inputs. Navigation and draft restoration belong to
 the consumer.
 
-## 09 — Preferences
+## 09 — Configuration
 
-```bash
-composer preferences -- Italian
-composer preferences
-```
-
-The first invocation saves a language choice. The second reads Italian without
-receiving that choice again. A fresh Store for another user still returns its
-English fallback. To change the choice, run `composer preferences -- English`.
-The Agent answers an English question in the saved language. The Host applies
-the preference through Agent instructions; ConfigurationStore handles its
-persistence and user scope.
+Run `composer configuration` to save Spanish for `demo-user` and apply it to an
+Agent answering an English question. Another user has no saved language.
+ConfigurationStore handles persistence and user scope; the Host applies the
+preference through Agent instructions.
 
 ## Dependencies, storage and validation
 
@@ -150,18 +142,11 @@ repository's `composer stan` analyses the library and its tests separately.
 The implementation order and decisions are recorded in the
 [approved plan](../.scratch/rebuild-examples/spec.md).
 
-## 10 — Portable selection without a provider
+## 10 — Custom command
 
-Run `composer portable-selection` to present labeled choices and submit their
-opaque value through CommandInput. Unlike the Session picker in example04, this
-example needs no API key. The Command validates and persists the chosen preference;
-the host has no adapter or hidden continuation.
-
-## 11 — Echo and host exit without a provider
-
-The script submits `/echo` through `Conversation::sendInput()` and prints its
-Notification. `/exit` emits an `ExitRequest`; the terminal host stops its own input
-loop. Conversation remains usable, so a web host can ignore the same request.
-The Agent has no provider because neither Command prompts it. This example needs
-no API key. An exit request does not stop an Agent response:
-`requestInterruption()` is the separate operation used in example 05.
+Run `composer custom-command`, submit `/language Italian`, then ask a question in
+English. `LanguageCommand` saves the preference through ConfigurationStore and
+updates the Agent instructions, so the next response uses Italian. Restarting
+restores the saved language. The command accepts English, Italian, Spanish and
+Portuguese. `/language English` changes it back; `/exit` ends
+the consumer's input loop. Invalid language values produce a Notification.
