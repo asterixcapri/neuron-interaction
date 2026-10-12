@@ -9,6 +9,6 @@ use NeuronAI\StructuredOutput\SchemaProperty;
 /** @internal */
 final class SessionTitleResult
 {
-    #[SchemaProperty(description: 'A short topic title, or null if no concrete topic has emerged.', required: true, maxLength: 80)]
+    #[SchemaProperty(description: 'A concise title of 2–5 words for a meaningful subject expressed by the user, or null for small talk or unclear intent.', required: true)]
     public ?string $title;
 }

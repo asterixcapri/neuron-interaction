@@ -212,17 +212,26 @@ $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
 ```
 
 Without this setter, Conversation does not generate titles. When configured, it
-attempts generation after each successfully completed, fully consumed message
-stream, unless a response stop was requested. Commands that do not send a message
-do not trigger generation. Existing titles are preserved, and the default limit
-is three provider requests per session, including failed requests.
+attempts generation when a message stream starts being consumed, before executing
+the Agent response. The input contains saved user messages plus the prepared
+current message; assistant messages are excluded. Commands that do not send a
+message do not trigger generation, and existing titles are preserved.
 
-Generation runs synchronously after the response stream and adds latency before
-the turn returns its `AgentState`. A saved title emits `SessionTitleChanged`, with
+The title agent decides whether the user has expressed a meaningful subject.
+Greetings, wellbeing checks, small talk, and unclear intent should return `null`.
+A `null` result leaves the title unset and consumes one attempt. The default limit
+is five attempts per Session, including no-topic results and failed requests.
+After the limit is reached, automatic title generation stops even if a concrete
+subject emerges later. The prompt requests 2–5
+words in the user's language; the code does not impose a length limit.
+
+Generation is synchronous and adds latency before the Agent response starts,
+instead of after its last chunk. A saved title emits `SessionTitleChanged`, with
 `session` and `title` properties. Generation failures emit a warning `Notification`
-and preserve the completed turn's result. If the selected session changes during
-a turn, the title is still generated for the session used by that turn. Hosts
-coordinate overlapping executions and concurrent title requests.
+and the Agent response still executes. The title can remain saved even if that
+response later fails or is interrupted. If the selected session changes during
+a turn, generation uses the session captured at its start. Hosts coordinate
+overlapping executions and concurrent title requests.
 
 To generate a title explicitly with an AI provider:
 
@@ -234,9 +243,9 @@ $title = (new SessionTitleGenerator($provider))->generate($session);
 
 This saves a generated title without changing messages. It returns `null` if no
 title was generated, including when a title already exists, there is no usable
-conversation, or the attempt limit has been reached. The default limit is three
-provider requests per session; set `maxAttempts:` to change it. Attempts, including
-failed requests, are persisted in session metadata. With explicit generation,
+user content, or the attempt limit has been reached. The default budget is five
+attempts per session; set `maxAttempts:` to change it. No-topic results and failed
+requests both consume the budget. The counter is persisted in session metadata. With explicit generation,
 your application decides when to call the generator and coordinates concurrent calls.
 
 ## Commands

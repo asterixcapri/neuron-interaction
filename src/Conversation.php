@@ -300,14 +300,12 @@ final class Conversation
         $this->responseStopRequested = false;
         $this->stopSignal?->clear();
 
-        $state = yield from $agent->stream($message);
-
-        if ($sessionTitleGenerator !== null && !$this->responseStopRequested()) {
+        if ($sessionTitleGenerator !== null) {
             try {
-                $title = $sessionTitleGenerator->generate($session);
+                $title = $sessionTitleGenerator->generate($session, $message);
             } catch (Throwable $exception) {
                 yield new Notification('Session title generation failed: ' . $exception->getMessage(), NotificationLevel::Warning);
-                return $state;
+                $title = null;
             }
 
             if ($title !== null) {
@@ -315,6 +313,6 @@ final class Conversation
             }
         }
 
-        return $state;
+        return yield from $agent->stream($message);
     }
 }

@@ -23,7 +23,6 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 use function array_filter;
-use function array_last;
 use function array_map;
 use function array_values;
 use function iterator_to_array;
@@ -51,23 +50,49 @@ final class SessionTitleTest extends TestCase
         self::assertSame('Redis setup', $changed[0]->title);
         self::assertSame('Redis setup', $conversation->session()->getTitle());
         self::assertCount(4, $conversation->session()->getMessages());
-        self::assertSame($changed[0], array_last($events));
+        self::assertSame($changed[0], $events[0]);
 
         self::assertSame([], $this->titleEvents(iterator_to_array($conversation->sendInput('More'), false)));
         self::assertCount(1, $provider->getRecorded());
     }
 
-    public function testNullTitlesRetryOnLaterTurnsUntilThePersistedLimit(): void
+    public function testNoTopicResultsAllowALaterTitleWithinTheAttemptLimit(): void
     {
         $conversation = $this->conversation('One', 'Two', 'Three', 'Four');
-        $provider = new FakeAIProvider(new AssistantMessage('{"title":null}'), new AssistantMessage('{"title":null}'), new AssistantMessage('{"title":null}'));
+        $provider = new FakeAIProvider(new AssistantMessage('{"title":null}'), new AssistantMessage('{"title":null}'), new AssistantMessage('{"title":null}'), new AssistantMessage('{"title":"Redis setup"}'));
         $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
-        foreach (['Hello', 'Continue', 'More', 'Again'] as $input) {
+        foreach (['Hello', 'How are you?', 'Thanks'] as $input) {
             self::assertSame([], $this->titleEvents(iterator_to_array($conversation->sendInput($input), false)));
         }
-        self::assertCount(3, $provider->getRecorded());
-        self::assertSame('3', $conversation->session()->getMetadata()['titleGenerationAttempts']);
         self::assertNull($conversation->session()->getTitle());
+        self::assertSame('3', $conversation->session()->getMetadata()['titleGenerationAttempts']);
+        $events = $this->titleEvents(iterator_to_array($conversation->sendInput('Configure Redis'), false));
+        self::assertCount(1, $events);
+        self::assertSame('Redis setup', $conversation->session()->getTitle());
+        self::assertCount(4, $provider->getRecorded());
+    }
+
+    public function testConversationStopsTitleRequestsAfterFiveNullResults(): void
+    {
+        $conversation = $this->conversation('One', 'Two', 'Three', 'Four', 'Five', 'Six');
+        $provider = new FakeAIProvider(
+            new AssistantMessage('{"title":null}'),
+            new AssistantMessage('{"title":null}'),
+            new AssistantMessage('{"title":null}'),
+            new AssistantMessage('{"title":null}'),
+            new AssistantMessage('{"title":null}'),
+            new AssistantMessage('{"title":"Unused"}'),
+        );
+        $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
+
+        foreach (['Hello', 'How are you?', 'Thanks', 'Continue', 'More', 'Configure Redis'] as $input) {
+            self::assertSame([], $this->titleEvents(iterator_to_array($conversation->sendInput($input), false)));
+        }
+
+        self::assertCount(5, $provider->getRecorded());
+        self::assertSame('5', $conversation->session()->getMetadata()['titleGenerationAttempts']);
+        self::assertNull($conversation->session()->getTitle());
+        self::assertCount(12, $conversation->session()->getMessages());
     }
 
     public function testTitleFailureWarnsWithoutLosingTheResponse(): void
@@ -113,25 +138,35 @@ final class SessionTitleTest extends TestCase
         self::assertCount(2, $provider->getRecorded());
     }
 
-    public function testUnconsumedInterruptedAndCommandStreamsDoNotGenerateTitles(): void
+    public function testUnstartedAndCommandStreamsDoNotGenerateTitles(): void
     {
-        $conversation = $this->conversation('Partial', 'Stopped');
+        $conversation = $this->conversation('Unused');
         $provider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
         $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
-        $stream = $conversation->sendInput('Partial question');
-        $stream->rewind();
+        $stream = $conversation->sendInput('Question');
         unset($stream);
         iterator_to_array($conversation->sendInput('/unknown'));
-        $conversation->setStopSignal(new StopSignal(new InMemoryStorage(), 'stop'));
-        $stream = $conversation->sendInput('Stopped question');
-        $stream->rewind();
-        self::assertTrue($conversation->requestInterruption());
-        iterator_to_array($stream);
         self::assertSame([], $provider->getRecorded());
         self::assertArrayNotHasKey('titleGenerationAttempts', $conversation->session()->getMetadata());
     }
 
-    public function testFailedResponseDoesNotAttemptTitleGeneration(): void
+    public function testTitleIsGeneratedBeforeResponseExecutionAndCanSurviveInterruption(): void
+    {
+        $conversation = $this->conversation('Partial answer');
+        $provider = new FakeAIProvider(new AssistantMessage('{"title":"Redis setup"}'));
+        $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
+        $conversation->setStopSignal(new StopSignal(new InMemoryStorage(), 'stop'));
+        $stream = $conversation->sendInput('Configure Redis');
+        $stream->rewind();
+        self::assertInstanceOf(SessionTitleChanged::class, $stream->current());
+        self::assertSame([], $conversation->session()->getMessages());
+        self::assertSame('Redis setup', $conversation->session()->getTitle());
+        self::assertTrue($conversation->requestInterruption());
+        iterator_to_array($stream);
+        self::assertCount(1, $provider->getRecorded());
+    }
+
+    public function testResponseFailureStillPropagatesAfterTitleGeneration(): void
     {
         $agentProvider = new class (new AssistantMessage('Unused')) extends FakeAIProvider {
             protected function streamChunks(Message $response): Generator
@@ -148,7 +183,8 @@ final class SessionTitleTest extends TestCase
         } catch (RuntimeException $error) {
             self::assertSame('Response failed', $error->getMessage());
         }
-        self::assertSame([], $titleProvider->getRecorded());
+        self::assertCount(1, $titleProvider->getRecorded());
+        self::assertSame('Unused', $conversation->session()->getTitle());
     }
 
     private function conversation(string ...$answers): Conversation

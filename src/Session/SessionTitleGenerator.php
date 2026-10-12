@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronInteraction\Session;
 
 use InvalidArgumentException;
-use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
@@ -25,19 +24,19 @@ use const FILTER_VALIDATE_INT;
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_UNICODE;
 
-/** Generates and persists a topic title within a per-Session attempt limit, preserving messages. */
+/** Generates and persists a user topic title within a per-Session attempt budget. */
 final readonly class SessionTitleGenerator
 {
     public function __construct(
         private AIProviderInterface $provider,
-        private int $maxAttempts = 3,
+        private int $maxAttempts = 5,
     ) {
         if ($maxAttempts < 1) {
             throw new InvalidArgumentException('The title generation attempt limit must be positive.');
         }
     }
 
-    public function generate(Session $session): ?string
+    public function generate(Session $session, ?UserMessage $pendingMessage = null): ?string
     {
         if ($session->getTitle() !== null) {
             return null;
@@ -52,7 +51,7 @@ final readonly class SessionTitleGenerator
             return null;
         }
 
-        $conversation = $this->conversation($session);
+        $conversation = $this->conversation($session, $pendingMessage);
 
         if ($conversation === []) {
             return null;
@@ -84,12 +83,16 @@ final readonly class SessionTitleGenerator
     /**
      * @return list<array{role: string, content: string}>
      */
-    private function conversation(Session $session): array
+    private function conversation(Session $session, ?UserMessage $pendingMessage): array
     {
         $conversation = [];
-        foreach ($session->getMessages() as $message) {
+        $messages = $session->getMessages();
+        if ($pendingMessage !== null) {
+            $messages[] = $pendingMessage;
+        }
+        foreach ($messages as $message) {
             if ($message instanceof ToolCallMessage || $message instanceof ToolResultMessage
-                || (!$message instanceof UserMessage && !$message instanceof AssistantMessage)) {
+                || !$message instanceof UserMessage) {
                 continue;
             }
 
@@ -105,8 +108,9 @@ final readonly class SessionTitleGenerator
                     $parts[] = $text;
                 }
             }
-            if ($parts !== []) {
-                $conversation[] = ['role' => $message->getRole(), 'content' => implode("\n\n", $parts)];
+            $content = implode("\n\n", $parts);
+            if ($content !== '') {
+                $conversation[] = ['role' => $message->getRole(), 'content' => $content];
             }
         }
 
