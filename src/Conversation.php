@@ -112,9 +112,11 @@ final class Conversation
         return $this->commands;
     }
 
-    public function setCommands(Commands $commands): void
+    public function setCommands(Commands $commands): self
     {
         $this->commands = $commands;
+
+        return $this;
     }
 
     public function configurationStore(): ConfigurationStore
@@ -122,9 +124,11 @@ final class Conversation
         return $this->configurationStore;
     }
 
-    public function setConfigurationStore(ConfigurationStore $configurationStore): void
+    public function setConfigurationStore(ConfigurationStore $configurationStore): self
     {
         $this->configurationStore = $configurationStore;
+
+        return $this;
     }
 
     public function userMessageProcessors(): UserMessageProcessors
@@ -132,9 +136,11 @@ final class Conversation
         return $this->userMessageProcessors;
     }
 
-    public function setUserMessageProcessors(UserMessageProcessors $userMessageProcessors): void
+    public function setUserMessageProcessors(UserMessageProcessors $userMessageProcessors): self
     {
         $this->userMessageProcessors = $userMessageProcessors;
+
+        return $this;
     }
 
     public function inputHistory(): ?InputHistory
@@ -142,9 +148,11 @@ final class Conversation
         return $this->inputHistory;
     }
 
-    public function setInputHistory(InputHistory $inputHistory): void
+    public function setInputHistory(InputHistory $inputHistory): self
     {
         $this->inputHistory = $inputHistory;
+
+        return $this;
     }
 
     public function sessionTitleGenerator(): ?SessionTitleGenerator
@@ -152,9 +160,11 @@ final class Conversation
         return $this->sessionTitleGenerator;
     }
 
-    public function setSessionTitleGenerator(SessionTitleGenerator $sessionTitleGenerator): void
+    public function setSessionTitleGenerator(SessionTitleGenerator $sessionTitleGenerator): self
     {
         $this->sessionTitleGenerator = $sessionTitleGenerator;
+
+        return $this;
     }
 
     public function stopSignal(): ?StopSignal
@@ -162,9 +172,11 @@ final class Conversation
         return $this->stopSignal;
     }
 
-    public function setStopSignal(StopSignal $stopSignal): void
+    public function setStopSignal(StopSignal $stopSignal): self
     {
         $this->stopSignal = $stopSignal;
+
+        return $this;
     }
 
     public function supportsResponseStop(): bool
