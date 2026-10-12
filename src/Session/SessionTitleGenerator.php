@@ -30,7 +30,6 @@ final readonly class SessionTitleGenerator
 {
     public function __construct(
         private AIProviderInterface $provider,
-        private Session $session,
         private int $maxAttempts = 3,
     ) {
         if ($maxAttempts < 1) {
@@ -38,14 +37,14 @@ final readonly class SessionTitleGenerator
         }
     }
 
-    public function generate(): ?string
+    public function generate(Session $session): ?string
     {
-        if ($this->session->getTitle() !== null) {
+        if ($session->getTitle() !== null) {
             return null;
         }
 
         $attempts = filter_var(
-            $this->session->getMetadata()['titleGenerationAttempts'] ?? '0',
+            $session->getMetadata()['titleGenerationAttempts'] ?? '0',
             FILTER_VALIDATE_INT,
             ['options' => ['min_range' => 0]],
         );
@@ -53,15 +52,15 @@ final readonly class SessionTitleGenerator
             return null;
         }
 
-        $conversation = $this->conversation($this->session);
+        $conversation = $this->conversation($session);
 
         if ($conversation === []) {
             return null;
         }
 
-        $this->session->setMetadata('titleGenerationAttempts', (string) ($attempts + 1));
+        $session->setMetadata('titleGenerationAttempts', (string) ($attempts + 1));
 
-        $agent = (new SessionTitleAgent())->setThreadId('title-' . $this->session->getKey());
+        $agent = (new SessionTitleAgent())->setThreadId('title-' . $session->getKey());
         $agent->setAiProvider($this->provider);
         $result = $agent->structured(
             new UserMessage(json_encode($conversation, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)),
@@ -73,11 +72,11 @@ final readonly class SessionTitleGenerator
 
         $title = trim($result->title ?? '');
 
-        if ($title === '' || $this->session->getTitle() !== null) {
+        if ($title === '' || $session->getTitle() !== null) {
             return null;
         }
 
-        $this->session->setTitle($title);
+        $session->setTitle($title);
 
         return $title;
     }

@@ -19,10 +19,12 @@ use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\NotificationLevel;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Event\Notification;
+use NeuronInteraction\Event\SessionTitleChanged;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Message\UserMessageProcessors;
 use NeuronInteraction\Session\Session;
+use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\InMemoryStorage;
 use Throwable;
 
@@ -44,6 +46,8 @@ final class Conversation
     private UserMessageProcessors $userMessageProcessors;
 
     private ?InputHistory $inputHistory = null;
+
+    private ?SessionTitleGenerator $sessionTitleGenerator = null;
 
     private ?StopSignal $stopSignal = null;
 
@@ -141,6 +145,16 @@ final class Conversation
     public function setInputHistory(InputHistory $inputHistory): void
     {
         $this->inputHistory = $inputHistory;
+    }
+
+    public function sessionTitleGenerator(): ?SessionTitleGenerator
+    {
+        return $this->sessionTitleGenerator;
+    }
+
+    public function setSessionTitleGenerator(SessionTitleGenerator $sessionTitleGenerator): void
+    {
+        $this->sessionTitleGenerator = $sessionTitleGenerator;
     }
 
     public function stopSignal(): ?StopSignal
@@ -280,10 +294,27 @@ final class Conversation
     private function streamMessage(UserMessage $message): Generator
     {
         $agent = $this->agent;
+        $session = $this->session;
+        $sessionTitleGenerator = $this->sessionTitleGenerator;
 
         $this->responseStopRequested = false;
         $this->stopSignal?->clear();
 
-        return yield from $agent->stream($message);
+        $state = yield from $agent->stream($message);
+
+        if ($sessionTitleGenerator !== null && !$this->responseStopRequested()) {
+            try {
+                $title = $sessionTitleGenerator->generate($session);
+            } catch (Throwable $exception) {
+                yield new Notification('Session title generation failed: ' . $exception->getMessage(), NotificationLevel::Warning);
+                return $state;
+            }
+
+            if ($title !== null) {
+                yield new SessionTitleChanged($session, $title);
+            }
+        }
+
+        return $state;
     }
 }

@@ -1,0 +1,168 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NeuronInteraction\Tests\Conversation;
+
+use Generator;
+use NeuronAI\Agent\Agent;
+use NeuronAI\Agent\AgentState;
+use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Chat\Messages\Message;
+use NeuronAI\Providers\ProviderResponse;
+use NeuronAI\Testing\FakeAIProvider;
+use NeuronInteraction\Command\NotificationLevel;
+use NeuronInteraction\Conversation;
+use NeuronInteraction\Event\Notification;
+use NeuronInteraction\Event\SessionTitleChanged;
+use NeuronInteraction\Interruption\StopSignal;
+use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Session\SessionTitleGenerator;
+use NeuronInteraction\Storage\InMemoryStorage;
+use PHPUnit\Framework\TestCase;
+use RuntimeException;
+
+use function array_filter;
+use function array_last;
+use function array_map;
+use function array_values;
+use function iterator_to_array;
+
+final class SessionTitleTest extends TestCase
+{
+    public function testGenerationRequiresConfigurationAndPreservesTheCompletedTurn(): void
+    {
+        $conversation = $this->conversation('First answer', 'Second answer', 'Third answer');
+        self::assertNull($conversation->sessionTitleGenerator());
+        iterator_to_array($conversation->sendInput('Configure Redis'));
+        self::assertNull($conversation->session()->getTitle());
+        self::assertArrayNotHasKey('titleGenerationAttempts', $conversation->session()->getMetadata());
+
+        $provider = new FakeAIProvider(new AssistantMessage('{"title":"Redis setup"}'));
+        $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
+        self::assertInstanceOf(SessionTitleGenerator::class, $conversation->sessionTitleGenerator());
+        $stream = $conversation->sendInput('Continue');
+        $events = iterator_to_array($stream, false);
+        self::assertInstanceOf(AgentState::class, $stream->getReturn());
+        self::assertSame('Second answer', $stream->getReturn()->getMessage()?->getContent());
+        $changed = $this->titleEvents($events);
+        self::assertCount(1, $changed);
+        self::assertSame($conversation->session(), $changed[0]->session);
+        self::assertSame('Redis setup', $changed[0]->title);
+        self::assertSame('Redis setup', $conversation->session()->getTitle());
+        self::assertCount(4, $conversation->session()->getMessages());
+        self::assertSame($changed[0], array_last($events));
+
+        self::assertSame([], $this->titleEvents(iterator_to_array($conversation->sendInput('More'), false)));
+        self::assertCount(1, $provider->getRecorded());
+    }
+
+    public function testNullTitlesRetryOnLaterTurnsUntilThePersistedLimit(): void
+    {
+        $conversation = $this->conversation('One', 'Two', 'Three', 'Four');
+        $provider = new FakeAIProvider(new AssistantMessage('{"title":null}'), new AssistantMessage('{"title":null}'), new AssistantMessage('{"title":null}'));
+        $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
+        foreach (['Hello', 'Continue', 'More', 'Again'] as $input) {
+            self::assertSame([], $this->titleEvents(iterator_to_array($conversation->sendInput($input), false)));
+        }
+        self::assertCount(3, $provider->getRecorded());
+        self::assertSame('3', $conversation->session()->getMetadata()['titleGenerationAttempts']);
+        self::assertNull($conversation->session()->getTitle());
+    }
+
+    public function testTitleFailureWarnsWithoutLosingTheResponse(): void
+    {
+        $conversation = $this->conversation('Completed answer');
+        $provider = new class extends FakeAIProvider {
+            public function structured(array|Message $messages, string $class, array $response_schema): ProviderResponse
+            {
+                throw new RuntimeException('Title provider unavailable');
+            }
+        };
+        $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
+        $stream = $conversation->sendInput('Question');
+        $events = iterator_to_array($stream, false);
+        self::assertInstanceOf(AgentState::class, $stream->getReturn());
+        self::assertSame('Completed answer', $stream->getReturn()->getMessage()?->getContent());
+        $warnings = array_values(array_filter($events, static fn(object $event): bool => $event instanceof Notification));
+        self::assertCount(1, $warnings);
+        self::assertInstanceOf(Notification::class, $warnings[0]);
+        self::assertSame(NotificationLevel::Warning, $warnings[0]->level);
+        self::assertStringContainsString('Title provider unavailable', $warnings[0]->text);
+        self::assertSame('1', $conversation->session()->getMetadata()['titleGenerationAttempts']);
+    }
+
+    public function testSessionReplacementDoesNotRedirectTheTitleAndNewSessionsAreEligible(): void
+    {
+        $conversation = $this->conversation('First', 'Second');
+        $original = $conversation->session();
+        $selected = (new SessionStore(new InMemoryStorage(), 'other'))->create();
+        $provider = new FakeAIProvider(new AssistantMessage('{"title":"Original topic"}'), new AssistantMessage('{"title":"New topic"}'));
+        $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
+        $stream = $conversation->sendInput('Original question');
+        $stream->rewind();
+        $conversation->useSession($selected);
+        $events = $this->titleEvents(iterator_to_array($stream, false));
+        self::assertCount(1, $events);
+        self::assertSame($original, $events[0]->session);
+        self::assertSame('Original topic', $original->getTitle());
+        self::assertNull($selected->getTitle());
+
+        iterator_to_array($conversation->sendInput('New question'));
+        self::assertSame('New topic', $selected->getTitle());
+        self::assertCount(2, $provider->getRecorded());
+    }
+
+    public function testUnconsumedInterruptedAndCommandStreamsDoNotGenerateTitles(): void
+    {
+        $conversation = $this->conversation('Partial', 'Stopped');
+        $provider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
+        $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
+        $stream = $conversation->sendInput('Partial question');
+        $stream->rewind();
+        unset($stream);
+        iterator_to_array($conversation->sendInput('/unknown'));
+        $conversation->setStopSignal(new StopSignal(new InMemoryStorage(), 'stop'));
+        $stream = $conversation->sendInput('Stopped question');
+        $stream->rewind();
+        self::assertTrue($conversation->requestInterruption());
+        iterator_to_array($stream);
+        self::assertSame([], $provider->getRecorded());
+        self::assertArrayNotHasKey('titleGenerationAttempts', $conversation->session()->getMetadata());
+    }
+
+    public function testFailedResponseDoesNotAttemptTitleGeneration(): void
+    {
+        $agentProvider = new class (new AssistantMessage('Unused')) extends FakeAIProvider {
+            protected function streamChunks(Message $response): Generator
+            {
+                throw new RuntimeException('Response failed');
+            }
+        };
+        $conversation = new Conversation((new Agent())->setAiProvider($agentProvider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $titleProvider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
+        $conversation->setSessionTitleGenerator(new SessionTitleGenerator($titleProvider));
+        try {
+            iterator_to_array($conversation->sendInput('Question'));
+            self::fail('Expected response failure');
+        } catch (RuntimeException $error) {
+            self::assertSame('Response failed', $error->getMessage());
+        }
+        self::assertSame([], $titleProvider->getRecorded());
+    }
+
+    private function conversation(string ...$answers): Conversation
+    {
+        $provider = new FakeAIProvider(...array_map(static fn(string $answer): AssistantMessage => new AssistantMessage($answer), $answers));
+        return new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+    }
+
+    /**
+     * @param list<object> $events
+     * @return list<SessionTitleChanged>
+     */
+    private function titleEvents(array $events): array
+    {
+        return array_values(array_filter($events, static fn(object $event): bool => $event instanceof SessionTitleChanged));
+    }
+}

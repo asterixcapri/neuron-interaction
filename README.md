@@ -202,20 +202,42 @@ and an unknown ID returns an empty page. Reads load the current saved history.
 The Agent's active model context may be shorter because Neuron archives older
 messages while trimming its context window.
 
-To generate a title with an AI provider:
+To enable automatic title generation, configure a SessionTitleGenerator on the Conversation,
+just as you configure input history:
 
 ```php
 use NeuronInteraction\Session\SessionTitleGenerator;
 
-$title = (new SessionTitleGenerator($provider, $session))->generate();
+$conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
+```
+
+Without this setter, Conversation does not generate titles. When configured, it
+attempts generation after each successfully completed, fully consumed message
+stream, unless a response stop was requested. Commands that do not send a message
+do not trigger generation. Existing titles are preserved, and the default limit
+is three provider requests per session, including failed requests.
+
+Generation runs synchronously after the response stream and adds latency before
+the turn returns its `AgentState`. A saved title emits `SessionTitleChanged`, with
+`session` and `title` properties. Generation failures emit a warning `Notification`
+and preserve the completed turn's result. If the selected session changes during
+a turn, the title is still generated for the session used by that turn. Hosts
+coordinate overlapping executions and concurrent title requests.
+
+To generate a title explicitly with an AI provider:
+
+```php
+use NeuronInteraction\Session\SessionTitleGenerator;
+
+$title = (new SessionTitleGenerator($provider))->generate($session);
 ```
 
 This saves a generated title without changing messages. It returns `null` if no
 title was generated, including when a title already exists, there is no usable
 conversation, or the attempt limit has been reached. The default limit is three
 provider requests per session; set `maxAttempts:` to change it. Attempts, including
-failed requests, are persisted in session metadata. Your application decides
-when to generate titles and coordinates concurrent calls.
+failed requests, are persisted in session metadata. With explicit generation,
+your application decides when to call the generator and coordinates concurrent calls.
 
 ## Commands
 
