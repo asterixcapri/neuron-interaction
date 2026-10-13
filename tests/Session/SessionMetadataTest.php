@@ -18,10 +18,11 @@ use PHPUnit\Framework\TestCase;
 
 use function array_map;
 use function bin2hex;
-use function glob;
 use function is_dir;
+use function is_link;
 use function random_bytes;
 use function rmdir;
+use function scandir;
 use function sys_get_temp_dir;
 use function unlink;
 
@@ -36,15 +37,26 @@ final class SessionMetadataTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->directory . '/sessions/*.json') ?: [] as $path) {
-            unlink($path);
+        $this->removeDirectory($this->directory);
+    }
+
+    private function removeDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
+            return;
         }
-        if (is_dir($this->directory . '/sessions')) {
-            rmdir($this->directory . '/sessions');
+        foreach (scandir($directory) ?: [] as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $path = $directory . '/' . $name;
+            if (is_dir($path) && !is_link($path)) {
+                $this->removeDirectory($path);
+            } else {
+                unlink($path);
+            }
         }
-        if (is_dir($this->directory)) {
-            rmdir($this->directory);
-        }
+        rmdir($directory);
     }
 
     /** @return array<string, array{bool}> */
@@ -68,7 +80,7 @@ final class SessionMetadataTest extends TestCase
         $initial = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice'))->get($session->getKey());
         self::assertNotNull($initial);
         self::assertSame($session->getMetadata(), $initial->getMetadata());
-        $messageStore = new SessionMessageStore($storage, 'sessions', 'alice');
+        $messageStore = new SessionMessageStore($storage, 'alice');
         $messageStore->append($session->getKey(), new UserMessage('Opening title'));
         $lastUsed = $store->list()[0]->getLastUsedAt();
         $session->setMetadata('projectId', 'beta');
@@ -93,7 +105,7 @@ final class SessionMetadataTest extends TestCase
         $storage = $this->storage($files);
         $store = new SessionStore($storage, 'alice');
         $session = $store->create(['projectId' => 'alpha']);
-        $messages = new SessionMessageStore($storage, 'sessions', 'alice');
+        $messages = new SessionMessageStore($storage, 'alice');
         $messages->append($session->getKey(), new UserMessage('Old question'));
         $messages->append($session->getKey(), new AssistantMessage('Old answer'));
         $question = 'Next question';
@@ -120,7 +132,7 @@ final class SessionMetadataTest extends TestCase
         $storage = $this->storage($files);
         $store = new SessionStore($storage, 'alice');
         $first = $store->create(['projectId' => 'alpha', 'branchName' => 'main', 'extra' => 'allowed', 'userId' => 'bob']);
-        $messageStore = new SessionMessageStore($storage, 'sessions', 'alice');
+        $messageStore = new SessionMessageStore($storage, 'alice');
         $messageStore->append($first->getKey(), new UserMessage('First title'));
         $first->setTitle('First title');
         $second = $store->create(['projectId' => 'alpha', 'branchName' => 'main']);
@@ -130,7 +142,7 @@ final class SessionMetadataTest extends TestCase
         $messageStore->append($store->create(['projectId' => 'alpha'])->getKey(), new UserMessage('Missing branch'));
         $messageStore->append($store->create(['projectId' => 'alpha', 'branchName' => 'Main'])->getKey(), new UserMessage('Different case'));
         $messageStore->append($store->create(['projectId' => 'alpha', 'branchName' => 'main '])->getKey(), new UserMessage('Trailing space'));
-        (new SessionMessageStore($storage, 'sessions', 'bob'))->append((new SessionStore($storage, 'bob'))->create(['projectId' => 'alpha', 'branchName' => 'main', 'userId' => 'bob'])->getKey(), new UserMessage('Another owner'));
+        (new SessionMessageStore($storage, 'bob'))->append((new SessionStore($storage, 'bob'))->create(['projectId' => 'alpha', 'branchName' => 'main', 'userId' => 'bob'])->getKey(), new UserMessage('Another owner'));
         $messageStore->append($first->getKey(), new AssistantMessage('Latest answer'));
         $filter = ['projectId' => 'alpha', 'branchName' => 'main'];
         $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');

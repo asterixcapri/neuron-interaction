@@ -27,7 +27,7 @@ application metadata.
 
 **SessionSummary**:
 An immutable snapshot of the information used to recognize a Session in a listing:
-its identity, title, last use and history size.
+its identity, title and last use.
 
 **Notification**:
 Feedback intended for the person, with text and a severity level. It is presented

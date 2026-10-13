@@ -7,30 +7,26 @@ namespace NeuronInteraction\Session;
 use InvalidArgumentException;
 
 use function is_string;
-use function lcfirst;
 use function preg_match;
-use function str_starts_with;
-use function substr;
-use function ucfirst;
 
-/** @internal Encodes application metadata separately from Session system fields. */
+/** @internal Validates application metadata; it lives inside the Session value. */
 final class SessionMetadata
 {
     /**
      * @param array<array-key, mixed> $metadata
      * @return array<string, string>
      */
-    public static function encode(array $metadata): array
+    public static function validate(array $metadata): array
     {
-        $encoded = [];
+        $validated = [];
         foreach ($metadata as $key => $value) {
             if (!is_string($key) || !is_string($value)) {
                 throw new InvalidArgumentException('Session metadata must contain camelCase string pairs.');
             }
-            $encoded[self::key($key)] = $value;
+            self::key($key);
+            $validated[$key] = $value;
         }
-
-        return $encoded;
+        return $validated;
     }
 
     public static function key(string $key): string
@@ -38,23 +34,6 @@ final class SessionMetadata
         if (preg_match('/^[a-z][a-zA-Z0-9]*$/D', $key) !== 1) {
             throw new InvalidArgumentException('Session metadata must contain camelCase string pairs.');
         }
-
-        return 'app' . ucfirst($key);
-    }
-
-    /**
-     * @param array<string, string> $metadata
-     * @return array<string, string>
-     */
-    public static function decode(array $metadata): array
-    {
-        $decoded = [];
-        foreach ($metadata as $key => $value) {
-            if (str_starts_with($key, 'app')) {
-                $decoded[lcfirst(substr($key, 3))] = $value;
-            }
-        }
-
-        return $decoded;
+        return $key;
     }
 }

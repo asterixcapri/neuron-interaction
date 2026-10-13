@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Session;
 
+use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
@@ -15,7 +16,9 @@ use NeuronAI\Tools\ToolOutput;
 use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use UnexpectedValueException;
 
 use const PHP_INT_MAX;
@@ -26,7 +29,7 @@ final class SessionMessageStoreTest extends TestCase
     {
         $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'alice'))->create();
-        $store = new SessionMessageStore($storage, 'sessions', 'alice');
+        $store = new SessionMessageStore($storage, 'alice');
         $threadId = $session->getKey();
         $first = new UserMessage('First');
         $second = new AssistantMessage('Second');
@@ -43,28 +46,28 @@ final class SessionMessageStoreTest extends TestCase
         self::assertSame([], $store->loadAll($threadId));
     }
 
-    public function testLegacyMessagesKeepStableIdsAndMetadataAcrossReads(): void
+    public function testMessageIdentitiesAndMetadataRemainStableAcrossReads(): void
     {
         $storage = new InMemoryStorage();
-        $storage->write('sessions', 'legacy', [
-            ['role' => 'user', 'content' => [['type' => 'text', 'content' => 'Earlier']], 'source' => 'legacy'],
-        ], ['userId' => 'alice']);
-        $store = new SessionMessageStore($storage, 'sessions', 'alice');
-        $first = $store->loadActive('legacy')[0];
-        self::assertSame($first->getId(), $store->loadActive('legacy')[0]->getId());
-        self::assertSame('legacy', $first->getMetadata('source'));
-        $store->append('legacy', $first);
-        self::assertCount(1, $store->loadAll('legacy'));
-        $store->append('legacy', new AssistantMessage('New answer'));
-        self::assertSame($first->getId(), $store->loadAll('legacy')[0]->getId());
-        self::assertSame('legacy', $store->loadAll('legacy')[0]->getMetadata('source'));
+        $session = (new SessionStore($storage, 'alice'))->create();
+        $store = new SessionMessageStore($storage, 'alice');
+        $original = (new UserMessage('Earlier'))->setMetadata(['source' => 'original']);
+        $store->append($session->getKey(), $original);
+        $first = $store->loadActive($session->getKey())[0];
+        self::assertSame($original->getId(), $first->getId());
+        self::assertSame('original', $first->getMetadata('source'));
+        $store->append($session->getKey(), $first);
+        self::assertCount(1, $store->loadAll($session->getKey()));
+        $store->append($session->getKey(), new AssistantMessage('New answer'));
+        self::assertSame($first->getId(), $store->loadAll($session->getKey())[0]->getId());
+        self::assertSame('original', $store->loadAll($session->getKey())[0]->getMetadata('source'));
     }
 
     public function testStructuredToolErrorsRoundTrip(): void
     {
         $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'alice'))->create();
-        $store = new SessionMessageStore($storage, 'sessions', 'alice');
+        $store = new SessionMessageStore($storage, 'alice');
         $call = (new ToolCall(name: 'lookup', callId: 'call-1'))->setResult(ToolOutput::error('Invalid input'));
         $store->append($session->getKey(), new ToolResultMessage([$call]));
         $message = $store->loadAll($session->getKey())[0];
@@ -79,7 +82,7 @@ final class SessionMessageStoreTest extends TestCase
     {
         $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'bob'))->create();
-        $store = new SessionMessageStore($storage, 'sessions', 'alice');
+        $store = new SessionMessageStore($storage, 'alice');
         $this->expectException(UnexpectedValueException::class);
         $store->append($session->getKey(), new UserMessage('Unauthorized'));
     }
@@ -124,13 +127,53 @@ final class SessionMessageStoreTest extends TestCase
         $storage = new InMemoryStorage();
         $sessions = new SessionStore($storage, 'alice');
         $session = $sessions->create();
-        $store = new SessionMessageStore($storage, 'sessions', 'alice');
+        $store = new SessionMessageStore($storage, 'alice');
         $message = new UserMessage('Saved subject');
         $store->append($session->getKey(), $message);
         $store->archive($session->getKey(), 1);
         self::assertSame([], $session->bindToAgent(new Agent())->getChatHistory()->getMessages());
         self::assertEquals([$message], $session->getMessages());
         self::assertSame($session->getKey(), $sessions->list()[0]->getKey());
+    }
+
+    public function testAppendPropagatesValidationAndIoFailuresWithoutRegisteringUse(): void
+    {
+        foreach ([new InvalidArgumentException('invalid payload'), new RuntimeException('publication failure')] as $failure) {
+            $storage = $this->createMock(StorageInterface::class);
+            $storage->expects(self::once())->method('get')->willReturn([]);
+            $storage->expects(self::once())->method('create')->willThrowException($failure);
+            $storage->expects(self::never())->method('update');
+            $store = new SessionMessageStore($storage, 'owner');
+            try {
+                $store->append('thread', new UserMessage('Question'));
+                self::fail('Non-conflict failures must propagate.');
+            } catch (InvalidArgumentException|RuntimeException $caught) {
+                self::assertSame($failure, $caught);
+            }
+        }
+    }
+
+    public function testOwnershipIsRequiredForEveryMessageOperation(): void
+    {
+        $storage = new InMemoryStorage();
+        $session = (new SessionStore($storage, 'bob'))->create();
+        $owner = new SessionMessageStore($storage, 'bob');
+        $owner->append($session->getKey(), new UserMessage('Owned content'));
+        $stranger = new SessionMessageStore($storage, 'alice');
+        foreach ([
+            fn() => $stranger->loadActive($session->getKey()),
+            fn() => $stranger->loadAll($session->getKey()),
+            fn() => $stranger->append($session->getKey(), new UserMessage('Intrusion')),
+            fn() => $stranger->archive($session->getKey(), 1),
+            fn() => $stranger->clear($session->getKey()),
+        ] as $operation) {
+            try {
+                $operation();
+                self::fail('A foreign thread must be inaccessible.');
+            } catch (UnexpectedValueException) {
+                self::assertSame('Owned content', $owner->loadActive($session->getKey())[0]->getContent());
+            }
+        }
     }
 
 }

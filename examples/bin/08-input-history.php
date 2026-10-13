@@ -26,7 +26,7 @@ $storage = new FileStorage(\dirname(__DIR__) . '/.storage/input-history');
 $sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
 
-$inputHistory = new InputHistory($storage);
+$inputHistory = new InputHistory($storage, 'demo-user');
 
 $conversation = new Conversation($agent, $session);
 $conversation->setCommands(new Commands(new HelpCommand()));

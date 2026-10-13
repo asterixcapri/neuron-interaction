@@ -20,6 +20,7 @@ use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -267,7 +268,7 @@ final class SessionTitleGeneratorTest extends TestCase
         try {
             (new SessionTitleGenerator($this->provider($requests)))->generate($session);
             self::fail('Saving a title to a deleted Session must fail.');
-        } catch (InvalidArgumentException $error) {
+        } catch (MissingEntryException $error) {
             self::assertSame('The Session no longer exists.', $error->getMessage());
         }
 

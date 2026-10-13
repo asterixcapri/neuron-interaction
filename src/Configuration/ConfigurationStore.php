@@ -6,9 +6,11 @@ namespace NeuronInteraction\Configuration;
 
 use InvalidArgumentException;
 use JsonException;
+use NeuronInteraction\Storage\DuplicateKeyException;
+use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Storage\StorageInterface;
+use UnexpectedValueException;
 
-use function array_key_exists;
 use function hash;
 use function is_array;
 use function is_bool;
@@ -17,13 +19,18 @@ use function is_int;
 use function is_object;
 use function is_string;
 use function json_encode;
+use function str_starts_with;
+use function strlen;
+use function substr;
 
 use const JSON_THROW_ON_ERROR;
 
 final class ConfigurationStore
 {
-    // Direct preferences never read or overwrite legacy named configurations.
     private const string NAMESPACE = 'preferences';
+
+    // Keep numeric preference names as object fields despite PHP array-key coercion.
+    private const string FIELD_PREFIX = 'preference-';
 
     public function __construct(
         private readonly StorageInterface $storage,
@@ -40,14 +47,14 @@ final class ConfigurationStore
      *     ($fallback is float ? float :
      *     ($fallback is bool ? bool : array<array-key, mixed>)))))
      */
-    public function read(string $key, mixed $fallback = null): mixed
+    public function get(string $key, mixed $fallback = null): mixed
     {
         self::guardJson($fallback);
         if ($fallback === '') {
             throw new InvalidArgumentException('A string fallback must be non-empty.');
         }
 
-        $values = $this->entries();
+        $values = $this->list();
 
         $value = $values[$key] ?? null;
 
@@ -62,45 +69,47 @@ final class ConfigurationStore
         };
     }
 
-    public function write(string $key, mixed $value): void
+    public function set(string $key, mixed $value): void
     {
         self::guardJson($value);
-        $values = $this->entries();
-        $values[$key] = $value;
-        $this->storage->write(
+        try {
+            $this->storage->create(self::NAMESPACE, [], $this->storageKey());
+        } catch (DuplicateKeyException) {
+            // Another writer has already established this user's record.
+        }
+
+        $this->storage->update(
             self::NAMESPACE,
             $this->storageKey(),
-            self::snapshotArray($values),
-            ['userId' => $this->userId],
+            [['path' => [self::FIELD_PREFIX . $key], 'value' => $value]],
         );
     }
 
     public function delete(string $key): void
     {
-        $values = $this->entries();
-        if (!array_key_exists($key, $values)) {
+        if ($this->storage->get(self::NAMESPACE, $this->storageKey()) === null) {
             return;
         }
 
-        unset($values[$key]);
-        $this->storage->write(
-            self::NAMESPACE,
-            $this->storageKey(),
-            self::snapshotArray($values),
-            ['userId' => $this->userId],
-        );
+        try {
+            $this->storage->update(self::NAMESPACE, $this->storageKey(), removals: [[self::FIELD_PREFIX . $key]]);
+        } catch (MissingEntryException) {
+            // Removing a preference from an absent record is already complete.
+        }
     }
 
     /** @return array<array-key, mixed> */
-    public function entries(): array
+    public function list(): array
     {
-        $document = $this->storage->read(self::NAMESPACE, $this->storageKey());
-
-        if ($document === null || ($document->metadata['userId'] ?? null) !== $this->userId) {
-            return [];
+        $preferences = [];
+        foreach ($this->storage->get(self::NAMESPACE, $this->storageKey()) ?? [] as $field => $value) {
+            if (!is_string($field) || !str_starts_with($field, self::FIELD_PREFIX)) {
+                throw new UnexpectedValueException('A stored preference field must use its encoded name.');
+            }
+            $preferences[substr($field, strlen(self::FIELD_PREFIX))] = $value;
         }
 
-        return self::snapshotArray($document->data);
+        return $preferences;
     }
 
     private function storageKey(): string

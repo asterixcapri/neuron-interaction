@@ -5,19 +5,24 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Session;
 
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronInteraction\Session\Session;
+use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\StorageInterface;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use UnexpectedValueException;
 
 use function array_map;
 use function array_unique;
@@ -25,7 +30,6 @@ use function bin2hex;
 use function file_get_contents;
 use function file_put_contents;
 use function is_dir;
-use function iterator_to_array;
 use function mkdir;
 use function random_bytes;
 use function rmdir;
@@ -37,6 +41,103 @@ use function unlink;
 
 final class SessionStoreTest extends TestCase
 {
+    #[DataProvider('storageKinds')]
+    public function testContentVisibilityAndExactMetadataFiltersFollowLifecycle(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $store = new SessionStore($storage, 'alice');
+        $session = $store->create(['project' => 'one', 'environment' => 'test']);
+        $other = $store->create(['project' => 'One', 'environment' => 'test']);
+        $messages = new SessionMessageStore($storage, 'alice');
+        self::assertSame([], $store->list());
+        $messages->append($session->getKey(), new AssistantMessage('Introductory answer'));
+        self::assertCount(0, $store->list());
+        $messages->append($session->getKey(), new UserMessage('My topic'));
+        $messages->append($other->getKey(), new UserMessage('Other topic'));
+        self::assertCount(2, $store->list());
+        self::assertSame([$session->getKey()], array_map(
+            static fn(SessionSummary $summary): string => $summary->getKey(),
+            $store->list(['project' => 'one', 'environment' => 'test']),
+        ));
+        self::assertSame([], $store->list(['project' => 'one', 'missing' => '']));
+        $messages->archive($session->getKey(), 2);
+        self::assertCount(1, $store->list(['project' => 'one']));
+        self::assertSame([], $messages->loadActive($session->getKey()));
+        $resumed = $store->get($session->getKey());
+        self::assertNotNull($resumed);
+        self::assertCount(2, $resumed->getMessages());
+        $messages->clear($session->getKey());
+        self::assertSame([], $store->list(['project' => 'one']));
+        self::assertNotNull($store->get($session->getKey()));
+        $messages->append($session->getKey(), new UserMessage('New content'));
+        self::assertCount(1, $store->list(['project' => 'one']));
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testListingDoesNotConsultAnyMessageHistory(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $messages = $this->createMock(MessageStoreInterface::class);
+        foreach (['loadActive', 'loadAll', 'append', 'archive', 'clear'] as $method) {
+            $messages->expects(self::never())->method($method);
+        }
+        $store = new SessionStore($storage, 'alice', $messages);
+        $session = $store->create(['project' => 'one']);
+        $session->setTitle('Record title');
+        $session->registerUse(new UserMessage('Content stored elsewhere'));
+        $listed = $store->list(['project' => 'one']);
+        self::assertCount(1, $listed);
+        self::assertSame($session->getKey(), $listed[0]->getKey());
+        self::assertSame('Record title', $listed[0]->getTitle());
+        self::assertEquals($session->getLastUsedAt(), $listed[0]->getLastUsedAt());
+    }
+
+    public function testListingDecodesItsStorageSnapshotWithoutAdditionalReads(): void
+    {
+        $storage = $this->createMock(StorageInterface::class);
+        $storage->expects(self::never())->method('get');
+        $storage->expects(self::once())->method('list')->with(Session::namespaceForUser('alice'))->willReturn([
+            ['key' => 'saved', 'value' => [
+                'title' => 'Snapshot title',
+                'createdAt' => '2026-09-04T12:00:00.000000+00:00',
+                'lastUsedAt' => '2026-09-05T12:00:00.000000+00:00',
+                'hasContent' => true,
+                'metadata' => ['project' => 'one'],
+            ]],
+        ]);
+        $summaries = (new SessionStore($storage, 'alice'))->list(['project' => 'one']);
+        self::assertCount(1, $summaries);
+        self::assertSame('Snapshot title', $summaries[0]->getTitle());
+        self::assertSame('2026-09-05', $summaries[0]->getLastUsedAt()->format('Y-m-d'));
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testListingAndSessionReadsRejectTheSameCorruptRecordFields(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $store = new SessionStore($storage, 'alice');
+        $session = $store->create();
+        $session->registerUse(new UserMessage('Content'));
+        $record = $storage->get(Session::namespaceForUser('alice'), $session->getKey());
+        self::assertNotNull($record);
+        foreach (['title' => 12, 'createdAt' => 'invalid', 'lastUsedAt' => 'invalid', 'hasContent' => 1, 'metadata' => false] as $field => $invalid) {
+            $corrupt = $record;
+            $corrupt[$field] = $invalid;
+            $storage->set(Session::namespaceForUser('alice'), $session->getKey(), $corrupt);
+            try {
+                $store->list();
+                self::fail('Listing must reject invalid record fields.');
+            } catch (UnexpectedValueException $listed) {
+                try {
+                    $session->getTitle();
+                    self::fail('Session reads must reject invalid record fields.');
+                } catch (UnexpectedValueException $read) {
+                    self::assertSame($listed->getMessage(), $read->getMessage());
+                }
+            }
+        }
+    }
+
     private string $directory;
 
     protected function setUp(): void
@@ -139,7 +240,6 @@ final class SessionStoreTest extends TestCase
 
         self::assertSame('The older subject', $listed[0]->getTitle());
         self::assertGreaterThan($listed[1]->getLastUsedAt(), $listed[0]->getLastUsedAt());
-        self::assertGreaterThan(0, $listed[0]->getSize());
     }
 
     public function testUnknownKeysAreRejectedWithoutCreatingAHistory(): void
@@ -149,8 +249,8 @@ final class SessionStoreTest extends TestCase
 
         self::assertNull($sessionStore->get('unknown'));
 
-        self::assertNull($storage->read('sessions', 'unknown'));
-        self::assertSame([], iterator_to_array($storage->entries('sessions')));
+        self::assertNull($storage->get(Session::namespaceForUser('local-user'), 'unknown'));
+        self::assertSame([], $storage->list(Session::namespaceForUser('local-user')));
     }
 
     public function testUserContentIsListedWithoutDerivingATitle(): void
@@ -197,19 +297,19 @@ final class SessionStoreTest extends TestCase
         self::assertInstanceOf(FileContent::class, $resumed->getMessages()[0]->getContentBlocks()[0]);
     }
 
-    public function testEqualLastUseTimesAreOrderedByKey(): void
+    #[DataProvider('storageKinds')]
+    public function testEqualLastUseTimesAreOrderedByKey(bool $files): void
     {
-        $storage = new InMemoryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
         SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('First'));
         SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('Second'));
         $keys = [];
 
-        foreach ($storage->entries('sessions') as $document) {
-            $keys[] = $document->key;
-            $storage->write('sessions', $document->key, $document->data, [
-                'userId' => 'local-user',
-                'lastUsedAt' => '2026-09-04T12:00:00.000000+00:00',
+        foreach ($storage->list(Session::namespaceForUser('local-user')) as $entry) {
+            $keys[] = $entry['key'];
+            $storage->update(Session::namespaceForUser('local-user'), $entry['key'], [
+                ['path' => ['lastUsedAt'], 'value' => '2026-09-04T12:00:00.000000+00:00'],
             ]);
         }
 
@@ -221,7 +321,7 @@ final class SessionStoreTest extends TestCase
         ));
     }
 
-    public function testFileSummaryReportsThePersistedConversationSize(): void
+    public function testFileSummaryRetainsIdentityTitleAndLastUse(): void
     {
         $sessionStore = new SessionStore(new FileStorage($this->directory), 'local-user');
         $history = $sessionStore->create();
@@ -233,7 +333,6 @@ final class SessionStoreTest extends TestCase
         self::assertCount(1, $listed);
         self::assertSame($history->getKey(), $listed[0]->getKey());
         self::assertSame('Stored in a file', $listed[0]->getTitle());
-        self::assertGreaterThan(0, $listed[0]->getSize());
     }
 
     public function testLegacyFilesAreNeitherDiscoveredNorMigrated(): void
@@ -287,12 +386,12 @@ final class SessionStoreTest extends TestCase
     public function testOwnerlessDocumentsAreNotAssignedToTheStoreUser(): void
     {
         $storage = new InMemoryStorage();
-        $document = $storage->create('sessions', []);
+        $key = $storage->create('sessions', []);
         $sessionStore = new SessionStore($storage, 'local-user');
-        self::assertNull($sessionStore->get($document->key));
+        self::assertNull($sessionStore->get($key));
         self::assertSame([], $sessionStore->list());
-        $sessionStore->delete($document->key);
-        self::assertNotNull($storage->read('sessions', $document->key));
+        $sessionStore->delete($key);
+        self::assertNotNull($storage->get('sessions', $key));
     }
 
     public function testTitlesPersistIndependentlyFromMessagesAndLastUseTime(): void

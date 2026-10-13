@@ -4,148 +4,63 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Session;
 
-use DateTimeImmutable;
-use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
-use NeuronAI\Chat\Messages\ToolResultMessage;
-use NeuronAI\Chat\Messages\UserMessage;
+use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronInteraction\Storage\StorageInterface;
-use NeuronInteraction\Storage\StoredDocument;
-use UnexpectedValueException;
 
-use function trim;
 use function usort;
 
-/**
- * Owns the lifecycle of conversations persisted through shared storage.
- */
+/** Owns lookup and lifecycle delegation within one user's Session namespace. */
 final readonly class SessionStore
 {
-    private const string NAMESPACE = 'sessions';
+    public function __construct(private StorageInterface $storage, private string $userId, private ?MessageStoreInterface $messageStore = null) {}
 
-    public function __construct(private StorageInterface $storage, private string $userId) {}
-
-    /**
-     * Starts a distinct Session with an empty History.
-     *
-     * @param array<string, string> $metadata
-     */
+    /** @param array<string, string> $metadata */
     public function create(array $metadata = []): Session
     {
-        $document = $this->storage->create(
-            self::NAMESPACE,
-            [],
-            ['userId' => $this->userId] + SessionMetadata::encode($metadata),
-        );
-
-        return $this->session($document);
+        return Session::create($this->storage, $this->userId, $metadata, $this->messageStore);
     }
 
     /**
-     * Returns non-empty Sessions, most recently used first.
-     *
      * @param array<string, string> $metadata
      * @return list<SessionSummary>
+     * @phpstan-impure
      */
     public function list(array $metadata = []): array
     {
+        $filter = SessionMetadata::validate($metadata);
         $sessions = [];
-
-        $filter = ['userId' => $this->userId] + SessionMetadata::encode($metadata);
-
-        foreach ($this->storage->entries(self::NAMESPACE, $filter) as $document) {
-            if (($document->metadata['userId'] ?? null) !== $this->userId) {
+        foreach ($this->storage->list(Session::namespaceForUser($this->userId)) as $entry) {
+            $record = SessionRecord::fromArray($entry['value']);
+            if (!$record->hasContent) {
                 continue;
             }
-
-            $session = $this->session($document);
-            if (!$this->hasUserContent($session)) {
-                continue;
+            foreach ($filter as $field => $value) {
+                if (($record->metadata[$field] ?? null) !== $value) {
+                    continue 2;
+                }
             }
-
-            $sessions[] = new SessionSummary(
-                $document->key,
-                $this->lastUsedAt($document),
-                $session->getTitle(),
-                $document->size(),
-            );
+            $sessions[] = new SessionSummary($entry['key'], $record->lastUsedAt, $record->title);
         }
-
-        usort(
-            $sessions,
-            static fn(SessionSummary $one, SessionSummary $other): int
-                => ($other->getLastUsedAt() <=> $one->getLastUsedAt())
-                    ?: ($one->getKey() <=> $other->getKey()),
-        );
-
+        usort($sessions, static fn(SessionSummary $one, SessionSummary $other): int
+            => ($other->getLastUsedAt() <=> $one->getLastUsedAt()) ?: ($one->getKey() <=> $other->getKey()));
         return $sessions;
     }
 
-    /** Reads only Sessions owned by this Store's user. */
     public function get(string $key): ?Session
     {
-        $document = $this->storage->read(self::NAMESPACE, $key);
-
-        if ($document === null || ($document->metadata['userId'] ?? null) !== $this->userId) {
+        if ($this->storage->get(Session::namespaceForUser($this->userId), $key) === null) {
             return null;
         }
-
-        return $this->session($document);
+        return $this->session($key);
     }
 
     public function delete(string $key): void
     {
-        if ($this->get($key) !== null) {
-            $this->storage->delete(self::NAMESPACE, $key);
-        }
+        $this->get($key)?->delete();
     }
 
-    private function session(StoredDocument $document): Session
+    private function session(string $key): Session
     {
-        return new Session(
-            $this->storage,
-            self::NAMESPACE,
-            $document->key,
-            $this->userId,
-        );
-    }
-
-    private function hasUserContent(Session $session): bool
-    {
-        foreach ($session->getMessages() as $message) {
-            if (!$message instanceof UserMessage || $message instanceof ToolResultMessage) {
-                continue;
-            }
-
-            if (trim($message->getContent() ?? '') !== '') {
-                return true;
-            }
-
-            foreach ($message->getContentBlocks() as $block) {
-                if (!$block instanceof TextContent) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private function lastUsedAt(StoredDocument $document): DateTimeImmutable
-    {
-        $value = $document->metadata['lastUsedAt'] ?? null;
-        $lastUsedAt = $value === null
-            ? false
-            : DateTimeImmutable::createFromFormat(
-                '!Y-m-d\TH:i:s.uP',
-                $value,
-            );
-
-        if ($lastUsedAt === false) {
-            throw new UnexpectedValueException(
-                'A stored Session must contain a valid last-used time.',
-            );
-        }
-
-        return $lastUsedAt;
+        return new Session($this->storage, $key, $this->userId, $this->messageStore);
     }
 }

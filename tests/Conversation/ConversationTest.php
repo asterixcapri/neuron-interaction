@@ -20,6 +20,7 @@ use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Tools\ToolCall;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Interruption\StopSignal;
+use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
@@ -242,7 +243,7 @@ final class ConversationTest extends TestCase
 
         self::assertSame($session, $conversation->session());
         self::assertSame($session->getKey(), $conversation->agent()->getThreadId());
-        self::assertCount(1, iterator_to_array($storage->entries('sessions')));
+        self::assertCount(1, $storage->list(Session::namespaceForUser('owner')));
     }
 
     public function testHostCanSelectASessionFromAnotherStore(): void

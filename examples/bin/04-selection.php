@@ -14,7 +14,9 @@ use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Event\SessionChanged;
+use NeuronInteraction\Event\SessionTitleChanged;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
@@ -23,14 +25,16 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
+$provider = AIProviderFactory::create('openai:gpt-5.4-nano');
 $agent = new Agent();
-$agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
+$agent->setAiProvider($provider);
 
 $storage = new InMemoryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
 
 $conversation = new Conversation($agent, $session);
+$conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
 
 $conversation->setCommands(new Commands(
     new ResumeCommand($sessionStore),
@@ -67,6 +71,8 @@ while (true) {
             echo $event->content;
         } elseif ($event instanceof Notification) {
             echo $event->text . \PHP_EOL;
+        } elseif ($event instanceof SessionTitleChanged) {
+            echo 'Session title: ' . $event->title . \PHP_EOL;
         } elseif ($event instanceof SessionChanged) {
             echo 'Session changed: ' . $event->session->getKey() . \PHP_EOL;
             foreach ($conversation->getDisplayMessages() as $message) {
@@ -75,7 +81,9 @@ while (true) {
         } elseif ($event instanceof SelectionRequest) {
             echo $event->prompt . \PHP_EOL;
             foreach ($event->options as $index => $option) {
-                echo ($index + 1) . '. ' . $option->label . \PHP_EOL;
+                echo ($index + 1) . '. ' . $option->label
+                    . ' — ' . $option->description
+                    . ' [' . $option->value . ']' . \PHP_EOL;
             }
 
             echo 'Choose an option number (Enter to cancel): ';

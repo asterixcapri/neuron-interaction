@@ -13,7 +13,6 @@ use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
-use RuntimeException;
 use Symfony\Component\Dotenv\Dotenv;
 
 require_once __DIR__ . '/../vendor/autoload.php';

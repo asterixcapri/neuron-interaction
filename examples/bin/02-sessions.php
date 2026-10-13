@@ -8,7 +8,6 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteractionDemo\AIProviderFactory;
-use RuntimeException;
 use Symfony\Component\Dotenv\Dotenv;
 
 require_once __DIR__ . '/../vendor/autoload.php';

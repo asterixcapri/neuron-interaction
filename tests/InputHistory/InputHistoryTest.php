@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\InputHistory;
 
+use InvalidArgumentException;
 use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
+use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
+use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
@@ -19,6 +22,7 @@ use UnexpectedValueException;
 
 use function array_map;
 use function bin2hex;
+use function hash;
 use function is_dir;
 use function is_link;
 use function json_decode;
@@ -53,10 +57,10 @@ final class InputHistoryTest extends TestCase
         $storage = $files
             ? new FileStorage($this->directory)
             : new InMemoryStorage();
-        $first = new InputHistory($storage);
+        $first = new InputHistory($storage, 'local-user');
         $second = new InputHistory($files
             ? new FileStorage($this->directory)
-            : $storage);
+            : $storage, 'local-user');
 
         self::assertSame([], $first->list());
         self::assertSame([], $second->list());
@@ -76,7 +80,7 @@ final class InputHistoryTest extends TestCase
         self::assertSame($expected, array_map(static fn(UserMessage $message): ?string => $message->getContent(), $second->list()));
         self::assertSame($expected, array_map(static fn(UserMessage $message): ?string => $message->getContent(), (new InputHistory($files
             ? new FileStorage($this->directory)
-            : $storage))->list()));
+            : $storage, 'local-user'))->list()));
     }
 
     #[DataProvider('storageKinds')]
@@ -85,10 +89,10 @@ final class InputHistoryTest extends TestCase
         $storage = $files
             ? new FileStorage($this->directory)
             : new InMemoryStorage();
-        $first = new InputHistory($storage);
+        $first = new InputHistory($storage, 'local-user');
         $second = new InputHistory($files
             ? new FileStorage($this->directory)
-            : $storage);
+            : $storage, 'local-user');
 
         $first->append(new UserMessage(" \n\t "));
         self::assertSame([], $second->list());
@@ -112,7 +116,7 @@ final class InputHistoryTest extends TestCase
         $storage = $files
             ? new FileStorage($this->directory)
             : new InMemoryStorage();
-        $inputs = new InputHistory($storage);
+        $inputs = new InputHistory($storage, 'local-user');
         $sessionStore = new SessionStore($storage, 'local-user');
         $history = $sessionStore->create();
 
@@ -125,7 +129,7 @@ final class InputHistoryTest extends TestCase
 
         self::assertSame(
             ['/summarize', 'A submitted message'],
-            array_map(static fn(UserMessage $message): ?string => $message->getContent(), (new InputHistory($storage))->list()),
+            array_map(static fn(UserMessage $message): ?string => $message->getContent(), (new InputHistory($storage, 'local-user'))->list()),
         );
         self::assertCount(2, $sessionStore->list());
     }
@@ -134,7 +138,7 @@ final class InputHistoryTest extends TestCase
     public function testAttachmentsAndMetadataSurviveStorageRecall(bool $files): void
     {
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
-        $inputs = new InputHistory($storage);
+        $inputs = new InputHistory($storage, 'local-user');
         $inputs->append(new UserMessage('/resume original-key'));
         $message = new UserMessage([
             new ImageContent('https://example.com/photo.png', SourceType::URL, 'image/png'),
@@ -146,7 +150,7 @@ final class InputHistoryTest extends TestCase
         $inputs->append($message);
         $message->setContents('Changed after submission');
 
-        $reopened = new InputHistory($files ? new FileStorage($this->directory) : $storage);
+        $reopened = new InputHistory($files ? new FileStorage($this->directory) : $storage, 'local-user');
         self::assertCount(2, $reopened->list());
         $recalled = $reopened->list()[1];
         self::assertSame($snapshot, json_decode(json_encode($recalled, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR));
@@ -154,22 +158,94 @@ final class InputHistoryTest extends TestCase
         self::assertSame('/resume original-key', $reopened->list()[0]->getContent());
     }
 
+    #[DataProvider('storageKinds')]
+    public function testUsersHaveIndependentUnboundedHistoriesAndLimitsSelectLatestInputs(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $alice = new InputHistory($storage, 'alice');
+        $bob = new InputHistory($storage, 'bob');
+        $alice->append(new UserMessage('First'));
+        $bob->append(new UserMessage('Private'));
+        $alice->append(new UserMessage('Second'));
+        $alice->append(new UserMessage('Third'));
+
+        self::assertSame(['First', 'Second', 'Third'], array_map(static fn(UserMessage $message): ?string => $message->getContent(), $alice->list()));
+        self::assertSame(['Second', 'Third'], array_map(static fn(UserMessage $message): ?string => $message->getContent(), $alice->list(2)));
+        self::assertSame(['Third'], array_map(static fn(UserMessage $message): ?string => $message->getContent(), $alice->list(1)));
+        self::assertSame([], $alice->list(0));
+        self::assertCount(3, $alice->list(100));
+        self::assertSame('Private', $bob->list()[0]->getContent());
+        // Each submission remains an independently addressable Storage entry.
+        $entries = $storage->list('input-history-' . hash('sha256', 'alice'));
+        self::assertCount(3, $entries);
+        self::assertSame($entries[0]['value'], $storage->get('input-history-' . hash('sha256', 'alice'), $entries[0]['key']));
+        self::assertSame('user', $entries[2]['value']['role']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $alice->list(-1);
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testReasoningOnlyInputsAreSkippedWhileStructuredAuthoredDataDeterminesRepeats(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $inputs = new InputHistory($storage, 'local-user');
+        $inputs->append(new UserMessage([new ReasoningContent('Internal reasoning')]));
+        $inputs->append(new UserMessage([new ReasoningContent('Internal reasoning'), new TextContent('  ')]));
+        self::assertSame([], $inputs->list());
+
+        $first = new UserMessage([new ImageContent('https://example.com/photo.png', SourceType::URL, 'image/png')]);
+        $first->addMetadata('label', 'original');
+        $repeat = new UserMessage([new ImageContent('https://example.com/photo.png', SourceType::URL, 'image/png')]);
+        $repeat->addMetadata('label', 'original');
+        $inputs->append($first);
+        $inputs->append($repeat);
+        self::assertCount(1, $inputs->list());
+
+        $repeat->addMetadata('label', 'changed');
+        $inputs->append($repeat);
+        self::assertCount(2, $inputs->list());
+        self::assertSame('original', $inputs->list()[0]->getMetadata('label'));
+        self::assertSame('changed', $inputs->list()[1]->getMetadata('label'));
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testIntegralFloatMetadataSurvivesRecallAndRepeatComparison(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $history = new InputHistory($storage, 'owner');
+        $first = new UserMessage('Same text');
+        $first->addMetadata('weight', 1.0);
+        $history->append($first);
+        $reopened = new InputHistory($files ? new FileStorage($this->directory) : $storage, 'owner');
+        self::assertSame(1.0, $reopened->list()[0]->getMetadata('weight'));
+
+        $repeat = new UserMessage('Same text');
+        $repeat->addMetadata('weight', 1.0);
+        $reopened->append($repeat);
+        self::assertCount(1, $history->list());
+        $repeat->addMetadata('weight', 1);
+        $reopened->append($repeat);
+        self::assertCount(2, $history->list());
+        self::assertSame(1, $history->list()[1]->getMetadata('weight'));
+    }
+
     public function testStoredStringsAreRejected(): void
     {
         $storage = new InMemoryStorage();
-        $storage->write('input-history', 'entries', ['old text entry']);
+        $storage->create('input-history-' . hash('sha256', 'local-user'), ['old text entry']);
 
         $this->expectException(UnexpectedValueException::class);
-        (new InputHistory($storage))->list();
+        (new InputHistory($storage, 'local-user'))->list();
     }
 
     public function testStoredAssistantMessagesAreRejectedAsInput(): void
     {
         $storage = new InMemoryStorage();
-        $storage->write('input-history', 'entries', [['role' => 'assistant', 'content' => 'invalid']]);
+        $storage->create('input-history-' . hash('sha256', 'local-user'), ['role' => 'assistant', 'content' => 'invalid']);
 
         $this->expectException(UnexpectedValueException::class);
-        (new InputHistory($storage))->list();
+        (new InputHistory($storage, 'local-user'))->list();
     }
 
     /** @return array<string, array{bool}> */

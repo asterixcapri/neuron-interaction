@@ -1,4 +1,11 @@
+---
+status: superseded by ADR-0003
+---
+
 # Store Session listing information with its history
+
+Superseded by [ADR-0003](0003-store-session-records-and-messages-separately.md).
+The decision below records the previous design.
 
 A Session will retain one storage document containing its messages, ownership and
 application metadata. Information needed to build SessionSummary objects will be

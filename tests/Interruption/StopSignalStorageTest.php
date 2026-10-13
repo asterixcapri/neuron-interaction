@@ -8,7 +8,6 @@ use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Storage\StorageInterface;
-use NeuronInteraction\Storage\StoredDocument;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
 
@@ -19,8 +18,10 @@ use function proc_close;
 use function proc_open;
 use function random_bytes;
 use function rmdir;
+use function scandir;
 use function stream_get_contents;
 use function sys_get_temp_dir;
+use function unlink;
 use function usleep;
 
 use const PHP_BINARY;
@@ -40,6 +41,11 @@ final class StopSignalStorageTest extends TestCase
             self::assertFalse($callback());
         } finally {
             $signal->clear();
+            foreach (scandir($directory . '/response-stops') ?: [] as $name) {
+                if ($name !== '.' && $name !== '..') {
+                    unlink($directory . '/response-stops/' . $name);
+                }
+            }
             rmdir($directory . '/response-stops');
             rmdir($directory);
         }
@@ -61,8 +67,8 @@ final class StopSignalStorageTest extends TestCase
     {
         $storage = $this->createMock(StorageInterface::class);
         $storage->expects(self::never())->method('create');
-        $storage->expects(self::never())->method('write');
-        $storage->expects(self::once())->method('read')->willReturn(null);
+        $storage->expects(self::never())->method('set');
+        $storage->expects(self::once())->method('get')->willReturn(null);
         $storage->expects(self::never())->method('delete');
         $polls = 0;
         $callback = (new StopSignal($storage, 'chat'))->stopCallback(
@@ -105,7 +111,7 @@ final class StopSignalStorageTest extends TestCase
     public function testMalformedStoredFlagsAreRejected(): void
     {
         $storage = $this->createStub(StorageInterface::class);
-        $storage->method('read')->willReturn(new StoredDocument('chat', ['requested' => 'true'], []));
+        $storage->method('get')->willReturn(['requested' => 'true']);
         $this->expectException(UnexpectedValueException::class);
         (new StopSignal($storage, 'chat'))->stopCallback()();
     }

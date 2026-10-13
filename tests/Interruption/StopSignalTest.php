@@ -19,8 +19,8 @@ final class StopSignalTest extends TestCase
     public function testCreatingACallbackDoesNotAccessStorage(): void
     {
         $storage = $this->createMock(StorageInterface::class);
-        $storage->expects(self::never())->method('read');
-        $storage->expects(self::never())->method('write');
+        $storage->expects(self::never())->method('get');
+        $storage->expects(self::never())->method('set');
         $storage->expects(self::never())->method('delete');
         $polls = 0;
         (new StopSignal($storage, 'chat'))->stopCallback(
@@ -46,7 +46,7 @@ final class StopSignalTest extends TestCase
     public function testEachCallbackHasItsOwnPollingSchedule(): void
     {
         $storage = $this->createMock(StorageInterface::class);
-        $storage->expects(self::exactly(2))->method('read')->willReturn(null);
+        $storage->expects(self::exactly(2))->method('get')->willReturn(null);
         $signal = new StopSignal($storage, 'chat');
         $first = $signal->stopCallback(pollInterval: 3600);
         $second = $signal->stopCallback(pollInterval: 3600);

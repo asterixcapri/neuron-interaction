@@ -8,7 +8,6 @@ use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
-use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
 
@@ -20,22 +19,21 @@ $storage = new FileStorage(\dirname(__DIR__) . '/.storage/preferences');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
 
 $language = 'Spanish';
-$configurationStore->write('language', $language);
+$configurationStore->set('language', $language);
 
-echo 'Saved language: ' . $configurationStore->read('language') . \PHP_EOL;
+echo 'Saved language: ' . $configurationStore->get('language') . \PHP_EOL;
 
 $configurationStoreAnotherUser = new ConfigurationStore($storage, 'another-user');
-echo "Another user's language: " . $configurationStoreAnotherUser->read('language') . \PHP_EOL;
+echo "Another user's language: " . $configurationStoreAnotherUser->get('language') . \PHP_EOL;
 
 // Apply the saved preference to the Agent, even when the input is in another language.
-$language = $configurationStore->read('language');
+$language = $configurationStore->get('language');
 
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 $agent->setInstructions("Always respond in {$language}, regardless of the user's language.");
 
-$sessionStorage = new InMemoryStorage();
-$sessionStore = new SessionStore($sessionStorage, 'demo-user');
+$sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
 
 $conversation = new Conversation($agent, $session);

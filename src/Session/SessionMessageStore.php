@@ -4,62 +4,67 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Session;
 
-use DateTimeImmutable;
-use DateTimeZone;
 use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronAI\Chat\History\PaginatesMessages;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\MessageDeserializer;
+use NeuronInteraction\Storage\DuplicateKeyException;
 use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
-use function array_filter;
-use function array_is_list;
-use function array_map;
-use function array_values;
-use function hash;
 use function is_array;
+use function is_bool;
 use function is_string;
+use function json_decode;
 use function json_encode;
 
-use const DATE_ATOM;
+use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
 
-/** Persists active and archived messages in the Session's storage document. */
+/**
+ * Persists one message per entry, separately from its archive state.
+ * Hosts serialize multi-operation history workflows for a Session.
+ */
 final readonly class SessionMessageStore implements MessageStoreInterface
 {
     use PaginatesMessages;
 
-    public function __construct(
-        private StorageInterface $storage,
-        private string $namespace,
-        private string $userId,
-    ) {}
+    public function __construct(private StorageInterface $storage, private string $userId) {}
 
     public function loadActive(string $threadId): array
     {
-        return $this->deserialize(array_values(array_filter(
-            $this->read($threadId),
-            static fn(array $entry): bool => !isset($entry['archived_at']),
-        )));
+        $messages = [];
+        foreach ($this->entries($threadId) as $entry) {
+            if (!$entry['archived']) {
+                $messages[] = $this->deserialize($entry['message']);
+            }
+        }
+        return $messages;
     }
 
     public function loadAll(string $threadId, ?int $limit = null, ?string $before = null): array
     {
-        $messages = $this->deserialize($this->read($threadId));
+        $messages = [];
+        foreach ($this->entries($threadId) as $entry) {
+            $messages[] = $this->deserialize($entry['message']);
+        }
         return $this->paginate($messages, $limit, $before);
     }
 
     public function append(string $threadId, Message $message): void
     {
-        $entries = $this->read($threadId);
-        foreach ($entries as $entry) {
-            if ($entry['__id'] === $message->getId()) {
-                return;
-            }
+        $session = $this->session($threadId);
+        // Neuron serialization can include JSON objects such as empty tool inputs.
+        $payload = json_decode(json_encode($message, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, flags: JSON_THROW_ON_ERROR);
+        if (!is_array($payload)) {
+            throw new UnexpectedValueException('A serialized message must be a JSON object.');
         }
-        $entries[] = $message->jsonSerialize();
-        $this->write($threadId, $entries);
+        try {
+            $this->storage->create($session->messageNamespace(), ['message' => $payload, 'archived' => false], $message->getId());
+        } catch (DuplicateKeyException) {
+            return;
+        }
+        $session->registerUse($message);
     }
 
     public function archive(string $threadId, int $count): void
@@ -67,76 +72,58 @@ final readonly class SessionMessageStore implements MessageStoreInterface
         if ($count <= 0) {
             return;
         }
-        $entries = $this->read($threadId);
-        $archivedAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format(DATE_ATOM);
-        foreach ($entries as $index => $entry) {
-            if ($count <= 0) {
-                break;
-            }
-            if (!isset($entry['archived_at'])) {
-                $entries[$index]['archived_at'] = $archivedAt;
-                $count--;
+        $session = $this->session($threadId);
+        foreach ($this->entries($threadId) as $entry) {
+            if (!$entry['archived']) {
+                $this->storage->update($session->messageNamespace(), $entry['key'], [['path' => ['archived'], 'value' => true]]);
+                if (--$count === 0) {
+                    break;
+                }
             }
         }
-        $this->write($threadId, $entries);
     }
 
     public function clear(string $threadId): void
     {
-        $this->write($threadId, []);
+        $session = $this->session($threadId);
+        $this->storage->clear($session->messageNamespace());
+        $session->resetContent();
     }
 
-    /** @return list<array<string, mixed>> */
-    private function read(string $threadId): array
+    private function session(string $threadId): Session
     {
-        $document = $this->storage->read($this->namespace, $threadId);
-        if ($document === null || ($document->metadata['userId'] ?? null) !== $this->userId) {
-            throw new UnexpectedValueException('The Session does not exist or belongs to another user.');
-        }
-        if (!array_is_list($document->data)) {
-            throw new UnexpectedValueException('A stored Chat History must be a JSON array.');
-        }
+        return (new SessionStore($this->storage, $this->userId))->get($threadId)
+            ?? throw new UnexpectedValueException('The Session does not exist or belongs to another user.');
+    }
+
+    /** @return list<array{key: string, message: array<string, mixed>, archived: bool}> */
+    private function entries(string $threadId): array
+    {
+        $session = $this->session($threadId);
         $entries = [];
-        foreach ($document->data as $index => $entry) {
-            if (!is_array($entry)) {
-                throw new UnexpectedValueException('Every stored Chat History entry must be a JSON object.');
+        foreach ($this->storage->list($session->messageNamespace()) as $entry) {
+            $value = $entry['value'];
+            if (!isset($value['message'], $value['archived']) || !is_array($value['message']) || !is_bool($value['archived'])) {
+                throw new UnexpectedValueException('A stored message requires a payload and boolean archive state.');
             }
             $fields = [];
-            foreach ($entry as $key => $value) {
-                if (!is_string($key)) {
+            foreach ($value['message'] as $field => $data) {
+                if (!is_string($field)) {
                     throw new UnexpectedValueException('Stored message fields must have string names.');
                 }
-                $fields[$key] = $value;
+                $fields[$field] = $data;
             }
-            // Legacy entries without IDs must retain the same identity on each read.
-            $fields['__id'] ??= 'msg_' . hash('sha256', $threadId . ':' . $index . ':' . json_encode($fields, JSON_THROW_ON_ERROR));
-            $entries[] = $fields;
+            if (($fields['__id'] ?? null) !== $entry['key']) {
+                throw new UnexpectedValueException('The stored message identity must match its key.');
+            }
+            $entries[] = ['key' => $entry['key'], 'message' => $fields, 'archived' => $value['archived']];
         }
         return $entries;
     }
 
-    /**
-     * @param list<array<string, mixed>> $entries
-     * @return list<Message>
-     */
-    private function deserialize(array $entries): array
+    /** @param array<string, mixed> $payload */
+    private function deserialize(array $payload): Message
     {
-        $deserializer = new MessageDeserializer();
-        return array_map(static function (array $entry) use ($deserializer): Message {
-            unset($entry['archived_at']);
-            return $deserializer->deserialize($entry);
-        }, $entries);
-    }
-
-    /** @param list<array<string, mixed>> $entries */
-    private function write(string $threadId, array $entries): void
-    {
-        $document = $this->storage->read($this->namespace, $threadId);
-        if ($document === null || ($document->metadata['userId'] ?? null) !== $this->userId) {
-            throw new UnexpectedValueException('The Session does not exist or belongs to another user.');
-        }
-        $metadata = $document->metadata;
-        $metadata['lastUsedAt'] = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.uP');
-        $this->storage->write($this->namespace, $threadId, $entries, $metadata);
+        return (new MessageDeserializer())->deserialize($payload);
     }
 }
