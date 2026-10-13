@@ -25,7 +25,7 @@ use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionTitleGenerator;
-use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use Throwable;
 
 use function array_any;
@@ -60,7 +60,7 @@ final class Conversation
         private readonly ?Closure $admitCommand = null,
     ) {
         $this->commands = new Commands();
-        $this->configurationStore = new ConfigurationStore(new InMemoryStorage(), 'local');
+        $this->configurationStore = new ConfigurationStore(new InMemoryEntryStorage(), 'local');
         $this->messageProcessors = new MessageProcessors();
 
         $this->session = $session;

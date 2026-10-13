@@ -20,19 +20,48 @@ use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\FileEntryStorage;
 use NeuronInteraction\Storage\InMemoryEntryStorage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 use function array_map;
+use function bin2hex;
+use function is_dir;
+use function is_link;
 use function iterator_to_array;
+use function random_bytes;
+use function rmdir;
+use function scandir;
+use function sys_get_temp_dir;
+use function unlink;
 
 final class ConversationInputHistoryTest extends TestCase
 {
-    public function testOriginalInputsAreRecordedBeforeProcessingAndGeneratedPromptsAreExcluded(): void
+    private string $directory;
+
+    protected function setUp(): void
+    {
+        $this->directory = sys_get_temp_dir() . '/neuron-interaction-conversation-input-' . bin2hex(random_bytes(6));
+    }
+
+    protected function tearDown(): void
+    {
+        $this->removeDirectory($this->directory);
+    }
+
+    /** @return array<string, array{bool}> */
+    public static function storageKinds(): array
+    {
+        return ['memory' => [false], 'files' => [true]];
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testOriginalInputsAreRecordedBeforeProcessingAndGeneratedPromptsAreExcluded(bool $files): void
     {
         $storage = new InMemoryEntryStorage();
-        $history = new InputHistory($storage);
+        $history = new InputHistory($files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage(), 'owner');
         $provider = new FakeAIProvider(new AssistantMessage('Answer'), new AssistantMessage('Summary'));
         $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore($storage, 'owner'))->create());
         self::assertNull($conversation->inputHistory());
@@ -92,10 +121,11 @@ final class ConversationInputHistoryTest extends TestCase
         self::assertSame('Expanded: Generated prompt', $messages[2]->getContent());
     }
 
-    public function testInputIsRetainedWhenPreparationFails(): void
+    #[DataProvider('storageKinds')]
+    public function testInputIsRetainedWhenPreparationFails(bool $files): void
     {
         $storage = new InMemoryEntryStorage();
-        $history = new InputHistory($storage);
+        $history = new InputHistory($files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage(), 'owner');
         $conversation = new Conversation(new Agent(), (new SessionStore($storage, 'owner'))->create());
         $conversation->setInputHistory($history);
         $processor = $this->createStub(MessageProcessorInterface::class);
@@ -111,4 +141,21 @@ final class ConversationInputHistoryTest extends TestCase
         self::assertSame('Original input', $history->list()[0]->getContent());
         self::assertSame([], $conversation->getMessages());
     }
+    private function removeDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
+            return;
+        }
+        foreach (scandir($directory) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $directory . '/' . $entry;
+            is_dir($path) && !is_link($path)
+                ? $this->removeDirectory($path)
+                : unlink($path);
+        }
+        rmdir($directory);
+    }
+
 }

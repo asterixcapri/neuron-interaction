@@ -42,7 +42,7 @@ final class LanguageCommand implements CommandInterface
             return;
         }
 
-        $context->configurationStore()->write('language', $value);
+        $context->configurationStore()->set('language', $value);
         $context->agent()->setInstructions("Always respond in {$value}, regardless of the user's language.");
         $context->notify('Response language saved: ' . $value);
     }
@@ -50,7 +50,7 @@ final class LanguageCommand implements CommandInterface
 
 $storage = new FileEntryStorage(\dirname(__DIR__) . '/.storage/custom-command');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
-$language = $configurationStore->read('language', 'English');
+$language = $configurationStore->get('language', 'English');
 
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));

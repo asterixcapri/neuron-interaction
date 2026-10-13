@@ -45,7 +45,7 @@ final class CommandAdmissionTest extends TestCase
         $events = iterator_to_array($stream);
         self::assertSame([$command], $admission->commands());
         self::assertSame([], $command->values);
-        self::assertNull($conversation->configurationStore()->read('effect'));
+        self::assertNull($conversation->configurationStore()->get('effect'));
         self::assertSame([], $provider->getRecorded());
         self::assertCount(1, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
@@ -56,7 +56,7 @@ final class CommandAdmissionTest extends TestCase
         iterator_to_array($conversation->sendInput(new CommandInput('/probe', 'selected')));
         self::assertSame([$command, $command], $admission->commands());
         self::assertSame(['selected'], $command->values);
-        self::assertSame('selected', $conversation->configurationStore()->read('effect'));
+        self::assertSame('selected', $conversation->configurationStore()->get('effect'));
         $allowed = false;
         iterator_to_array($conversation->sendInput(new CommandInput('/probe', 'second choice')));
         self::assertSame(['selected'], $command->values);
@@ -108,7 +108,7 @@ final class CommandAdmissionTest extends TestCase
             self::assertSame($failure, $exception);
         }
         self::assertSame([], $command->values);
-        self::assertNull($conversation->configurationStore()->read('effect'));
+        self::assertNull($conversation->configurationStore()->get('effect'));
     }
 
     public function testUnknownCommandDoesNotInvokeAdmission(): void
@@ -144,7 +144,7 @@ final class AdmissionProbeCommand implements CommandInterface
     public function run(CommandContext $context, string $value): void
     {
         $this->values[] = $value;
-        $context->configurationStore()->write('effect', $value);
+        $context->configurationStore()->set('effect', $value);
     }
 }
 

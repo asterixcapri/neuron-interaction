@@ -8,24 +8,27 @@ use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Message\UserMessageFactory;
-use NeuronInteraction\Storage\StorageInterface;
+use NeuronInteraction\Storage\EntryStorageInterface;
 use UnexpectedValueException;
 
-use function array_is_list;
-use function array_map;
-use function end;
+use function hash;
 use function is_array;
 use function is_string;
+use function json_decode;
+use function json_encode;
 use function trim;
+
+use const JSON_THROW_ON_ERROR;
 
 /** Submitted inputs shared across Sessions and interaction Adapters. */
 final class InputHistory
 {
-    private const string NAMESPACE = 'input-history';
+    private readonly string $namespace;
 
-    private const string KEY = 'entries';
-
-    public function __construct(private readonly StorageInterface $storage) {}
+    public function __construct(private readonly EntryStorageInterface $storage, string $userId)
+    {
+        $this->namespace = 'input-history-' . hash('sha256', $userId);
+    }
 
     /**
      * Records the person's original submission, including Command syntax.
@@ -37,61 +40,63 @@ final class InputHistory
             return;
         }
 
-        // Another Adapter may have submitted input since this instance's
-        // previous operation. Append to the current persisted sequence.
-        $entries = $this->list();
-
-        if ($entries !== [] && $this->sameInput(end($entries), $input)) {
+        $latest = $this->list(1);
+        if ($latest !== [] && $this->sameInput($latest[0], $input)) {
             return;
         }
 
-        $entries[] = $input;
-        $data = array_map(static fn(UserMessage $message): array => $message->jsonSerialize(), $entries);
-        $this->storage->write(self::NAMESPACE, self::KEY, $data);
+        // Comparison and insertion are separate operations. Simultaneous identical
+        // submissions are not guaranteed to deduplicate across instances.
+        $this->storage->create($this->namespace, $this->serialize($input));
     }
 
     /**
-     * Reads the current shared Storage sequence, oldest first.
+     * Reads this user's original submissions, oldest first, without retention.
+     * A limit selects the latest inputs; Storage may still scan the namespace.
      *
      * @return list<UserMessage>
      * @phpstan-impure
      */
-    public function list(): array
+    public function list(?int $limit = null): array
     {
-        $document = $this->storage->read(self::NAMESPACE, self::KEY);
-        $entries = $document->data ?? [];
-
-        if (!array_is_list($entries)) {
-            throw new UnexpectedValueException(
-                'Stored Input history must be a JSON array.',
-            );
-        }
-
         $decoded = [];
-
-        foreach ($entries as $entry) {
-            if (!is_array($entry)) {
-                throw new UnexpectedValueException('Every input history entry must be a user message.');
-            }
-
+        foreach ($this->storage->list($this->namespace, $limit) as $entry) {
             $data = [];
-            foreach ($entry as $key => $value) {
+            foreach ($entry['value'] as $key => $value) {
                 if (!is_string($key)) {
                     throw new UnexpectedValueException('An input history message must be an object.');
                 }
                 $data[$key] = $value;
             }
-
             $decoded[] = UserMessageFactory::fromArray($data);
         }
 
         return $decoded;
     }
 
+    /** @return array<string, mixed> */
+    private function serialize(UserMessage $message): array
+    {
+        $decoded = json_decode(json_encode($message, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+        if (!is_array($decoded)) {
+            throw new UnexpectedValueException('A serialized input must be an object.');
+        }
+
+        $data = [];
+        foreach ($decoded as $key => $value) {
+            if (!is_string($key)) {
+                throw new UnexpectedValueException('Serialized input fields must have string names.');
+            }
+            $data[$key] = $value;
+        }
+
+        return $data;
+    }
+
     private function sameInput(UserMessage $first, UserMessage $second): bool
     {
-        $firstData = $first->jsonSerialize();
-        $secondData = $second->jsonSerialize();
+        $firstData = $this->serialize($first);
+        $secondData = $this->serialize($second);
         // Neuron generates an ID for each instance; it is not authored input.
         unset($firstData['__id'], $secondData['__id']);
 

@@ -31,8 +31,9 @@ final class SelectionRequestTest extends TestCase
     {
         $storage = new InMemoryEntryStorage();
         $sessions = new SessionStore($storage, 'owner');
-        $configuration = new ConfigurationStore($storage, 'owner');
-        $configuration->write('account', 'original owner');
+        $preferences = new InMemoryEntryStorage();
+        $configuration = new ConfigurationStore($preferences, 'owner');
+        $configuration->set('account', 'original owner');
         $first = new Conversation(new Agent(), $sessions->create());
         $first->setConfigurationStore($configuration);
         $first->setCommands(new Commands(new HttpSelectionCommand()));
@@ -62,7 +63,7 @@ final class SelectionRequestTest extends TestCase
             new Agent(),
             $session,
         );
-        $second->setConfigurationStore(new ConfigurationStore($storage, 'owner'));
+        $second->setConfigurationStore(new ConfigurationStore($preferences, 'owner'));
         $second->setCommands(new Commands(new HttpSelectionCommand()));
         foreach ([' raw value ', '/help/not-an-option'] as $value) {
             $stream = $second->sendInput(new CommandInput($identifier, $value));
@@ -71,7 +72,7 @@ final class SelectionRequestTest extends TestCase
             self::assertInstanceOf(Notification::class, $events[0]);
             self::assertSame($value, $events[0]->text);
             self::assertNull($stream->getReturn());
-            self::assertSame($value, $second->configurationStore()->read('chosen'));
+            self::assertSame($value, $second->configurationStore()->get('chosen'));
             self::assertSame($value, $secondStore->get($sessionKey)?->getMetadata()['chosen']);
             self::assertSame($sessionKey, $second->agent()->getThreadId());
         }
@@ -158,10 +159,10 @@ final class HttpSelectionCommand implements CommandInterface
             return;
         }
 
-        if ($context->configurationStore()->read('account') !== 'original owner' || $context->session()->getTitle() !== 'Original Session') {
+        if ($context->configurationStore()->get('account') !== 'original owner' || $context->session()->getTitle() !== 'Original Session') {
             throw new InvalidArgumentException('The HTTP request did not restore the original context.');
         }
-        $context->configurationStore()->write('chosen', $value);
+        $context->configurationStore()->set('chosen', $value);
         $context->session()->setMetadata('chosen', $value);
         $context->notify($value);
     }
