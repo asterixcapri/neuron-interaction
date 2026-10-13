@@ -7,7 +7,7 @@ namespace NeuronInteraction\Message;
 use NeuronAI\Chat\Messages\UserMessage;
 
 /** Preparation and display projection of complete user messages. */
-interface UserMessageProcessorInterface
+interface MessageProcessorInterface
 {
     /**
      * Prepare a submitted message before it is sent to the Agent.

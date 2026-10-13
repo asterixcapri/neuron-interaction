@@ -13,8 +13,8 @@ use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Conversation;
-use NeuronInteraction\Message\UserMessageProcessorInterface;
-use NeuronInteraction\Message\UserMessageProcessors;
+use NeuronInteraction\Message\MessageProcessorInterface;
+use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
@@ -28,16 +28,16 @@ final class UserMessagePreparationTest extends TestCase
     {
         $first = new PreparationRecorder('A');
         $second = new PreparationRecorder('B');
-        $processors = new UserMessageProcessors($first, $second);
+        $processors = new MessageProcessors($first, $second);
         $provider = new FakeAIProvider(new AssistantMessage('One'), new AssistantMessage('Two'), new AssistantMessage('Three'));
         $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
-        $conversation->setUserMessageProcessors($processors);
+        $conversation->setMessageProcessors($processors);
         $original = new UserMessage('First');
         $original->addMetadata('origin', 'human');
         $firstStream = $conversation->sendInput($original);
         $secondStream = $conversation->sendInput(new UserMessage('Second'));
         $promptStream = $conversation->sendInput(new UserMessage('Raw command'));
-        self::assertSame($processors, $conversation->userMessageProcessors());
+        self::assertSame($processors, $conversation->messageProcessors());
         self::assertSame('First', $original->getContent());
         $before = $provider->getRecorded();
         self::assertSame([], $before);
@@ -54,7 +54,7 @@ final class UserMessagePreparationTest extends TestCase
 
     public function testRejectedPreparationCannotReserveOrQueueAndPreservesOriginal(): void
     {
-        $processor = new class implements UserMessageProcessorInterface {
+        $processor = new class implements MessageProcessorInterface {
             public function forAgent(UserMessage $input): UserMessage
             {
                 $text = $input->getContent();
@@ -71,7 +71,7 @@ final class UserMessagePreparationTest extends TestCase
         };
         $provider = new FakeAIProvider();
         $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
-        $conversation->setUserMessageProcessors(new UserMessageProcessors($processor));
+        $conversation->setMessageProcessors(new MessageProcessors($processor));
         foreach (['fail', 'empty'] as $text) {
             $original = new UserMessage($text);
             try {
@@ -87,7 +87,7 @@ final class UserMessagePreparationTest extends TestCase
 
     public function testPreparationDoesNotEnforceAdmissionAfterAProcessorStartsExecution(): void
     {
-        $processor = new class implements UserMessageProcessorInterface {
+        $processor = new class implements MessageProcessorInterface {
             public ?Closure $onPrepare = null;
             public function forAgent(UserMessage $input): UserMessage
             {
@@ -100,7 +100,7 @@ final class UserMessagePreparationTest extends TestCase
             }
         };
         $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), (new SessionStore(new InMemoryStorage(), 'local'))->create());
-        $conversation->setUserMessageProcessors(new UserMessageProcessors($processor));
+        $conversation->setMessageProcessors(new MessageProcessors($processor));
         $otherStream = null;
         $processor->onPrepare = static function () use ($conversation, $processor, &$otherStream): void {
             $processor->onPrepare = null;
@@ -127,7 +127,7 @@ final class UserMessagePreparationTest extends TestCase
     }
 }
 
-final class PreparationRecorder implements UserMessageProcessorInterface
+final class PreparationRecorder implements MessageProcessorInterface
 {
     /** @var list<string|null> */
     public array $inputs = [];

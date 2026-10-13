@@ -108,7 +108,7 @@ The script prints Session messages through `getDisplayMessages()`. The processor
 removes its generated blocks from the display copy, so the user message shows
 only the original request, followed by the Agent's response.
 
-`FileUserMessageProcessor` directly implements `UserMessageProcessorInterface`.
+`FileMessageProcessor` directly implements `MessageProcessorInterface`.
 Its `forAgent()` recognizes references, reads files inside the configured
 directory and adds each file once. Its `forDisplay()` filters blocks by metadata.
 It does not use XML tags or an abstract processor class.

@@ -6,29 +6,29 @@ namespace NeuronInteraction\Message;
 
 use NeuronAI\Chat\Messages\UserMessage;
 
+use function array_push;
 use function array_reverse;
+use function array_values;
 
 /** Compose preparation in registration order and display in reverse order. */
-final class UserMessageProcessors implements UserMessageProcessorInterface
+final class MessageProcessors implements MessageProcessorInterface
 {
-    /** @var list<UserMessageProcessorInterface> */
-    private array $processors = [];
+    /** @var list<MessageProcessorInterface> */
+    private array $processors;
 
-    public function __construct(UserMessageProcessorInterface ...$processors)
+    public function __construct(MessageProcessorInterface ...$processors)
     {
-        $this->addProcessor(...$processors);
+        $this->processors = array_values($processors);
     }
 
-    public function addProcessor(UserMessageProcessorInterface ...$processors): self
+    public function addProcessor(MessageProcessorInterface ...$processors): self
     {
-        foreach ($processors as $processor) {
-            $this->processors[] = $processor;
-        }
+        array_push($this->processors, ...array_values($processors));
 
         return $this;
     }
 
-    /** @return list<UserMessageProcessorInterface> */
+    /** @return list<MessageProcessorInterface> */
     public function all(): array
     {
         return $this->processors;

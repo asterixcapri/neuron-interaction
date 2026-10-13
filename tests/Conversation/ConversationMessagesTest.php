@@ -12,8 +12,8 @@ use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Conversation;
-use NeuronInteraction\Message\UserMessageProcessorInterface;
-use NeuronInteraction\Message\UserMessageProcessors;
+use NeuronInteraction\Message\MessageProcessorInterface;
+use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
@@ -24,7 +24,7 @@ final class ConversationMessagesTest extends TestCase
 {
     public function testDisplayMessagesRestoreReferencesWithoutChangingSavedHistoryOrAttachments(): void
     {
-        $processor = new class implements UserMessageProcessorInterface {
+        $processor = new class implements MessageProcessorInterface {
             public function forAgent(UserMessage $message): UserMessage
             {
                 $prepared = clone $message;
@@ -49,7 +49,7 @@ final class ConversationMessagesTest extends TestCase
         $session = $sessionStore->create();
         $agent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Summary')));
         $conversation = new Conversation($agent, $session);
-        $conversation->setUserMessageProcessors(new UserMessageProcessors($processor));
+        $conversation->setMessageProcessors(new MessageProcessors($processor));
         $image = new ImageContent('https://example.com/image.png', SourceType::URL);
         $input = new UserMessage([new TextContent('Read @README.md'), $image]);
         $input->addMetadata('origin', 'human');

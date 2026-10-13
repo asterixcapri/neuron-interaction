@@ -20,8 +20,8 @@ use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Interruption\StopSignal;
-use NeuronInteraction\Message\UserMessageProcessorInterface;
-use NeuronInteraction\Message\UserMessageProcessors;
+use NeuronInteraction\Message\MessageProcessorInterface;
+use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
@@ -74,7 +74,7 @@ final class CommandPromptTest extends TestCase
     {
         $message = new UserMessage(new ImageContent('https://example.com/image.png', SourceType::URL));
         $message->addMetadata('origin', 'command');
-        $processor = new class implements UserMessageProcessorInterface {
+        $processor = new class implements MessageProcessorInterface {
             public int $calls = 0;
             public function forAgent(UserMessage $input): UserMessage
             {
@@ -192,7 +192,7 @@ final class CommandPromptTest extends TestCase
      * @param Closure(CommandContext): void $run
      * @param Closure(Message|array<Message>): Generator<int, object, mixed, AgentState> $stream
      */
-    private function conversation(Closure $run, Closure $stream, ?UserMessageProcessorInterface $processors = null, ?StopSignal $stopSignal = null): Conversation
+    private function conversation(Closure $run, Closure $stream, ?MessageProcessorInterface $processors = null, ?StopSignal $stopSignal = null): Conversation
     {
         $command = new class ($run) implements CommandInterface {
             /** @param Closure(CommandContext): void $run */
@@ -224,7 +224,7 @@ final class CommandPromptTest extends TestCase
         };
         $conversation = new Conversation($agent, (new SessionStore(new InMemoryStorage(), 'owner'))->create());
         if ($processors !== null) {
-            $conversation->setUserMessageProcessors(new UserMessageProcessors($processors));
+            $conversation->setMessageProcessors(new MessageProcessors($processors));
         }
         if ($stopSignal !== null) {
             $conversation->setStopSignal($stopSignal);

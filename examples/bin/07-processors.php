@@ -8,8 +8,8 @@ use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Conversation;
-use NeuronInteraction\Message\UserMessageProcessorInterface;
-use NeuronInteraction\Message\UserMessageProcessors;
+use NeuronInteraction\Message\MessageProcessorInterface;
+use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
@@ -21,7 +21,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
 /** Adds file contents in separate blocks, keeping the person's text intact. */
-final readonly class FileUserMessageProcessor implements UserMessageProcessorInterface
+final readonly class FileMessageProcessor implements MessageProcessorInterface
 {
     private const string FILE_KEY = 'demo:file';
 
@@ -88,8 +88,8 @@ $session->setTitle('A README summary');
 
 $conversation = new Conversation($agent, $session);
 
-$conversation->setUserMessageProcessors(new UserMessageProcessors(
-    new FileUserMessageProcessor(\dirname(__DIR__, 2))
+$conversation->setMessageProcessors(new MessageProcessors(
+    new FileMessageProcessor(\dirname(__DIR__, 2))
 ));
 
 // Conversation adds the README contents before executing the Agent.

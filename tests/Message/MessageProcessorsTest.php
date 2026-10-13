@@ -7,13 +7,13 @@ namespace NeuronInteraction\Tests\Message;
 use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Message\UserMessageProcessorInterface;
-use NeuronInteraction\Message\UserMessageProcessors;
+use NeuronInteraction\Message\MessageProcessorInterface;
+use NeuronInteraction\Message\MessageProcessors;
 use PHPUnit\Framework\TestCase;
 
 use function is_string;
 
-final class UserMessageProcessorsTest extends TestCase
+final class MessageProcessorsTest extends TestCase
 {
     public function testCompleteMessagesAreComposedInPreparationAndReverseDisplayOrder(): void
     {
@@ -21,7 +21,7 @@ final class UserMessageProcessorsTest extends TestCase
         $original->addMetadata('source', 'original input');
         $first = $this->processor('A');
         $second = $this->processor('B');
-        $processing = new UserMessageProcessors($first, $second);
+        $processing = new MessageProcessors($first, $second);
 
         $prepared = $processing->forAgent($original);
         $displayed = $processing->forDisplay($prepared);
@@ -40,7 +40,7 @@ final class UserMessageProcessorsTest extends TestCase
     public function testAnEmptyPipelineReturnsAnUnchangedCopy(): void
     {
         $original = new UserMessage('Original text');
-        $processing = new UserMessageProcessors();
+        $processing = new MessageProcessors();
 
         self::assertEquals($original, $processing->forAgent($original));
         self::assertEquals($original, $processing->forDisplay($original));
@@ -54,10 +54,10 @@ final class UserMessageProcessorsTest extends TestCase
         $second = $this->processor('B');
         $third = $this->processor('C');
         $fourth = $this->processor('D');
-        $processing = new UserMessageProcessors($first);
+        $processing = new MessageProcessors(first: $first);
 
         self::assertSame($processing, $processing->addProcessor($second));
-        self::assertSame($processing, $processing->addProcessor($third, $fourth));
+        self::assertSame($processing, $processing->addProcessor(third: $third, fourth: $fourth));
         self::assertSame([$first, $second, $third, $fourth], $processing->all());
 
         $original = new UserMessage('Original text');
@@ -70,9 +70,9 @@ final class UserMessageProcessorsTest extends TestCase
         self::assertNull($prepared->getMetadata('displayed'));
     }
 
-    private function processor(string $label): UserMessageProcessorInterface
+    private function processor(string $label): MessageProcessorInterface
     {
-        $processor = $this->createStub(UserMessageProcessorInterface::class);
+        $processor = $this->createStub(MessageProcessorInterface::class);
         $processor->method('forAgent')->willReturnCallback(static function (UserMessage $message) use ($label): UserMessage {
             $result = clone $message;
             $previous = $message->getMetadata('prepared');

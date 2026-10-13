@@ -505,7 +505,7 @@ Processors prepare user messages for the Agent and project saved messages for
 display. For example, a processor can expand `@README.md` into file contents for
 the model and restore the original reference when showing saved history.
 
-Implement `NeuronInteraction\Message\UserMessageProcessorInterface`:
+Implement `NeuronInteraction\Message\MessageProcessorInterface`:
 
 ```php
 public function forAgent(UserMessage $message): UserMessage;
@@ -522,7 +522,7 @@ file contents or Skill instructions. Mark the generated block in its metadata.
 `getContent()` on the copy as usual. The Agent and saved History retain the full
 message. Reference recognition and loading belong to the concrete processor.
 
-A `UserMessageProcessors` collection applies preparation in registration order
+A `MessageProcessors` collection applies preparation in registration order
 and display in reverse order. `addProcessor()` extends the collection;
 `all()` returns its processors. Ordinary messages are prepared in `sendInput()`;
 command-generated prompts are prepared when reached in the stream. Prepared

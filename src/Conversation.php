@@ -22,7 +22,7 @@ use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SessionTitleChanged;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Interruption\StopSignal;
-use NeuronInteraction\Message\UserMessageProcessors;
+use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -43,7 +43,7 @@ final class Conversation
 
     private ConfigurationStore $configurationStore;
 
-    private UserMessageProcessors $userMessageProcessors;
+    private MessageProcessors $messageProcessors;
 
     private ?InputHistory $inputHistory = null;
 
@@ -61,7 +61,7 @@ final class Conversation
     ) {
         $this->commands = new Commands();
         $this->configurationStore = new ConfigurationStore(new InMemoryStorage(), 'local');
-        $this->userMessageProcessors = new UserMessageProcessors();
+        $this->messageProcessors = new MessageProcessors();
 
         $this->session = $session;
         $this->agent = $session->bindToAgent($agent);
@@ -100,7 +100,7 @@ final class Conversation
         $messages = $this->getMessages($limit, $before);
         foreach ($messages as $index => $message) {
             if ($message instanceof UserMessage) {
-                $messages[$index] = $this->userMessageProcessors->forDisplay(clone $message);
+                $messages[$index] = $this->messageProcessors->forDisplay(clone $message);
             }
         }
 
@@ -131,14 +131,14 @@ final class Conversation
         return $this;
     }
 
-    public function userMessageProcessors(): UserMessageProcessors
+    public function messageProcessors(): MessageProcessors
     {
-        return $this->userMessageProcessors;
+        return $this->messageProcessors;
     }
 
-    public function setUserMessageProcessors(UserMessageProcessors $userMessageProcessors): self
+    public function setMessageProcessors(MessageProcessors $messageProcessors): self
     {
-        $this->userMessageProcessors = $userMessageProcessors;
+        $this->messageProcessors = $messageProcessors;
 
         return $this;
     }
@@ -239,7 +239,7 @@ final class Conversation
     /** @return Generator<int, object, mixed, AgentState> */
     private function prepareMessage(UserMessage $message): Generator
     {
-        $message = $this->userMessageProcessors->forAgent(clone $message);
+        $message = $this->messageProcessors->forAgent(clone $message);
 
         $hasText = trim($message->getContent() ?? '') !== '';
         $hasAttachments = array_any(

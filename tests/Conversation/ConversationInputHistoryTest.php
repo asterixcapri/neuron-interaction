@@ -17,8 +17,8 @@ use NeuronInteraction\Command\CommandInterface;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\InputHistory\InputHistory;
-use NeuronInteraction\Message\UserMessageProcessorInterface;
-use NeuronInteraction\Message\UserMessageProcessors;
+use NeuronInteraction\Message\MessageProcessorInterface;
+use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
@@ -38,7 +38,7 @@ final class ConversationInputHistoryTest extends TestCase
         self::assertNull($conversation->inputHistory());
         $conversation->setInputHistory($history);
         self::assertSame($history, $conversation->inputHistory());
-        $processor = new class implements UserMessageProcessorInterface {
+        $processor = new class implements MessageProcessorInterface {
             public function forAgent(UserMessage $message): UserMessage
             {
                 $message->setContents('Expanded: ' . $message->getContent());
@@ -49,7 +49,7 @@ final class ConversationInputHistoryTest extends TestCase
                 return $message;
             }
         };
-        $conversation->setUserMessageProcessors(new UserMessageProcessors($processor));
+        $conversation->setMessageProcessors(new MessageProcessors($processor));
         $command = new class implements CommandInterface {
             public function name(): string
             {
@@ -98,9 +98,9 @@ final class ConversationInputHistoryTest extends TestCase
         $history = new InputHistory($storage);
         $conversation = new Conversation(new Agent(), (new SessionStore($storage, 'owner'))->create());
         $conversation->setInputHistory($history);
-        $processor = $this->createStub(UserMessageProcessorInterface::class);
+        $processor = $this->createStub(MessageProcessorInterface::class);
         $processor->method('forAgent')->willThrowException(new RuntimeException('Cannot expand'));
-        $conversation->setUserMessageProcessors(new UserMessageProcessors($processor));
+        $conversation->setMessageProcessors(new MessageProcessors($processor));
 
         try {
             $conversation->sendInput('Original input');
