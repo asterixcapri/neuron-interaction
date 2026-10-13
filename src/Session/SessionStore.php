@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Session;
 
+use DateTimeImmutable;
 use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronInteraction\Storage\EntryStorageInterface;
+use UnexpectedValueException;
 
-use function json_encode;
-use function strlen;
+use function is_array;
+use function is_bool;
+use function is_string;
 use function usort;
-
-use const JSON_THROW_ON_ERROR;
 
 /** Owns lookup and lifecycle delegation within one user's Session namespace. */
 final readonly class SessionStore
@@ -27,25 +28,41 @@ final readonly class SessionStore
     /**
      * @param array<string, string> $metadata
      * @return list<SessionSummary>
+     * @phpstan-impure
      */
     public function list(array $metadata = []): array
     {
         $filter = SessionMetadata::validate($metadata);
         $sessions = [];
         foreach ($this->storage->list(Session::namespaceForUser($this->userId)) as $entry) {
-            $session = $this->session($entry['key']);
-            if (!$session->hasContent()) {
+            $record = $entry['value'];
+            $hasContent = $record['hasContent'] ?? null;
+            if (!is_bool($hasContent)) {
+                throw new UnexpectedValueException('A Session record must contain a boolean content flag.');
+            }
+            if (!$hasContent) {
                 continue;
             }
-            $application = $session->getMetadata();
+            $application = $record['metadata'] ?? null;
+            if (!is_array($application)) {
+                throw new UnexpectedValueException('A Session record must contain application metadata.');
+            }
+            $application = SessionMetadata::validate($application);
             foreach ($filter as $field => $value) {
                 if (($application[$field] ?? null) !== $value) {
                     continue 2;
                 }
             }
-            // Transitional history-size presentation remains until ticket 06.
-            $size = strlen(json_encode($session->getMessages(), JSON_THROW_ON_ERROR));
-            $sessions[] = new SessionSummary($entry['key'], $session->getLastUsedAt(), $session->getTitle(), $size);
+            $title = $record['title'] ?? null;
+            if ($title !== null && !is_string($title)) {
+                throw new UnexpectedValueException('A Session title must be a string or null.');
+            }
+            $time = $record['lastUsedAt'] ?? null;
+            $lastUsedAt = is_string($time) ? DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s.uP', $time) : false;
+            if ($lastUsedAt === false || $lastUsedAt->format('Y-m-d\TH:i:s.uP') !== $time) {
+                throw new UnexpectedValueException('A Session record must contain a valid lastUsedAt time.');
+            }
+            $sessions[] = new SessionSummary($entry['key'], $lastUsedAt, $title);
         }
         usort($sessions, static fn(SessionSummary $one, SessionSummary $other): int
             => ($other->getLastUsedAt() <=> $one->getLastUsedAt()) ?: ($one->getKey() <=> $other->getKey()));

@@ -7,6 +7,7 @@ namespace NeuronInteraction\Tests\Command;
 use DateTimeImmutable;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronInteraction\Command\CommandInput;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\ResumeCommand;
 use NeuronInteraction\Command\SelectionOption;
@@ -14,25 +15,72 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\FileEntryStorage;
 use NeuronInteraction\Storage\InMemoryEntryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+use function bin2hex;
+use function is_dir;
 use function iterator_to_array;
+use function random_bytes;
+use function rmdir;
+use function scandir;
+use function sys_get_temp_dir;
+use function unlink;
 
 final class ResumeCommandTest extends TestCase
 {
-    public function testSelectionDescriptionCombinesRelativeAgeAndSize(): void
-    {
-        $option = $this->selectionOption(new DateTimeImmutable('-90 seconds'), 'Topic');
+    private string $directory;
 
-        self::assertSame('New session', $option->label);
-        self::assertMatchesRegularExpression('/^1 minute ago · [0-9]+B$/', $option->description ?? '');
+    protected function setUp(): void
+    {
+        $this->directory = sys_get_temp_dir() . '/neuron-resume-' . bin2hex(random_bytes(6));
     }
 
-    private function selectionOption(DateTimeImmutable $lastUsedAt, string $content): SelectionOption
+    protected function tearDown(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $this->removeDirectory($this->directory);
+    }
+
+    private function removeDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
+            return;
+        }
+        foreach (scandir($directory) ?: [] as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $path = $directory . '/' . $name;
+            if (is_dir($path)) {
+                $this->removeDirectory($path);
+            } else {
+                unlink($path);
+            }
+        }
+        rmdir($directory);
+    }
+
+    /** @return array<string, array{bool}> */
+    public static function storageKinds(): array
+    {
+        return ['memory' => [false], 'files' => [true]];
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testSelectionDescriptionShowsRelativeAge(bool $files): void
+    {
+        $option = $this->selectionOption(new DateTimeImmutable('-90 seconds'), 'Topic', $files);
+
+        self::assertSame('New session', $option->label);
+        self::assertSame('1 minute ago', $option->description);
+    }
+
+    private function selectionOption(DateTimeImmutable $lastUsedAt, string $content, bool $files): SelectionOption
+    {
+        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
         $store = new SessionStore($storage, 'alice');
         $session = $store->create();
         SessionHistory::of($session)->addMessage(new UserMessage($content));
@@ -48,6 +96,9 @@ final class ResumeCommandTest extends TestCase
         self::assertCount(1, $events[0]->options);
         $option = $events[0]->options[0];
         self::assertSame($session->getKey(), $option->value);
+        iterator_to_array($conversation->sendInput(new CommandInput('/resume', $option->value)));
+        self::assertSame($session->getKey(), $conversation->session()->getKey());
+        self::assertSame($content, $conversation->session()->getMessages()[0]->getContent());
 
         return $option;
     }

@@ -5,24 +5,18 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Session;
 
 use DateTimeImmutable;
-use InvalidArgumentException;
 use NeuronInteraction\Session\SessionSummary;
 use PHPUnit\Framework\TestCase;
 
 final class SessionSummaryTest extends TestCase
 {
-    public function testSizeCannotBeNegative(): void
+    public function testSummaryRetainsRecognitionInformation(): void
     {
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage(
-            'A Session size cannot be negative.',
-        );
-
-        new SessionSummary(
-            'session-key',
-            new DateTimeImmutable(),
-            'The opening words',
-            -1,
-        );
+        $lastUsedAt = new DateTimeImmutable('2026-09-04T12:00:00+00:00');
+        $summary = new SessionSummary('session-key', $lastUsedAt, 'The opening words');
+        self::assertSame('session-key', $summary->getKey());
+        self::assertSame($lastUsedAt, $summary->getLastUsedAt());
+        self::assertSame('The opening words', $summary->getTitle());
+        self::assertNull((new SessionSummary('untitled', $lastUsedAt, null))->getTitle());
     }
 }

@@ -7,7 +7,6 @@ namespace NeuronInteraction\Command;
 use DateTimeImmutable;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Formatting\RelativeTimeFormatter;
-use NeuronInteraction\Formatting\SizeFormatter;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
 
@@ -80,13 +79,6 @@ final readonly class ResumeCommand implements CommandInterface
         SessionSummary $session,
         DateTimeImmutable $now,
     ): string {
-        $relativeAge = RelativeTimeFormatter::format($session->getLastUsedAt(), $now);
-
-        $size = $session->getSize();
-        if ($size === null) {
-            return $relativeAge;
-        }
-
-        return $relativeAge . ' · ' . SizeFormatter::format($size);
+        return RelativeTimeFormatter::format($session->getLastUsedAt(), $now);
     }
 }
