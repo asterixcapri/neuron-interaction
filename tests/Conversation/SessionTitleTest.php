@@ -18,6 +18,7 @@ use NeuronInteraction\Event\SessionTitleChanged;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionTitleGenerator;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -155,7 +156,7 @@ final class SessionTitleTest extends TestCase
         $conversation = $this->conversation('Partial answer');
         $provider = new FakeAIProvider(new AssistantMessage('{"title":"Redis setup"}'));
         $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
-        $conversation->setStopSignal(new StopSignal(new InMemoryStorage(), 'stop'));
+        $conversation->setStopSignal(new StopSignal(new InMemoryEntryStorage(), 'stop'));
         $stream = $conversation->sendInput('Configure Redis');
         $stream->rewind();
         self::assertInstanceOf(SessionTitleChanged::class, $stream->current());

@@ -23,6 +23,7 @@ use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -182,7 +183,7 @@ final class CommandPromptTest extends TestCase
                 yield $approval;
                 return new AgentState();
             },
-            stopSignal: new StopSignal(new InMemoryStorage(), 'prompts'),
+            stopSignal: new StopSignal(new InMemoryEntryStorage(), 'prompts'),
         );
         self::assertSame([$approval, $approval], iterator_to_array($conversation->sendInput('/prompt'), false));
         self::assertSame(2, $calls);

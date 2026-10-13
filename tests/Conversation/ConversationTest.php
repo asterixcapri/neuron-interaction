@@ -21,6 +21,7 @@ use NeuronAI\Tools\ToolCall;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -178,7 +179,7 @@ final class ConversationTest extends TestCase
 
     public function testConsumedResponseStopResetsAtNextExecution(): void
     {
-        $signal = new StopSignal(new InMemoryStorage(), 'stop');
+        $signal = new StopSignal(new InMemoryEntryStorage(), 'stop');
         $conversation = new Conversation($this->agent('Partial', 'Next'), (new SessionStore(new InMemoryStorage(), 'local'))->create());
         $conversation->setStopSignal($signal);
         $stream = $conversation->sendInput(new UserMessage('Stop'));
@@ -199,7 +200,7 @@ final class ConversationTest extends TestCase
 
     public function testPendingAndStaleStopRequestsAreNotReportedAsConsumed(): void
     {
-        $signal = new StopSignal(new InMemoryStorage(), 'pending');
+        $signal = new StopSignal(new InMemoryEntryStorage(), 'pending');
         $signal->request();
         $conversation = new Conversation($this->agent('Completed', 'Next'), (new SessionStore(new InMemoryStorage(), 'local'))->create());
         $conversation->setStopSignal($signal);
@@ -217,7 +218,7 @@ final class ConversationTest extends TestCase
 
     public function testStopCanBeRequestedWithoutALocalExecutionAndIsClearedAtStreamStart(): void
     {
-        $signal = new StopSignal(new InMemoryStorage(), 'idle-stop');
+        $signal = new StopSignal(new InMemoryEntryStorage(), 'idle-stop');
         $conversation = new Conversation($this->agent('Answer'), (new SessionStore(new InMemoryStorage(), 'local'))->create());
         $conversation->setStopSignal($signal);
         self::assertTrue($conversation->requestInterruption());

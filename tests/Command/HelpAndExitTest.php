@@ -17,6 +17,7 @@ use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 
@@ -43,7 +44,7 @@ final class HelpAndExitTest extends TestCase
 
     public function testExitCanBeIgnoredWithoutEndingConversationOrStoppingResponse(): void
     {
-        $stop = new StopSignal(new InMemoryStorage(), 'response');
+        $stop = new StopSignal(new InMemoryEntryStorage(), 'response');
         $provider = new FakeAIProvider(new AssistantMessage('Still available'));
         $conversation = new Conversation(
             (new Agent())->setAiProvider($provider),

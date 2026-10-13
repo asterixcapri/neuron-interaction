@@ -6,7 +6,7 @@ namespace NeuronInteraction\Interruption;
 
 use Closure;
 use InvalidArgumentException;
-use NeuronInteraction\Storage\StorageInterface;
+use NeuronInteraction\Storage\EntryStorageInterface;
 use UnexpectedValueException;
 
 use function hrtime;
@@ -18,7 +18,7 @@ final readonly class StopSignal
 {
     private const string NAMESPACE = 'response-stops';
 
-    public function __construct(private StorageInterface $storage, private string $key) {}
+    public function __construct(private EntryStorageInterface $storage, private string $key) {}
 
     /**
      * Creates a polling callback for Neuron's native stoppable HTTP client.
@@ -52,13 +52,13 @@ final readonly class StopSignal
 
     public function request(): void
     {
-        $this->storage->write(self::NAMESPACE, $this->key, ['requested' => true]);
+        $this->storage->set(self::NAMESPACE, $this->key, ['requested' => true]);
     }
 
     public function isRequested(): bool
     {
-        $document = $this->storage->read(self::NAMESPACE, $this->key);
-        $requested = $document?->data['requested'] ?? false;
+        $document = $this->storage->get(self::NAMESPACE, $this->key);
+        $requested = $document['requested'] ?? false;
         if (!is_bool($requested)) {
             throw new UnexpectedValueException('A stop flag must contain a boolean requested value.');
         }

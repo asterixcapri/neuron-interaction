@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Interruption;
 
 use NeuronInteraction\Interruption\StopSignal;
-use NeuronInteraction\Storage\FileStorage;
-use NeuronInteraction\Storage\InMemoryStorage;
-use NeuronInteraction\Storage\StorageInterface;
-use NeuronInteraction\Storage\StoredDocument;
+use NeuronInteraction\Storage\EntryStorageInterface;
+use NeuronInteraction\Storage\FileEntryStorage;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
 
@@ -19,8 +18,10 @@ use function proc_close;
 use function proc_open;
 use function random_bytes;
 use function rmdir;
+use function scandir;
 use function stream_get_contents;
 use function sys_get_temp_dir;
+use function unlink;
 use function usleep;
 
 use const PHP_BINARY;
@@ -30,16 +31,21 @@ final class StopSignalStorageTest extends TestCase
     public function testACallbackConsumesARequestFromAnotherProcess(): void
     {
         $directory = sys_get_temp_dir() . '/neuron-stop-' . bin2hex(random_bytes(8));
-        $signal = new StopSignal(new FileStorage($directory), 'chat-42');
+        $signal = new StopSignal(new FileEntryStorage($directory), 'chat-42');
         $callback = $signal->stopCallback(pollInterval: 0);
         self::assertFalse($callback());
         try {
             $this->requestFromAnotherProcess($directory, 'chat-42');
             self::assertTrue($callback());
-            self::assertFalse((new StopSignal(new FileStorage($directory), 'chat-42'))->isRequested());
+            self::assertFalse((new StopSignal(new FileEntryStorage($directory), 'chat-42'))->isRequested());
             self::assertFalse($callback());
         } finally {
             $signal->clear();
+            foreach (scandir($directory . '/response-stops') ?: [] as $name) {
+                if ($name !== '.' && $name !== '..') {
+                    unlink($directory . '/response-stops/' . $name);
+                }
+            }
             rmdir($directory . '/response-stops');
             rmdir($directory);
         }
@@ -47,7 +53,7 @@ final class StopSignalStorageTest extends TestCase
 
     public function testKeysIsolateStopRequests(): void
     {
-        $storage = new InMemoryStorage();
+        $storage = new InMemoryEntryStorage();
         $first = new StopSignal($storage, 'first');
         $second = new StopSignal($storage, 'second');
         $first->request();
@@ -59,10 +65,10 @@ final class StopSignalStorageTest extends TestCase
 
     public function testPollingIsThrottledWithoutWritingStorage(): void
     {
-        $storage = $this->createMock(StorageInterface::class);
+        $storage = $this->createMock(EntryStorageInterface::class);
         $storage->expects(self::never())->method('create');
-        $storage->expects(self::never())->method('write');
-        $storage->expects(self::once())->method('read')->willReturn(null);
+        $storage->expects(self::never())->method('set');
+        $storage->expects(self::once())->method('get')->willReturn(null);
         $storage->expects(self::never())->method('delete');
         $polls = 0;
         $callback = (new StopSignal($storage, 'chat'))->stopCallback(
@@ -77,7 +83,7 @@ final class StopSignalStorageTest extends TestCase
 
     public function testARequestAfterTheFirstPollIsObservedOnALaterPoll(): void
     {
-        $signal = new StopSignal(new InMemoryStorage(), 'chat');
+        $signal = new StopSignal(new InMemoryEntryStorage(), 'chat');
         $callback = $signal->stopCallback();
         self::assertFalse($callback());
         $signal->request();
@@ -88,7 +94,7 @@ final class StopSignalStorageTest extends TestCase
 
     public function testTheHostCanRequestAStopDuringPolling(): void
     {
-        $signal = new StopSignal(new InMemoryStorage(), 'chat');
+        $signal = new StopSignal(new InMemoryEntryStorage(), 'chat');
         $callback = $signal->stopCallback(onPoll: static fn() => $signal->request());
         self::assertTrue($callback());
         self::assertFalse($signal->isRequested());
@@ -97,15 +103,15 @@ final class StopSignalStorageTest extends TestCase
     public function testPollingWithoutARequestCreatesNoFiles(): void
     {
         $directory = sys_get_temp_dir() . '/neuron-no-stop-' . bin2hex(random_bytes(8));
-        $signal = new StopSignal(new FileStorage($directory), 'chat');
+        $signal = new StopSignal(new FileEntryStorage($directory), 'chat');
         self::assertFalse($signal->stopCallback()());
         self::assertDirectoryDoesNotExist($directory);
     }
 
     public function testMalformedStoredFlagsAreRejected(): void
     {
-        $storage = $this->createStub(StorageInterface::class);
-        $storage->method('read')->willReturn(new StoredDocument('chat', ['requested' => 'true'], []));
+        $storage = $this->createStub(EntryStorageInterface::class);
+        $storage->method('get')->willReturn(['requested' => 'true']);
         $this->expectException(UnexpectedValueException::class);
         (new StopSignal($storage, 'chat'))->stopCallback()();
     }
@@ -114,10 +120,10 @@ final class StopSignalStorageTest extends TestCase
     {
         $script = <<<'WORKER'
             use NeuronInteraction\Interruption\StopSignal;
-            use NeuronInteraction\Storage\FileStorage;
+            use NeuronInteraction\Storage\FileEntryStorage;
 
             require $argv[1];
-            $storage = new FileStorage($argv[2]);
+            $storage = new FileEntryStorage($argv[2]);
             (new StopSignal($storage, $argv[3]))->request();
             WORKER;
         $process = proc_open(

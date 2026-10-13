@@ -9,14 +9,14 @@ use NeuronAI\HttpClient\HttpRequest;
 use NeuronAI\HttpClient\StoppableHttpClient;
 use NeuronAI\HttpClient\StreamInterface;
 use NeuronInteraction\Interruption\StopSignal;
-use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use PHPUnit\Framework\TestCase;
 
 final class StopSignalHttpClientTest extends TestCase
 {
     public function testTheSignalCallbackConnectsToNeuronsNativeClient(): void
     {
-        $signal = new StopSignal(new InMemoryStorage(), 'chat');
+        $signal = new StopSignal(new InMemoryEntryStorage(), 'chat');
         $inner = $this->createMock(StreamInterface::class);
         $inner->method('eof')->willReturn(false);
         $inner->expects(self::once())->method('close');
