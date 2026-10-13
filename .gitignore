@@ -2,13 +2,13 @@
 /composer.lock
 /.phpunit.cache/
 /.phpstan.cache/
+/.php-cs-fixer.cache
+/.php-cs-fixer.php
 .agents
 .codex
 .claude
 .pi
 .opencode
-/.php-cs-fixer.cache
-/.php-cs-fixer.php
 
 /examples/.env
 /examples/.storage/
