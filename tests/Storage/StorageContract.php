@@ -197,6 +197,56 @@ abstract class StorageContract extends TestCase
         }
     }
 
+    public function testJsonDepthBoundarySupportsCreateSetAndUpdate(): void
+    {
+        $storage = $this->storage();
+        $deep = self::nestedValue(511);
+        $storage->create('depth', $deep, 'created');
+        $storage->set('depth', 'set', ['before' => true]);
+        $storage->set('depth', 'set', $deep);
+        $storage->set('depth', 'updated', []);
+        $updated = ['field' => self::nestedValue(510)];
+        $storage->update('depth', 'updated', [['path' => ['field'], 'value' => self::nestedValue(510)]]);
+        self::assertSame($deep, $storage->get('depth', 'created'));
+        self::assertSame($deep, $storage->get('depth', 'set'));
+        self::assertSame($updated, $storage->get('depth', 'updated'));
+        self::assertSame([
+            ['key' => 'created', 'value' => $deep],
+            ['key' => 'set', 'value' => $deep],
+            ['key' => 'updated', 'value' => $updated],
+        ], $storage->list('depth'));
+    }
+
+    public function testExcessiveJsonDepthFailsAtomically(): void
+    {
+        $storage = $this->storage();
+        $storage->create('depth', ['original' => true], 'existing');
+        $before = $storage->list('depth');
+        $operations = [
+            fn() => $storage->create('depth', self::nestedValue(512), 'rejected'),
+            fn() => $storage->set('depth', 'existing', self::nestedValue(512)),
+            fn() => $storage->update('depth', 'existing', [['path' => ['field'], 'value' => self::nestedValue(511)]]),
+        ];
+        foreach ($operations as $operation) {
+            try {
+                $operation();
+                self::fail('Values beyond the JSON depth limit must fail.');
+            } catch (InvalidArgumentException) {
+                self::assertSame($before, $storage->list('depth'));
+            }
+        }
+    }
+
+    /** @return array<string, mixed> */
+    protected static function nestedValue(int $levels): array
+    {
+        $value = [];
+        for ($level = 0; $level < $levels; ++$level) {
+            $value = ['nested' => $value];
+        }
+        return $value;
+    }
+
     public function testIdentifiersAreValidatedForEveryOperation(): void
     {
         $storage = $this->storage();

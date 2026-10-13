@@ -623,7 +623,12 @@ stop signals. FileStorage writes one complete JSON file per entry; InMemoryStora
 keeps the same contract in one process. The modules establish their own namespaces:
 SessionStore, ConfigurationStore and InputHistory receive the authenticated user ID.
 The default Session message adapter uses the same Storage; a MessageStoreInterface
-override is optional.
+override is optional. An override is wrapped to preserve Session ownership and
+lifecycle: its thread ID includes the owning user and Session identity, rather
+than the bare Session key. Newly appended messages update Session use and clear
+resets content visibility. Duplicate detection on an override reads that thread's
+saved messages before append; the normal Storage adapter uses atomic creation
+without that scan. The Host serializes the override's comparison and insertion.
 
 ```php
 use NeuronInteraction\Configuration\ConfigurationStore;

@@ -37,6 +37,7 @@ use function mkdir;
 use function random_bytes;
 use function realpath;
 use function rename;
+use function scandir;
 use function strlen;
 use function substr;
 use function tempnam;
@@ -53,6 +54,10 @@ use const PHP_INT_MAX;
 /** One complete JSON document per entry, coordinated by a stable namespace lock. */
 final class FileStorage implements StorageInterface
 {
+    // The envelope adds one object around a value validated at JSON depth 512.
+    // Decoding additionally counts the root level before its contents.
+    private const int DOCUMENT_DEPTH = 514;
+
     public function __construct(private readonly string $root) {}
 
     public function create(string $namespace, array $value, ?string $key = null): string
@@ -182,8 +187,22 @@ final class FileStorage implements StorageInterface
             return $missing;
         }
         $path = $directory . '/.lock';
-        $this->regularFile($path);
-        $lock = @fopen($path, 'c+b');
+        if (!$this->regularFile($path) && !$exclusive) {
+            $contents = scandir($directory);
+            if ($contents === false) {
+                throw new RuntimeException('The storage namespace could not be inspected.');
+            }
+            if ($contents === ['.', '..']) {
+                // Linearize an uninitialized empty namespace before a writer
+                // publishes its stable lock. Reads must not initialize it.
+                return $missing;
+            }
+            // A concurrent writer may have initialized during the inspection.
+            if (!$this->regularFile($path)) {
+                throw new UnexpectedValueException('A non-empty namespace has no coordination state.');
+            }
+        }
+        $lock = @fopen($path, $exclusive ? 'c+b' : 'rb');
         if ($lock === false) {
             throw new RuntimeException('The namespace lock could not be opened.');
         }
@@ -283,7 +302,7 @@ final class FileStorage implements StorageInterface
             throw new RuntimeException('The storage entry could not be read.');
         }
         try {
-            $entry = json_decode($encoded, true, flags: JSON_THROW_ON_ERROR);
+            $entry = json_decode($encoded, true, self::DOCUMENT_DEPTH, JSON_THROW_ON_ERROR);
             if (!is_array($entry) || !isset($entry['position'], $entry['value']) || !is_int($entry['position']) || $entry['position'] < 1 || !is_array($entry['value'])) {
                 throw new UnexpectedValueException('The stored entry has an invalid envelope.');
             }
@@ -333,7 +352,7 @@ final class FileStorage implements StorageInterface
     private function publish(string $path, array|int $document, bool $create = false): void
     {
         $this->regularFile($path);
-        $encoded = json_encode($document, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+        $encoded = json_encode($document, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION, self::DOCUMENT_DEPTH);
         $temporary = tempnam(dirname($path), '.entry-');
         if ($temporary === false) {
             throw new RuntimeException('A temporary storage file could not be created.');

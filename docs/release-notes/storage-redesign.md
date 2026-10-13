@@ -58,7 +58,10 @@ $inputs = new InputHistory($storage, $userId);
 ```
 
 The default SessionMessageStore persists Neuron messages through that same
-Storage; a separate MessageStoreInterface is optional. Session creation persists
+Storage; a separate MessageStoreInterface is optional. Custom message stores
+receive threads scoped by owning user and Session, and their lifecycle is wrapped
+so direct Agent writes and clear update the Session record. Override duplicate
+checks may scan saved messages; this does not affect the default Storage adapter. Session creation persists
 its record immediately. Lookup and deletion establish user ownership; listing
 excludes empty Sessions, filters application metadata and orders by latest use
 with a key tie-breaker, without reading message histories. SessionSummary::getSize()

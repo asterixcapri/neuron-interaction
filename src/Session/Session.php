@@ -15,13 +15,9 @@ use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Storage\StorageInterface;
-use UnexpectedValueException;
 
 use function array_values;
 use function hash;
-use function is_array;
-use function is_bool;
-use function is_string;
 use function trim;
 
 /**
@@ -41,7 +37,9 @@ final readonly class Session
         ?MessageStoreInterface $messageStore = null,
     ) {
         $this->namespace = self::namespaceForUser($userId);
-        $this->store = $messageStore ?? new SessionMessageStore($storage, $userId);
+        $this->store = $messageStore === null || $messageStore instanceof SessionMessageStore
+            ? $messageStore ?? new SessionMessageStore($storage, $userId)
+            : new SessionTrackingMessageStore($this, $messageStore);
     }
 
     /** @param array<string, string> $metadata */
@@ -92,11 +90,7 @@ final readonly class Session
     /** @phpstan-impure */
     public function getTitle(): ?string
     {
-        $title = $this->record()['title'] ?? null;
-        if ($title !== null && !is_string($title)) {
-            throw new UnexpectedValueException('A Session title must be a string or null.');
-        }
-        return $title;
+        return $this->record()->title;
     }
 
     public function setTitle(string $title): void
@@ -113,11 +107,7 @@ final readonly class Session
      */
     public function getMetadata(): array
     {
-        $metadata = $this->record()['metadata'] ?? null;
-        if (!is_array($metadata)) {
-            throw new UnexpectedValueException('A Session record must contain application metadata.');
-        }
-        return SessionMetadata::validate($metadata);
+        return $this->record()->metadata;
     }
 
     public function setMetadata(string $key, string $value): void
@@ -135,23 +125,19 @@ final readonly class Session
     /** @phpstan-impure */
     public function getCreatedAt(): DateTimeImmutable
     {
-        return $this->date('createdAt');
+        return $this->record()->createdAt;
     }
 
     /** @phpstan-impure */
     public function getLastUsedAt(): DateTimeImmutable
     {
-        return $this->date('lastUsedAt');
+        return $this->record()->lastUsedAt;
     }
 
     /** @phpstan-impure */
     public function hasContent(): bool
     {
-        $hasContent = $this->record()['hasContent'] ?? null;
-        if (!is_bool($hasContent)) {
-            throw new UnexpectedValueException('A Session record must contain a boolean content flag.');
-        }
-        return $hasContent;
+        return $this->record()->hasContent;
     }
 
     /** Called only after successful message insertion, including direct Agent use. */
@@ -191,21 +177,10 @@ final readonly class Session
         return false;
     }
 
-    /** @return array<array-key, mixed> */
-    private function record(): array
+    private function record(): SessionRecord
     {
-        return $this->storage->get($this->namespace, $this->key)
-            ?? throw new MissingEntryException('The Session no longer exists.');
-    }
-
-    private function date(string $field): DateTimeImmutable
-    {
-        $value = $this->record()[$field] ?? null;
-        $date = is_string($value) ? DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s.uP', $value) : false;
-        if ($date === false || $date->format('Y-m-d\TH:i:s.uP') !== $value) {
-            throw new UnexpectedValueException('A Session record must contain a valid ' . $field . ' time.');
-        }
-        return $date;
+        return SessionRecord::fromArray($this->storage->get($this->namespace, $this->key)
+            ?? throw new MissingEntryException('The Session no longer exists.'));
     }
 
     private static function now(): string

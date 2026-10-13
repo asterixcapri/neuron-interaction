@@ -13,6 +13,7 @@ use function array_column;
 use function array_diff;
 use function array_keys;
 use function bin2hex;
+use function chmod;
 use function file_get_contents;
 use function file_put_contents;
 use function is_dir;
@@ -43,6 +44,67 @@ final class FileStorageTest extends StorageContract
     protected function storage(): StorageInterface
     {
         return new FileStorage($this->directory);
+    }
+
+    public function testDepthBoundarySurvivesReopeningAfterCreateSetAndUpdate(): void
+    {
+        $storage = new FileStorage($this->directory);
+        $deep = self::nestedValue(511);
+        $storage->create('depth', $deep, 'created');
+        $storage->set('depth', 'replaced', []);
+        $storage->set('depth', 'replaced', $deep);
+        $storage->set('depth', 'updated', []);
+        $updated = ['field' => self::nestedValue(510)];
+        $storage->update('depth', 'updated', [['path' => ['field'], 'value' => self::nestedValue(510)]]);
+        $reopened = new FileStorage($this->directory);
+        self::assertSame($deep, $reopened->get('depth', 'created'));
+        self::assertSame($deep, $reopened->get('depth', 'replaced'));
+        self::assertSame($updated, $reopened->get('depth', 'updated'));
+        self::assertSame($storage->list('depth'), $reopened->list('depth'));
+    }
+
+    public function testMissingReadsInAPrecreatedReadonlyNamespaceLeaveFilesystemUnchanged(): void
+    {
+        $namespace = $this->directory . '/empty';
+        mkdir($namespace, recursive: true);
+        $beforeRoot = scandir($this->directory);
+        $beforeNamespace = scandir($namespace);
+        chmod($namespace, 0o555);
+        try {
+            $storage = new FileStorage($this->directory);
+            self::assertNull($storage->get('empty', 'absent'));
+            self::assertSame([], $storage->list('empty'));
+            self::assertSame($beforeRoot, scandir($this->directory));
+            self::assertSame($beforeNamespace, scandir($namespace));
+        } finally {
+            chmod($namespace, 0o755);
+        }
+    }
+
+    public function testReadDuringInitializationSeesMissingOrCommittedEntry(): void
+    {
+        mkdir($this->directory . '/items', recursive: true);
+        $reader = new StorageWorker($this->directory);
+        $writer = new StorageWorker($this->directory);
+        try {
+            $reader->send(['operation' => 'get', 'key' => 'new']);
+            $writer->send(['operation' => 'create', 'key' => 'new', 'value' => ['committed' => true]]);
+            $observed = $reader->receive()['result'];
+            self::assertTrue($observed === null || $observed === ['committed' => true]);
+            self::assertSame(['result' => 'new'], $writer->receive());
+            self::assertSame(['committed' => true], (new FileStorage($this->directory))->get('items', 'new'));
+        } finally {
+            $reader->close();
+            $writer->close();
+        }
+    }
+
+    public function testNonemptyNamespaceWithoutCoordinationFailsClearly(): void
+    {
+        mkdir($this->directory . '/items', recursive: true);
+        file_put_contents($this->directory . '/items/unexpected', 'uncoordinated state');
+        $this->expectException(UnexpectedValueException::class);
+        (new FileStorage($this->directory))->list('items');
     }
 
     public function testReopeningPreservesInsertionOrderAfterMutationsAndClear(): void

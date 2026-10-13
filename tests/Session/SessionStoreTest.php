@@ -18,9 +18,11 @@ use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\StorageInterface;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use UnexpectedValueException;
 
 use function array_map;
 use function array_unique;
@@ -88,6 +90,52 @@ final class SessionStoreTest extends TestCase
         self::assertSame($session->getKey(), $listed[0]->getKey());
         self::assertSame('Record title', $listed[0]->getTitle());
         self::assertEquals($session->getLastUsedAt(), $listed[0]->getLastUsedAt());
+    }
+
+    public function testListingDecodesItsStorageSnapshotWithoutAdditionalReads(): void
+    {
+        $storage = $this->createMock(StorageInterface::class);
+        $storage->expects(self::never())->method('get');
+        $storage->expects(self::once())->method('list')->with(Session::namespaceForUser('alice'))->willReturn([
+            ['key' => 'saved', 'value' => [
+                'title' => 'Snapshot title',
+                'createdAt' => '2026-09-04T12:00:00.000000+00:00',
+                'lastUsedAt' => '2026-09-05T12:00:00.000000+00:00',
+                'hasContent' => true,
+                'metadata' => ['project' => 'one'],
+            ]],
+        ]);
+        $summaries = (new SessionStore($storage, 'alice'))->list(['project' => 'one']);
+        self::assertCount(1, $summaries);
+        self::assertSame('Snapshot title', $summaries[0]->getTitle());
+        self::assertSame('2026-09-05', $summaries[0]->getLastUsedAt()->format('Y-m-d'));
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testListingAndSessionReadsRejectTheSameCorruptRecordFields(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $store = new SessionStore($storage, 'alice');
+        $session = $store->create();
+        $session->registerUse(new UserMessage('Content'));
+        $record = $storage->get(Session::namespaceForUser('alice'), $session->getKey());
+        self::assertNotNull($record);
+        foreach (['title' => 12, 'createdAt' => 'invalid', 'lastUsedAt' => 'invalid', 'hasContent' => 1, 'metadata' => false] as $field => $invalid) {
+            $corrupt = $record;
+            $corrupt[$field] = $invalid;
+            $storage->set(Session::namespaceForUser('alice'), $session->getKey(), $corrupt);
+            try {
+                $store->list();
+                self::fail('Listing must reject invalid record fields.');
+            } catch (UnexpectedValueException $listed) {
+                try {
+                    $session->getTitle();
+                    self::fail('Session reads must reject invalid record fields.');
+                } catch (UnexpectedValueException $read) {
+                    self::assertSame($listed->getMessage(), $read->getMessage());
+                }
+            }
+        }
     }
 
     private string $directory;

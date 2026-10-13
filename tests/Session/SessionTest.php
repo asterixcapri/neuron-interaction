@@ -7,6 +7,8 @@ namespace NeuronInteraction\Tests\Session;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Agent\Middleware\Summarization;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\History\InMemoryMessageStore;
+use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
@@ -18,12 +20,15 @@ use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Tools\ToolCall;
+use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\MissingEntryException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use UnexpectedValueException;
 
 use function array_map;
@@ -235,6 +240,98 @@ final class SessionTest extends TestCase
         self::assertEquals($createdAt, $session->getCreatedAt());
         self::assertCount(2, $session->getMessages());
         self::assertCount(1, $sessions->list());
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testCustomMessageStoreRegistersDirectAgentUseAndClearWithoutRegisteringDuplicates(bool $files): void
+    {
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $messages = new InMemoryMessageStore();
+        $sessions = new SessionStore($storage, 'owner', $messages);
+        $session = $sessions->create();
+        $created = $session->getCreatedAt();
+        $storage->update(Session::namespaceForUser('owner'), $session->getKey(), [
+            ['path' => ['lastUsedAt'], 'value' => '2000-01-01T00:00:00.000000+00:00'],
+        ]);
+        $before = $session->getLastUsedAt();
+        $agent = $session->bindToAgent((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Answer'))));
+        $question = new UserMessage('Original question');
+        $agent->chat($question);
+        self::assertTrue($session->hasContent());
+        self::assertGreaterThan($before, $session->getLastUsedAt());
+        self::assertEquals($created, $session->getCreatedAt());
+        self::assertCount(1, $sessions->list());
+        self::assertCount(2, $session->getMessages());
+        $lastUsed = $session->getLastUsedAt();
+        $messages->archive($session->messageNamespace(), 2);
+        $replay = (new UserMessage('Changed replay'))->setId($question->getId());
+        $agent->getChatHistory()->addMessage($replay);
+        self::assertSame([], $messages->loadActive($session->messageNamespace()));
+        self::assertSame('Original question', $session->getMessages()[0]->getContent());
+        self::assertCount(2, $session->getMessages());
+        self::assertEquals($lastUsed, $session->getLastUsedAt());
+
+        $agent->resetConversation();
+        self::assertSame([], $session->getMessages());
+        self::assertFalse($session->hasContent());
+        self::assertSame([], $sessions->list());
+        self::assertEquals($lastUsed, $session->getLastUsedAt());
+        $agent->getChatHistory()->addMessage($question);
+        self::assertTrue($session->hasContent());
+        self::assertCount(1, $sessions->list());
+        $sessions->delete($session->getKey());
+        self::assertSame([], $messages->loadAll($session->messageNamespace()));
+        $this->expectException(MissingEntryException::class);
+        $agent->getChatHistory()->addMessage(new UserMessage('Deleted Session'));
+    }
+
+    public function testSharedCustomMessageStoreIsolatesUsersWithTheSameSessionKey(): void
+    {
+        $storage = new InMemoryStorage();
+        $messages = new InMemoryMessageStore();
+        $alice = (new SessionStore($storage, 'alice', $messages))->create();
+        $record = $storage->get(Session::namespaceForUser('alice'), $alice->getKey());
+        self::assertNotNull($record);
+        $storage->create(Session::namespaceForUser('bob'), $record, $alice->getKey());
+        $bob = (new SessionStore($storage, 'bob', $messages))->get($alice->getKey());
+        self::assertNotNull($bob);
+        $alice->bindToAgent(new Agent())->getChatHistory()->addMessage(new UserMessage('Alice private'));
+        $bob->bindToAgent(new Agent())->getChatHistory()->addMessage(new UserMessage('Bob private'));
+        self::assertSame('Alice private', $alice->getMessages()[0]->getContent());
+        self::assertSame('Bob private', $bob->getMessages()[0]->getContent());
+        $alice->delete();
+        $reopenedBob = (new SessionStore($storage, 'bob', $messages))->get($bob->getKey());
+        self::assertNotNull($reopenedBob);
+        self::assertSame('Bob private', $reopenedBob->getMessages()[0]->getContent());
+        self::assertTrue($reopenedBob->hasContent());
+    }
+
+    public function testCustomMessageStoreRejectsRebindingToAnUnownedThreadBeforeDelegating(): void
+    {
+        $messages = $this->createMock(MessageStoreInterface::class);
+        $messages->expects(self::never())->method('loadActive');
+        $session = (new SessionStore(new InMemoryStorage(), 'owner', $messages))->create();
+        $agent = $session->bindToAgent(new Agent())->for('foreign-thread');
+        $this->expectException(UnexpectedValueException::class);
+        $agent->getChatHistory()->getMessages();
+    }
+
+    public function testCustomMessageStoreFailureDoesNotRegisterUse(): void
+    {
+        $messages = $this->createStub(MessageStoreInterface::class);
+        $messages->method('append')->willThrowException(new RuntimeException('Persistence failed'));
+        $sessions = new SessionStore(new InMemoryStorage(), 'owner', $messages);
+        $session = $sessions->create();
+        $lastUse = $session->getLastUsedAt();
+        try {
+            $session->bindToAgent(new Agent())->getChatHistory()->addMessage(new UserMessage('Not stored'));
+            self::fail('Expected the message-store error.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('Persistence failed', $exception->getMessage());
+        }
+        self::assertFalse($session->hasContent());
+        self::assertEquals($lastUse, $session->getLastUsedAt());
+        self::assertSame([], $sessions->list());
     }
 
     #[DataProvider('storageKinds')]

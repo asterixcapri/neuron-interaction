@@ -4,14 +4,9 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Session;
 
-use DateTimeImmutable;
 use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronInteraction\Storage\StorageInterface;
-use UnexpectedValueException;
 
-use function is_array;
-use function is_bool;
-use function is_string;
 use function usort;
 
 /** Owns lookup and lifecycle delegation within one user's Session namespace. */
@@ -35,34 +30,16 @@ final readonly class SessionStore
         $filter = SessionMetadata::validate($metadata);
         $sessions = [];
         foreach ($this->storage->list(Session::namespaceForUser($this->userId)) as $entry) {
-            $record = $entry['value'];
-            $hasContent = $record['hasContent'] ?? null;
-            if (!is_bool($hasContent)) {
-                throw new UnexpectedValueException('A Session record must contain a boolean content flag.');
-            }
-            if (!$hasContent) {
+            $record = SessionRecord::fromArray($entry['value']);
+            if (!$record->hasContent) {
                 continue;
             }
-            $application = $record['metadata'] ?? null;
-            if (!is_array($application)) {
-                throw new UnexpectedValueException('A Session record must contain application metadata.');
-            }
-            $application = SessionMetadata::validate($application);
             foreach ($filter as $field => $value) {
-                if (($application[$field] ?? null) !== $value) {
+                if (($record->metadata[$field] ?? null) !== $value) {
                     continue 2;
                 }
             }
-            $title = $record['title'] ?? null;
-            if ($title !== null && !is_string($title)) {
-                throw new UnexpectedValueException('A Session title must be a string or null.');
-            }
-            $time = $record['lastUsedAt'] ?? null;
-            $lastUsedAt = is_string($time) ? DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s.uP', $time) : false;
-            if ($lastUsedAt === false || $lastUsedAt->format('Y-m-d\TH:i:s.uP') !== $time) {
-                throw new UnexpectedValueException('A Session record must contain a valid lastUsedAt time.');
-            }
-            $sessions[] = new SessionSummary($entry['key'], $lastUsedAt, $title);
+            $sessions[] = new SessionSummary($entry['key'], $record->lastUsedAt, $record->title);
         }
         usort($sessions, static fn(SessionSummary $one, SessionSummary $other): int
             => ($other->getLastUsedAt() <=> $one->getLastUsedAt()) ?: ($one->getKey() <=> $other->getKey()));
