@@ -6,7 +6,7 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\FileStorage;
+use NeuronInteraction\Storage\FileEntryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use RuntimeException;
 use Symfony\Component\Dotenv\Dotenv;
@@ -18,7 +18,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
-$storage = new FileStorage(\dirname(__DIR__) . '/.storage/multiple-sessions');
+$storage = new FileEntryStorage(\dirname(__DIR__) . '/.storage/multiple-sessions');
 $sessionStore = new SessionStore($storage, 'demo-user');
 
 $lisbonSession = $sessionStore->create();
@@ -41,7 +41,7 @@ echo '=== Kyoto Session ===' . \PHP_EOL;
 execTurn($conversation, 'My destination is Kyoto. Acknowledge in one short sentence.');
 
 // List this user's non-empty Sessions, most recently used first.
-// FileStorage keeps them across runs; each run adds two more Sessions.
+// FileEntryStorage keeps them across runs; each run adds two more Sessions.
 echo '=== Saved Sessions (key — title) ===' . \PHP_EOL;
 foreach ($sessionStore->list() as $summary) {
     echo $summary->getKey() . ' — ' . $summary->getTitle() . \PHP_EOL;

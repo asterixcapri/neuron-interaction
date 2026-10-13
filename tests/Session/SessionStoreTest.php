@@ -11,10 +11,11 @@ use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
-use NeuronInteraction\Storage\FileStorage;
-use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\FileEntryStorage;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -25,7 +26,6 @@ use function bin2hex;
 use function file_get_contents;
 use function file_put_contents;
 use function is_dir;
-use function iterator_to_array;
 use function mkdir;
 use function random_bytes;
 use function rmdir;
@@ -53,7 +53,7 @@ final class SessionStoreTest extends TestCase
 
     public function testStartMintsDistinctStorageSafeKeysAndEmptyHistories(): void
     {
-        $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
+        $sessionStore = new SessionStore(new InMemoryEntryStorage(), 'local-user');
         $first = $sessionStore->create();
         $second = $sessionStore->create();
 
@@ -77,7 +77,7 @@ final class SessionStoreTest extends TestCase
 
     public function testAnEmptySessionIsKnownButNotListed(): void
     {
-        $storage = new InMemoryStorage();
+        $storage = new InMemoryEntryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
         $key = $sessionStore->create()->getKey();
 
@@ -92,13 +92,13 @@ final class SessionStoreTest extends TestCase
     public function testSessionsCanBeListedAndResumedByANewInstance(bool $files): void
     {
         $storage = $files
-            ? new FileStorage($this->directory)
-            : new InMemoryStorage();
+            ? new FileEntryStorage($this->directory)
+            : new InMemoryEntryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
         SessionHistory::of($history)->addMessage(new UserMessage('Written earlier'));
         $history->setTitle('Written earlier');
         $reopened = new SessionStore($files
-            ? new FileStorage($this->directory)
+            ? new FileEntryStorage($this->directory)
             : $storage, 'local-user');
         $listed = $reopened->list();
 
@@ -117,7 +117,7 @@ final class SessionStoreTest extends TestCase
 
     public function testSummariesUseTheOpeningWordsAndMostRecentUseOrder(): void
     {
-        $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
+        $sessionStore = new SessionStore(new InMemoryEntryStorage(), 'local-user');
         $first = $sessionStore->create();
         SessionHistory::of($first)->addMessage(new UserMessage('The older subject'));
         $first->setTitle('The older subject');
@@ -144,18 +144,18 @@ final class SessionStoreTest extends TestCase
 
     public function testUnknownKeysAreRejectedWithoutCreatingAHistory(): void
     {
-        $storage = new InMemoryStorage();
+        $storage = new InMemoryEntryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
 
         self::assertNull($sessionStore->get('unknown'));
 
-        self::assertNull($storage->read('sessions', 'unknown'));
-        self::assertSame([], iterator_to_array($storage->entries('sessions')));
+        self::assertNull($storage->get(Session::namespaceForUser('local-user'), 'unknown'));
+        self::assertSame([], $storage->list(Session::namespaceForUser('local-user')));
     }
 
     public function testUserContentIsListedWithoutDerivingATitle(): void
     {
-        $sessionStore = new SessionStore(new InMemoryStorage(), 'local-user');
+        $sessionStore = new SessionStore(new InMemoryEntryStorage(), 'local-user');
         $history = $sessionStore->create();
         SessionHistory::of($history)->addMessage(new UserMessage(" \n\t"));
         SessionHistory::of($history)->addMessage(new AssistantMessage('An introductory answer'));
@@ -183,11 +183,11 @@ final class SessionStoreTest extends TestCase
 
     public function testFileOnlySessionUsesItsFilenameAndCanBeResumed(): void
     {
-        $storage = new FileStorage($this->directory);
+        $storage = new FileEntryStorage($this->directory);
         $store = new SessionStore($storage, 'local-user');
         $session = $store->create();
         SessionHistory::of($session)->addMessage(new UserMessage(new FileContent('https://example.com/report.pdf', SourceType::URL, 'application/pdf', 'report.pdf')));
-        $reopened = new SessionStore(new FileStorage($this->directory), 'local-user');
+        $reopened = new SessionStore(new FileEntryStorage($this->directory), 'local-user');
         $listed = $reopened->list();
 
         self::assertCount(1, $listed);
@@ -199,17 +199,16 @@ final class SessionStoreTest extends TestCase
 
     public function testEqualLastUseTimesAreOrderedByKey(): void
     {
-        $storage = new InMemoryStorage();
+        $storage = new InMemoryEntryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
         SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('First'));
         SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('Second'));
         $keys = [];
 
-        foreach ($storage->entries('sessions') as $document) {
-            $keys[] = $document->key;
-            $storage->write('sessions', $document->key, $document->data, [
-                'userId' => 'local-user',
-                'lastUsedAt' => '2026-09-04T12:00:00.000000+00:00',
+        foreach ($storage->list(Session::namespaceForUser('local-user')) as $entry) {
+            $keys[] = $entry['key'];
+            $storage->update(Session::namespaceForUser('local-user'), $entry['key'], [
+                ['path' => ['lastUsedAt'], 'value' => '2026-09-04T12:00:00.000000+00:00'],
             ]);
         }
 
@@ -223,11 +222,11 @@ final class SessionStoreTest extends TestCase
 
     public function testFileSummaryReportsThePersistedConversationSize(): void
     {
-        $sessionStore = new SessionStore(new FileStorage($this->directory), 'local-user');
+        $sessionStore = new SessionStore(new FileEntryStorage($this->directory), 'local-user');
         $history = $sessionStore->create();
         SessionHistory::of($history)->addMessage(new UserMessage('Stored in a file'));
         $history->setTitle('Stored in a file');
-        $reopened = new SessionStore(new FileStorage($this->directory), 'local-user');
+        $reopened = new SessionStore(new FileEntryStorage($this->directory), 'local-user');
         $listed = $reopened->list();
 
         self::assertCount(1, $listed);
@@ -242,7 +241,7 @@ final class SessionStoreTest extends TestCase
         $legacy = $this->directory . '/neuron_legacy-key.chat';
         file_put_contents($legacy, '[{"content":"Old"}]');
         $contents = file_get_contents($legacy);
-        $sessionStore = new SessionStore(new FileStorage($this->directory), 'local-user');
+        $sessionStore = new SessionStore(new FileEntryStorage($this->directory), 'local-user');
 
         self::assertSame([], $sessionStore->list());
 
@@ -258,7 +257,7 @@ final class SessionStoreTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testOwnershipScopesCreationReadsSummariesAndDeletion(bool $files): void
     {
-        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
         $alice = new SessionStore($storage, 'alice@example.com');
         $bob = new SessionStore($storage, 'bob / local');
         $session = $alice->create();
@@ -273,7 +272,7 @@ final class SessionStoreTest extends TestCase
         $bob->delete($key);
         self::assertNotNull($alice->get($key));
 
-        $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice@example.com');
+        $fresh = new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'alice@example.com');
         $reopened = $fresh->get($key);
         self::assertNotNull($reopened);
         self::assertSame('alice@example.com', $reopened->getUserId());
@@ -286,18 +285,18 @@ final class SessionStoreTest extends TestCase
 
     public function testOwnerlessDocumentsAreNotAssignedToTheStoreUser(): void
     {
-        $storage = new InMemoryStorage();
-        $document = $storage->create('sessions', []);
+        $storage = new InMemoryEntryStorage();
+        $key = $storage->create('sessions', []);
         $sessionStore = new SessionStore($storage, 'local-user');
-        self::assertNull($sessionStore->get($document->key));
+        self::assertNull($sessionStore->get($key));
         self::assertSame([], $sessionStore->list());
-        $sessionStore->delete($document->key);
-        self::assertNotNull($storage->read('sessions', $document->key));
+        $sessionStore->delete($key);
+        self::assertNotNull($storage->get('sessions', $key));
     }
 
     public function testTitlesPersistIndependentlyFromMessagesAndLastUseTime(): void
     {
-        $storage = new InMemoryStorage();
+        $storage = new InMemoryEntryStorage();
         $store = new SessionStore($storage, 'local-user');
         $session = $store->create();
         self::assertNull($session->getTitle());

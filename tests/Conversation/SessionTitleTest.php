@@ -19,7 +19,6 @@ use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\InMemoryEntryStorage;
-use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -122,7 +121,7 @@ final class SessionTitleTest extends TestCase
     {
         $conversation = $this->conversation('First', 'Second');
         $original = $conversation->session();
-        $selected = (new SessionStore(new InMemoryStorage(), 'other'))->create();
+        $selected = (new SessionStore(new InMemoryEntryStorage(), 'other'))->create();
         $provider = new FakeAIProvider(new AssistantMessage('{"title":"Original topic"}'), new AssistantMessage('{"title":"New topic"}'));
         $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
         $stream = $conversation->sendInput('Original question');
@@ -175,7 +174,7 @@ final class SessionTitleTest extends TestCase
                 throw new RuntimeException('Response failed');
             }
         };
-        $conversation = new Conversation((new Agent())->setAiProvider($agentProvider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($agentProvider), (new SessionStore(new InMemoryEntryStorage(), 'local'))->create());
         $titleProvider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
         $conversation->setSessionTitleGenerator(new SessionTitleGenerator($titleProvider));
         try {
@@ -191,7 +190,7 @@ final class SessionTitleTest extends TestCase
     private function conversation(string ...$answers): Conversation
     {
         $provider = new FakeAIProvider(...array_map(static fn(string $answer): AssistantMessage => new AssistantMessage($answer), $answers));
-        return new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        return new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryEntryStorage(), 'local'))->create());
     }
 
     /**

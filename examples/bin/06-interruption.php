@@ -10,7 +10,6 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryEntryStorage;
-use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
 
@@ -18,7 +17,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
-$storage = new InMemoryStorage();
+$storage = new InMemoryEntryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
 
 $stopSignal = new StopSignal(new InMemoryEntryStorage(), 'demo-response');

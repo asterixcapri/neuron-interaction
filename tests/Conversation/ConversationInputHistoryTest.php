@@ -20,7 +20,7 @@ use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -31,7 +31,7 @@ final class ConversationInputHistoryTest extends TestCase
 {
     public function testOriginalInputsAreRecordedBeforeProcessingAndGeneratedPromptsAreExcluded(): void
     {
-        $storage = new InMemoryStorage();
+        $storage = new InMemoryEntryStorage();
         $history = new InputHistory($storage);
         $provider = new FakeAIProvider(new AssistantMessage('Answer'), new AssistantMessage('Summary'));
         $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore($storage, 'owner'))->create());
@@ -94,7 +94,7 @@ final class ConversationInputHistoryTest extends TestCase
 
     public function testInputIsRetainedWhenPreparationFails(): void
     {
-        $storage = new InMemoryStorage();
+        $storage = new InMemoryEntryStorage();
         $history = new InputHistory($storage);
         $conversation = new Conversation(new Agent(), (new SessionStore($storage, 'owner'))->create());
         $conversation->setInputHistory($history);

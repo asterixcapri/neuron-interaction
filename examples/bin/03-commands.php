@@ -13,7 +13,7 @@ use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SessionChanged;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\FileStorage;
+use NeuronInteraction\Storage\FileEntryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
 
@@ -24,7 +24,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
-$storage = new FileStorage(\dirname(__DIR__) . '/.storage/commands');
+$storage = new FileEntryStorage(\dirname(__DIR__) . '/.storage/commands');
 $sessionStore = new SessionStore($storage, 'demo-user');
 
 $session = $sessionStore->create();

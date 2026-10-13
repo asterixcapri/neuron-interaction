@@ -16,7 +16,7 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use PHPUnit\Framework\TestCase;
 
 use function iterator_to_array;
@@ -29,7 +29,7 @@ final class SelectionRequestTest extends TestCase
 {
     public function testSeparateHttpRequestsRestoreOnlySessionAndStoresAndForwardOpaqueValues(): void
     {
-        $storage = new InMemoryStorage();
+        $storage = new InMemoryEntryStorage();
         $sessions = new SessionStore($storage, 'owner');
         $configuration = new ConfigurationStore($storage, 'owner');
         $configuration->write('account', 'original owner');
@@ -107,7 +107,7 @@ final class SelectionRequestTest extends TestCase
                 }
             }
         };
-        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryEntryStorage(), 'owner'))->create());
         $conversation->setCommands(new Commands($command));
         $events = iterator_to_array($conversation->sendInput('/steps'));
         self::assertCount(3, $events);

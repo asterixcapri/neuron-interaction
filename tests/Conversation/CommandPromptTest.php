@@ -24,7 +24,6 @@ use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryEntryStorage;
-use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -223,7 +222,7 @@ final class CommandPromptTest extends TestCase
                 return yield from ($this->stream)($messages);
             }
         };
-        $conversation = new Conversation($agent, (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $conversation = new Conversation($agent, (new SessionStore(new InMemoryEntryStorage(), 'owner'))->create());
         if ($processors !== null) {
             $conversation->setMessageProcessors(new MessageProcessors($processors));
         }
