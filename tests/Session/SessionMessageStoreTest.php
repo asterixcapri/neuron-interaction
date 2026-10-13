@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Session;
 
+use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
@@ -14,8 +15,10 @@ use NeuronAI\Tools\ToolCall;
 use NeuronAI\Tools\ToolOutput;
 use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\EntryStorageInterface;
 use NeuronInteraction\Storage\InMemoryEntryStorage;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use UnexpectedValueException;
 
 use const PHP_INT_MAX;
@@ -131,6 +134,46 @@ final class SessionMessageStoreTest extends TestCase
         self::assertSame([], $session->bindToAgent(new Agent())->getChatHistory()->getMessages());
         self::assertEquals([$message], $session->getMessages());
         self::assertSame($session->getKey(), $sessions->list()[0]->getKey());
+    }
+
+    public function testAppendPropagatesValidationAndIoFailuresWithoutRegisteringUse(): void
+    {
+        foreach ([new InvalidArgumentException('invalid payload'), new RuntimeException('publication failure')] as $failure) {
+            $storage = $this->createMock(EntryStorageInterface::class);
+            $storage->expects(self::once())->method('get')->willReturn([]);
+            $storage->expects(self::once())->method('create')->willThrowException($failure);
+            $storage->expects(self::never())->method('update');
+            $store = new SessionMessageStore($storage, 'owner');
+            try {
+                $store->append('thread', new UserMessage('Question'));
+                self::fail('Non-conflict failures must propagate.');
+            } catch (InvalidArgumentException|RuntimeException $caught) {
+                self::assertSame($failure, $caught);
+            }
+        }
+    }
+
+    public function testOwnershipIsRequiredForEveryMessageOperation(): void
+    {
+        $storage = new InMemoryEntryStorage();
+        $session = (new SessionStore($storage, 'bob'))->create();
+        $owner = new SessionMessageStore($storage, 'bob');
+        $owner->append($session->getKey(), new UserMessage('Owned content'));
+        $stranger = new SessionMessageStore($storage, 'alice');
+        foreach ([
+            fn() => $stranger->loadActive($session->getKey()),
+            fn() => $stranger->loadAll($session->getKey()),
+            fn() => $stranger->append($session->getKey(), new UserMessage('Intrusion')),
+            fn() => $stranger->archive($session->getKey(), 1),
+            fn() => $stranger->clear($session->getKey()),
+        ] as $operation) {
+            try {
+                $operation();
+                self::fail('A foreign thread must be inaccessible.');
+            } catch (UnexpectedValueException) {
+                self::assertSame('Owned content', $owner->loadActive($session->getKey())[0]->getContent());
+            }
+        }
     }
 
 }

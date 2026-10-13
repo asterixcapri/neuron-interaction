@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Session;
 
+use NeuronAI\Agent\Agent;
+use NeuronAI\Agent\Middleware\Summarization;
 use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
@@ -14,6 +16,7 @@ use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Tools\ToolCall;
 use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
@@ -32,6 +35,8 @@ use function rmdir;
 use function scandir;
 use function sys_get_temp_dir;
 use function unlink;
+
+use const PHP_INT_MAX;
 
 final class SessionTest extends TestCase
 {
@@ -213,4 +218,122 @@ final class SessionTest extends TestCase
             $reopened->getMessages(),
         );
     }
+    #[DataProvider('storageKinds')]
+    public function testImmediateRecordAndDirectAgentUseTrackContentAndDates(bool $files): void
+    {
+        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $sessions = new SessionStore($storage, 'owner');
+        $session = $sessions->create(['projectId' => 'one']);
+        self::assertNotNull($sessions->get($session->getKey()));
+        self::assertFalse($session->hasContent());
+        self::assertEquals($session->getCreatedAt(), $session->getLastUsedAt());
+        $createdAt = $session->getCreatedAt();
+        $agent = $session->bindToAgent((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Answer'))));
+        $agent->chat(new UserMessage('Question'));
+        self::assertTrue($session->hasContent());
+        self::assertGreaterThanOrEqual($createdAt, $session->getLastUsedAt());
+        self::assertEquals($createdAt, $session->getCreatedAt());
+        self::assertCount(2, $session->getMessages());
+        self::assertCount(1, $sessions->list());
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testDuplicatePreservesArchivedPayloadOrderAndLastUse(bool $files): void
+    {
+        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $sessions = new SessionStore($storage, 'owner');
+        $session = $sessions->create();
+        $store = new SessionMessageStore($storage, 'owner');
+        $original = (new UserMessage('Original'))->setMetadata(['float' => 1.0]);
+        $store->append($session->getKey(), $original);
+        $lastUse = $session->getLastUsedAt();
+        $store->archive($session->getKey(), 1);
+        $replayed = (new UserMessage('Changed'))->setId($original->getId());
+        $store->append($session->getKey(), $replayed);
+        self::assertSame([], $store->loadActive($session->getKey()));
+        self::assertCount(1, $session->getMessages());
+        self::assertSame('Original', $session->getMessages()[0]->getContent());
+        self::assertSame($original->getId(), $session->getMessages()[0]->getId());
+        self::assertSame(1.0, $session->getMessages()[0]->getMetadata('float'));
+        self::assertEquals($lastUse, $session->getLastUsedAt());
+        $store->archive($session->getKey(), 0);
+        $store->archive($session->getKey(), -1);
+        self::assertEquals($lastUse, $session->getLastUsedAt());
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testResetClearsArchivedEntriesAndReappendRestoresVisibility(bool $files): void
+    {
+        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $sessions = new SessionStore($storage, 'owner');
+        $session = $sessions->create(['projectId' => 'one']);
+        $session->setTitle('Saved title');
+        $message = new UserMessage('Saved question');
+        $store = new SessionMessageStore($storage, 'owner');
+        $store->append($session->getKey(), $message);
+        $store->archive($session->getKey(), 1);
+        $lastUse = $session->getLastUsedAt();
+        $agent = $session->bindToAgent(new Agent());
+        $agent->resetConversation();
+        self::assertSame([], $session->getMessages());
+        self::assertFalse($session->hasContent());
+        self::assertSame([], $sessions->list());
+        self::assertSame('Saved title', $session->getTitle());
+        self::assertSame(['projectId' => 'one'], $session->getMetadata());
+        self::assertEquals($lastUse, $session->getLastUsedAt());
+        $agent->getChatHistory()->addMessage($message);
+        self::assertTrue($session->hasContent());
+        self::assertCount(1, $sessions->list());
+        self::assertSame($message->getId(), $session->getMessages()[0]->getId());
+        $namespace = $session->messageNamespace();
+        $sessions->delete($session->getKey());
+        self::assertNull($sessions->get($session->getKey()));
+        self::assertSame([], $storage->list($namespace));
+    }
+
+    #[DataProvider('storageKinds')]
+    public function testSummarizationClearAndReappendPersistsRetainedIds(bool $files): void
+    {
+        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $session = (new SessionStore($storage, 'owner'))->create();
+        $agent = $session->bindToAgent((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Newest answer'))));
+        $agent->setContextWindow(PHP_INT_MAX);
+        $agent->addGlobalMiddleware(new Summarization(new FakeAIProvider(new AssistantMessage('Earlier topic')), maxTokens: 1, messagesToKeep: 1));
+        $history = $agent->getChatHistory();
+        $history->addMessage(new UserMessage('First question'));
+        $history->addMessage((new AssistantMessage('First answer'))->setUsage(new Usage(100, 10)));
+        $history->addMessage(new UserMessage('Second question'));
+        $retained = (new AssistantMessage('Second answer'))->setUsage(new Usage(120, 10));
+        $history->addMessage($retained);
+        $latest = new UserMessage('Latest question');
+        $agent->chat($latest);
+        $reopened = (new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'owner'))->get($session->getKey());
+        self::assertNotNull($reopened);
+        $messages = $reopened->getMessages();
+        self::assertCount(4, $messages);
+        self::assertSame("## Previous conversation summary:\n\nEarlier topic", $messages[0]->getContent());
+        self::assertSame($retained->getId(), $messages[1]->getId());
+        self::assertSame($latest->getId(), $messages[2]->getId());
+        self::assertSame('Newest answer', $messages[3]->getContent());
+        self::assertTrue($reopened->hasContent());
+    }
+
+    public function testNonPersonMessagesNeverCreateOrResetContentVisibility(): void
+    {
+        $storage = new InMemoryEntryStorage();
+        $sessions = new SessionStore($storage, 'owner');
+        $session = $sessions->create();
+        $store = new SessionMessageStore($storage, 'owner');
+        $store->append($session->getKey(), new ToolResultMessage([]));
+        $store->append($session->getKey(), new UserMessage('  '));
+        $store->append($session->getKey(), new AssistantMessage('Intro'));
+        self::assertFalse($session->hasContent());
+        self::assertSame([], $sessions->list());
+        $store->append($session->getKey(), new UserMessage('Person content'));
+        $store->append($session->getKey(), new ToolResultMessage([]));
+        $store->append($session->getKey(), new AssistantMessage('Answer'));
+        self::assertTrue($session->hasContent());
+        self::assertCount(1, $sessions->list());
+    }
+
 }

@@ -108,7 +108,9 @@ final readonly class Session
         $this->storage->update($this->namespace, $this->key, [['path' => ['title'], 'value' => $title]]);
     }
 
-    /** @return array<string, string> */
+    /** @return array<string, string>
+     * @phpstan-impure
+     */
     public function getMetadata(): array
     {
         $metadata = $this->record()['metadata'] ?? null;
@@ -130,16 +132,19 @@ final readonly class Session
         $this->storage->update($this->namespace, $this->key, removals: [['metadata', $key]]);
     }
 
+    /** @phpstan-impure */
     public function getCreatedAt(): DateTimeImmutable
     {
         return $this->date('createdAt');
     }
 
+    /** @phpstan-impure */
     public function getLastUsedAt(): DateTimeImmutable
     {
         return $this->date('lastUsedAt');
     }
 
+    /** @phpstan-impure */
     public function hasContent(): bool
     {
         $hasContent = $this->record()['hasContent'] ?? null;
@@ -197,7 +202,7 @@ final readonly class Session
     {
         $value = $this->record()[$field] ?? null;
         $date = is_string($value) ? DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s.uP', $value) : false;
-        if ($date === false) {
+        if ($date === false || $date->format('Y-m-d\TH:i:s.uP') !== $value) {
             throw new UnexpectedValueException('A Session record must contain a valid ' . $field . ' time.');
         }
         return $date;
