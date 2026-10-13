@@ -4,207 +4,35 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Storage;
 
-use Generator;
-use InvalidArgumentException;
 use NeuronInteraction\Storage\FileStorage;
-use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\TestCase;
+use NeuronInteraction\Storage\StorageInterface;
 use RuntimeException;
+use UnexpectedValueException;
 
 use function array_column;
 use function array_diff;
-use function array_values;
+use function array_keys;
 use function bin2hex;
-use function dirname;
-use function fclose;
-use function fgets;
+use function file_get_contents;
 use function file_put_contents;
-use function fwrite;
 use function is_dir;
 use function is_link;
-use function iterator_to_array;
 use function mkdir;
-use function proc_close;
-use function proc_open;
 use function random_bytes;
 use function rmdir;
 use function scandir;
 use function str_repeat;
-use function stream_get_contents;
-use function strlen;
 use function symlink;
 use function sys_get_temp_dir;
 use function unlink;
-use function usleep;
 
-use const PHP_BINARY;
-
-final class FileStorageTest extends TestCase
+final class FileStorageTest extends StorageContract
 {
-    public function testStoredMetadataAreDetachedFromExternalReferences(): void
-    {
-        $storage = new FileStorage($this->directory);
-        $project = 'created';
-        $created = $storage->create('metadata', [], ['project' => &$project]);
-        $project = 'external change';
-        self::assertSame(['project' => 'created'], $created->metadata);
-        self::assertSame(['project' => 'created'], $storage->read('metadata', $created->key)?->metadata);
-        self::assertCount(1, iterator_to_array($storage->entries('metadata', ['project' => 'created'])));
-
-        $written = $storage->write('metadata', $created->key, [], ['project' => &$project]);
-        $project = 'another external change';
-        self::assertSame(['project' => 'external change'], $written->metadata);
-        self::assertSame(['project' => 'external change'], $storage->read('metadata', $created->key)->metadata);
-        self::assertCount(1, iterator_to_array($storage->entries('metadata', ['project' => 'external change'])));
-        self::assertSame([], iterator_to_array($storage->entries('metadata', ['project' => 'another external change'])));
-    }
-
-    public function testSuppliedKeysCannotBeCreatedTwice(): void
-    {
-        $storage = new FileStorage($this->directory);
-        $created = $storage->create('demo', ['value' => 'first'], key: 'chosen');
-        self::assertSame('chosen', $created->key);
-        try {
-            $storage->create('demo', ['value' => 'second'], key: 'chosen');
-            self::fail('An existing key must not be overwritten.');
-        } catch (RuntimeException) {
-            self::assertSame(['value' => 'first'], $storage->read('demo', 'chosen')?->data);
-        }
-    }
-
-    public function testEntriesFilterExactMetadataWithAnd(): void
-    {
-        $storage = new FileStorage($this->directory);
-        $match = $storage->create('demo', [], ['userId' => 'alice', 'project' => 'one', 'extra' => 'yes']);
-        $storage->create('demo', [], ['userId' => 'alice', 'project' => 'two']);
-        $storage->create('demo', [], ['userId' => 'bob', 'project' => 'one']);
-        $storage->create('demo', [], ['userId' => 'alice']);
-        $storage->create('demo', [], ['userId' => 'Alice', 'project' => 'one']);
-
-        $entries = iterator_to_array($storage->entries('demo', ['userId' => 'alice', 'project' => 'one']));
-        self::assertSame([$match->key], array_column($entries, 'key'));
-        self::assertCount(5, iterator_to_array($storage->entries('demo')));
-        self::assertSame([], iterator_to_array($storage->entries('demo', ['missing' => ''])));
-    }
-
-    public function testCompetingCreatesPublishOnlyOneCompleteDocument(): void
-    {
-        $script = <<<'PHP'
-            use NeuronInteraction\Storage\FileStorage;
-
-            require $argv[1];
-            $storage = new FileStorage($argv[2]);
-            fgets(STDIN);
-            try {
-                $storage->create('race', ['winner' => $argv[3], 'payload' => str_repeat('x', 100000)], key: 'shared');
-                exit(0);
-            } catch (RuntimeException $exception) {
-                fwrite(STDERR, $exception->getMessage());
-                exit(2);
-            }
-            PHP;
-        $workers = [];
-        for ($index = 0; $index < 8; ++$index) {
-            $process = proc_open(
-                [PHP_BINARY, '-r', $script, dirname(__DIR__, 2) . '/vendor/autoload.php', $this->directory, (string) $index],
-                [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-                $pipes,
-            );
-            self::assertIsResource($process);
-            $workers[] = [$process, $pipes];
-        }
-        foreach ($workers as [, $pipes]) {
-            fwrite($pipes[0], "start\n");
-            fclose($pipes[0]);
-        }
-
-        $winners = [];
-        foreach ($workers as $index => [$process, $pipes]) {
-            stream_get_contents($pipes[1]);
-            $error = stream_get_contents($pipes[2]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            $status = proc_close($process);
-            if ($status === 0) {
-                $winners[] = (string) $index;
-            } else {
-                self::assertSame(2, $status, $error);
-                self::assertSame('The storage key already exists.', $error);
-            }
-        }
-        self::assertCount(1, $winners);
-        $document = (new FileStorage($this->directory))->read('race', 'shared');
-        self::assertSame(['winner' => $winners[0], 'payload' => str_repeat('x', 100000)], $document?->data);
-    }
-
-    public function testNumericStringKeysRemainStringsWhenListed(): void
-    {
-        $storage = new FileStorage($this->directory);
-        $storage->write('demo', '123', ['value' => 'numeric key']);
-
-        $entries = iterator_to_array($storage->entries('demo'));
-
-        self::assertCount(1, $entries);
-        self::assertSame('123', $entries[0]->key);
-        self::assertSame(['value' => 'numeric key'], $entries[0]->data);
-        self::assertEquals($storage->read('demo', '123'), $entries[0]);
-    }
-
-    public function testConcurrentReadersAndDeletersTreatDisappearingDocumentsAsMissing(): void
-    {
-        $script = <<<'PHP'
-            use NeuronInteraction\Storage\FileStorage;
-
-            require $argv[1];
-            $storage = new FileStorage($argv[2]);
-            while (fgets(STDIN) !== false) {
-                try {
-                    $storage->read('race', 'shared');
-                    iterator_to_array($storage->entries('race'));
-                    $storage->write('race', 'shared', ['value' => 'from reader']);
-                    $storage->delete('race', 'shared');
-                    echo "ok\n";
-                } catch (Throwable $exception) {
-                    echo $exception->getMessage() . "\n";
-                }
-            }
-            PHP;
-        $process = proc_open(
-            [PHP_BINARY, '-r', $script, dirname(__DIR__, 2) . '/vendor/autoload.php', $this->directory],
-            [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-            $pipes,
-        );
-        self::assertIsResource($process);
-        $storage = new FileStorage($this->directory);
-
-        try {
-            for ($index = 0; $index < 300; ++$index) {
-                $storage->write('race', 'shared', ['value' => $index]);
-                fwrite($pipes[0], "read\n");
-                usleep(30);
-                $storage->delete('race', 'shared');
-                self::assertSame("ok\n", fgets($pipes[1]));
-            }
-        } finally {
-            fclose($pipes[0]);
-            fclose($pipes[1]);
-            $error = stream_get_contents($pipes[2]);
-            fclose($pipes[2]);
-            $status = proc_close($process);
-        }
-
-        self::assertSame(0, $status, $error);
-        self::assertSame('', $error);
-        self::assertNull($storage->read('race', 'shared'));
-    }
-
     private string $directory;
 
     protected function setUp(): void
     {
-        $this->directory = sys_get_temp_dir()
-            . '/neuron-interaction-storage-'
-            . bin2hex(random_bytes(6));
+        $this->directory = sys_get_temp_dir() . '/neuron-entries-' . bin2hex(random_bytes(8));
     }
 
     protected function tearDown(): void
@@ -212,217 +40,242 @@ final class FileStorageTest extends TestCase
         $this->removeDirectory($this->directory);
     }
 
-    public function testCreateReturnsANewKeyAndWritesItsJsonFile(): void
+    protected function storage(): StorageInterface
     {
-        $storage = new FileStorage($this->directory);
-        $document = $storage->create(
-            'sessions',
-            ['value' => 'conversation'],
-        );
-
-        self::assertMatchesRegularExpression(
-            '/^[a-f0-9]{32}$/D',
-            $document->key,
-        );
-        self::assertSame(['value' => 'conversation'], $document->data);
-        self::assertFileExists(
-            $this->directory
-                . '/sessions/'
-                . $document->key
-                . '.json',
-        );
+        return new FileStorage($this->directory);
     }
 
-    public function testReadingAMissingValueDoesNotCreateTheRoot(): void
+    public function testReopeningPreservesInsertionOrderAfterMutationsAndClear(): void
     {
-        $storage = new FileStorage($this->directory);
+        $storage = $this->storage();
+        foreach (['z', 'b', 'a'] as $key) {
+            $storage->create('items', ['key' => $key], $key);
+        }
+        $storage->set('items', 'z', ['replacement' => true]);
+        $storage->update('items', 'b', [['path' => ['changed'], 'value' => true]]);
+        $storage->delete('items', 'a');
+        $storage->create('items', [], 'a');
+        $reopened = $this->storage();
+        self::assertSame(['z', 'b', 'a'], array_column($reopened->list('items'), 'key'));
+        self::assertSame(['replacement' => true], $reopened->get('items', 'z'));
+        $reopened->clear('items');
+        $reopened->create('items', [], 'later');
+        $this->storage()->create('items', [], 'earlier-name');
+        self::assertSame(['later', 'earlier-name'], array_column($this->storage()->list('items'), 'key'));
+    }
 
-        self::assertNull($storage->read('sessions', 'missing'));
+    public function testMissingReadsAndDeletesDoNotCreateDirectories(): void
+    {
+        $storage = $this->storage();
+        self::assertNull($storage->get('items', 'absent'));
+        self::assertSame([], $storage->list('items'));
+        $storage->delete('items', 'absent');
+        $storage->clear('items');
         self::assertDirectoryDoesNotExist($this->directory);
     }
 
-    public function testListingAMissingNamespaceDoesNotCreateTheRoot(): void
+    public function testUpdatingAnEntryPreservesOtherEntriesAndNamespaces(): void
     {
-        $storage = new FileStorage($this->directory);
-
-        self::assertSame([], iterator_to_array($storage->entries('sessions')));
-        self::assertDirectoryDoesNotExist($this->directory);
+        $storage = $this->storage();
+        $storage->set('items', 'one', ['before' => true]);
+        $storage->set('items', 'two', ['untouched' => true]);
+        $storage->set('other', 'one', ['isolated' => true]);
+        $storage->update('items', 'one', [['path' => ['after'], 'value' => true]], [['before']]);
+        self::assertSame(['after' => true], $this->storage()->get('items', 'one'));
+        self::assertSame(['untouched' => true], $this->storage()->get('items', 'two'));
+        self::assertSame(['isolated' => true], $this->storage()->get('other', 'one'));
     }
 
-    public function testNamespacesAreSeparateDirectories(): void
+    public function testCorruptEntryIsAnExplicitReadAndListFailure(): void
     {
-        $storage = new FileStorage($this->directory);
-
-        $storage->write('sessions', 'known', ['value' => 'conversation']);
-        $storage->write('input-history', 'known', ['value' => 'commands']);
-
-        self::assertSame(
-            ['value' => 'conversation'],
-            $storage->read('sessions', 'known')?->data,
-        );
-        self::assertSame(
-            ['value' => 'commands'],
-            $storage->read('input-history', 'known')?->data,
-        );
+        $storage = $this->storage();
+        $storage->set('items', 'one', []);
+        file_put_contents($this->directory . '/items/one.json', '{broken');
+        try {
+            $storage->get('items', 'one');
+            self::fail('A corrupt entry must fail.');
+        } catch (UnexpectedValueException) {
+            $this->expectException(UnexpectedValueException::class);
+            $storage->list('items');
+        }
     }
 
-    public function testWritingAnExistingValueAtomicallyReplacesItsFile(): void
+    public function testNamespaceSymlinksCannotReadOrModifyOutsideTheRoot(): void
     {
-        $storage = new FileStorage($this->directory);
-        $storage->write('sessions', 'known', ['value' => 'before']);
-
-        $written = $storage->write(
-            'sessions',
-            'known',
-            ['value' => 'after'],
-        );
-
-        self::assertSame(
-            ['value' => 'after'],
-            $written->data,
-        );
-        self::assertSame(
-            ['known.json'],
-            array_values(array_diff(
-                scandir($this->directory . '/sessions') ?: [],
-                ['.', '..'],
-            )),
-        );
-    }
-
-    #[DataProvider('unsafeComponents')]
-    public function testUnsafeNamespacesAreRejected(string $component): void
-    {
-        $storage = new FileStorage($this->directory);
-
-        $this->expectException(InvalidArgumentException::class);
-
-        $storage->write($component, 'key', ['value']);
-    }
-
-    #[DataProvider('unsafeComponents')]
-    public function testUnsafeKeysAreRejected(string $component): void
-    {
-        $storage = new FileStorage($this->directory);
-
-        $this->expectException(InvalidArgumentException::class);
-
-        $storage->write('namespace', $component, ['value']);
-    }
-
-    /**
-     * @return Generator<string, array{string}>
-     */
-    public static function unsafeComponents(): Generator
-    {
-        yield 'empty' => [''];
-        yield 'current directory' => ['.'];
-        yield 'parent directory' => ['..'];
-        yield 'traversal' => ['../outside'];
-        yield 'embedded traversal' => ['safe/../../outside'];
-        yield 'absolute path' => ['/outside'];
-        yield 'backslash traversal' => ['..\\outside'];
-        yield 'backslash separator' => ['safe\\outside'];
-        yield 'null byte' => ["safe\0outside"];
-    }
-
-    public function testDotsThatDoNotNameADirectoryBoundaryRemainValid(): void
-    {
-        $storage = new FileStorage($this->directory);
-
-        $storage->write('version..sessions', 'history..json', ['value']);
-
-        self::assertSame(
-            ['value'],
-            $storage->read('version..sessions', 'history..json')?->data,
-        );
-    }
-
-    public function testASymbolicLinkCannotRedirectANamespaceOutsideTheRoot(): void
-    {
-        $outside = $this->directory . '-outside';
         mkdir($this->directory);
+        $outside = $this->directory . '/outside';
         mkdir($outside);
-        symlink($outside, $this->directory . '/sessions');
-
-        try {
-            $this->expectException(RuntimeException::class);
-            (new FileStorage($this->directory))->write(
-                'sessions',
-                'known',
-                ['value'],
-            );
-        } finally {
-            unlink($this->directory . '/sessions');
-            rmdir($outside);
+        symlink($outside, $this->directory . '/items');
+        foreach ([fn() => $this->storage()->get('items', 'key'), fn() => $this->storage()->create('items', [])] as $operation) {
+            try {
+                $operation();
+                self::fail('A symbolic namespace must fail.');
+            } catch (RuntimeException) {
+                self::assertSame([], array_diff(scandir($outside) ?: [], ['.', '..']));
+            }
         }
     }
 
-    public function testASymbolicLinkCannotRedirectAKeyOutsideTheRoot(): void
+    public function testEntrySymlinksCannotReadOrModifyTheirTarget(): void
     {
-        $outside = $this->directory . '-outside';
-        mkdir($this->directory . '/sessions', 0o777, true);
-        file_put_contents($outside, 'untouched');
-        symlink($outside, $this->directory . '/sessions/known.json');
-
-        try {
-            $this->expectException(RuntimeException::class);
-            (new FileStorage($this->directory))->write(
-                'sessions',
-                'known',
-                ['replacement'],
-            );
-        } finally {
-            unlink($this->directory . '/sessions/known.json');
-            unlink($outside);
+        $storage = $this->storage();
+        $storage->set('items', 'valid', []);
+        $target = $this->directory . '/target';
+        file_put_contents($target, 'untouched');
+        symlink($target, $this->directory . '/items/linked.json');
+        foreach ([
+            fn() => $storage->get('items', 'linked'),
+            fn() => $storage->set('items', 'linked', []),
+            fn() => $storage->create('items', [], 'linked'),
+            fn() => $storage->update('items', 'linked'),
+            fn() => $storage->delete('items', 'linked'),
+            fn() => $storage->list('items'),
+            fn() => $storage->clear('items'),
+        ] as $operation) {
+            try {
+                $operation();
+                self::fail('An entry symlink must fail.');
+            } catch (RuntimeException) {
+                self::assertSame('untouched', file_get_contents($target));
+            }
         }
     }
 
-    public function testEntriesHideTheFileExtensionAndExposeJsonSize(): void
+    public function testCompetingSuppliedKeyCreatesHaveExactlyOneWinner(): void
     {
-        $storage = new FileStorage($this->directory);
-        $storage->write('sessions', 'known', ['value' => 'conversation']);
-
-        $entries = iterator_to_array($storage->entries('sessions'));
-
-        self::assertCount(1, $entries);
-        self::assertSame('known', $entries[0]->key);
-        self::assertSame(['value' => 'conversation'], $entries[0]->data);
-        self::assertSame(
-            strlen('{"value":"conversation"}'),
-            $entries[0]->size(),
-        );
+        $workers = $this->workers(6);
+        $value = ['payload' => str_repeat('complete', 2000)];
+        try {
+            foreach ($workers as $worker) {
+                $worker->send(['operation' => 'create', 'key' => 'same', 'value' => $value]);
+            }
+            $successes = 0;
+            $conflicts = 0;
+            foreach ($workers as $worker) {
+                $response = $worker->receive();
+                if (isset($response['conflict'])) {
+                    ++$conflicts;
+                } else {
+                    self::assertSame(['result' => 'same'], $response);
+                    ++$successes;
+                }
+            }
+            self::assertSame(1, $successes);
+            self::assertSame(5, $conflicts);
+            self::assertSame($value, $this->storage()->get('items', 'same'));
+            self::assertCount(1, $this->storage()->list('items'));
+        } finally {
+            foreach ($workers as $worker) {
+                $worker->close();
+            }
+        }
     }
 
-    public function testMetadataRoundTripsWithData(): void
+    public function testConcurrentIndependentTopLevelAndNestedUpdatesSurvive(): void
     {
-        $storage = new FileStorage($this->directory);
-        $written = $storage->write(
-            'sessions',
-            'known',
-            ['value' => 'conversation'],
-            ['lastUsedAt' => '2026-09-03T12:00:00+00:00'],
-        );
-
-        self::assertSame(
-            ['lastUsedAt' => '2026-09-03T12:00:00+00:00'],
-            $written->metadata,
-        );
-        self::assertSame(
-            $written->metadata,
-            $storage->read('sessions', 'known')?->metadata,
-        );
+        $this->storage()->set('items', 'record', ['kept' => true, 'metadata' => ['kept' => true]]);
+        $workers = $this->workers(6);
+        try {
+            foreach ($workers as $index => $worker) {
+                $worker->send(['operation' => 'update', 'key' => 'record', 'assignments' => [
+                    ['path' => ['field-' . $index], 'value' => $index],
+                    ['path' => ['metadata', 'field-' . $index], 'value' => $index],
+                ]]);
+            }
+            foreach ($workers as $worker) {
+                self::assertSame(['result' => null], $worker->receive());
+            }
+            $value = $this->storage()->get('items', 'record');
+            self::assertNotNull($value);
+            self::assertTrue($value['kept']);
+            self::assertIsArray($value['metadata']);
+            self::assertTrue($value['metadata']['kept']);
+            foreach (array_keys($workers) as $index) {
+                self::assertSame($index, $value['field-' . $index]);
+                self::assertSame($index, $value['metadata']['field-' . $index]);
+            }
+        } finally {
+            foreach ($workers as $worker) {
+                $worker->close();
+            }
+        }
     }
 
-    public function testDeleteIsIdempotent(): void
+    public function testConcurrentReplacementReadersObserveCompleteValues(): void
     {
-        $storage = new FileStorage($this->directory);
-        $storage->write('sessions', 'known', ['value']);
+        $versions = [['version' => 'a', 'payload' => str_repeat('a', 24000)], ['version' => 'b', 'payload' => str_repeat('b', 24000)]];
+        $this->storage()->set('items', 'record', $versions[0]);
+        [$writer, $reader] = $this->workers(2);
+        try {
+            for ($round = 0; $round < 40; ++$round) {
+                $writer->send(['operation' => 'set', 'key' => 'record', 'value' => $versions[$round % 2]]);
+                $reader->send(['operation' => 'get', 'key' => 'record']);
+                self::assertSame(['result' => null], $writer->receive());
+                $value = $reader->receive()['result'];
+                self::assertContains($value, $versions);
+            }
+        } finally {
+            $writer->close();
+            $reader->close();
+        }
+    }
 
-        $storage->delete('sessions', 'known');
-        $storage->delete('sessions', 'known');
+    public function testConcurrentReadersAndDeletesObserveNullOrCompleteValues(): void
+    {
+        [$deleter, $reader] = $this->workers(2);
+        $value = ['payload' => str_repeat('complete', 1000)];
+        try {
+            for ($round = 0; $round < 20; ++$round) {
+                $this->storage()->set('items', 'record', $value);
+                $deleter->send(['operation' => 'delete', 'key' => 'record']);
+                $reader->send(['operation' => 'get', 'key' => 'record']);
+                self::assertSame(['result' => null], $deleter->receive());
+                self::assertContains($reader->receive()['result'], [null, $value]);
+                self::assertNull($this->storage()->get('items', 'record'));
+            }
+        } finally {
+            $deleter->close();
+            $reader->close();
+        }
+    }
 
-        self::assertNull($storage->read('sessions', 'known'));
+    public function testClearAndCreateProduceASerializableNamespaceSnapshot(): void
+    {
+        [$clearer, $creator, $reader] = $this->workers(3);
+        try {
+            for ($round = 0; $round < 15; ++$round) {
+                $storage = $this->storage();
+                $storage->clear('items');
+                $before = [];
+                for ($index = 0; $index < 8; ++$index) {
+                    $key = 'old-' . $index;
+                    $storage->create('items', ['old' => true], $key);
+                    $before[] = ['key' => $key, 'value' => ['old' => true]];
+                }
+                $new = ['key' => 'new', 'value' => ['new' => true]];
+                $clearer->send(['operation' => 'clear']);
+                $creator->send(['operation' => 'create', 'key' => 'new', 'value' => $new['value']]);
+                $reader->send(['operation' => 'list']);
+                self::assertSame(['result' => null], $clearer->receive());
+                self::assertSame(['result' => 'new'], $creator->receive());
+                self::assertContains($reader->receive()['result'], [[], [$new], $before, [...$before, $new]]);
+                self::assertContains($storage->list('items'), [[], [$new]]);
+            }
+        } finally {
+            $clearer->close();
+            $creator->close();
+            $reader->close();
+        }
+    }
+
+    /** @return list<StorageWorker> */
+    private function workers(int $count): array
+    {
+        $workers = [];
+        for ($index = 0; $index < $count; ++$index) {
+            $workers[] = new StorageWorker($this->directory);
+        }
+        return $workers;
     }
 
     private function removeDirectory(string $directory): void
@@ -430,18 +283,17 @@ final class FileStorageTest extends TestCase
         if (!is_dir($directory)) {
             return;
         }
-
-        foreach (scandir($directory) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
+        foreach (scandir($directory) ?: [] as $name) {
+            if ($name === '.' || $name === '..') {
                 continue;
             }
-
-            $path = $directory . '/' . $entry;
-            is_dir($path) && !is_link($path)
-                ? $this->removeDirectory($path)
-                : unlink($path);
+            $path = $directory . '/' . $name;
+            if (is_dir($path) && !is_link($path)) {
+                $this->removeDirectory($path);
+            } else {
+                unlink($path);
+            }
         }
-
         rmdir($directory);
     }
 }

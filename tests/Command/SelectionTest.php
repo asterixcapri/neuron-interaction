@@ -15,7 +15,7 @@ use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Event\SessionChanged;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 
@@ -25,7 +25,7 @@ final class SelectionTest extends TestCase
 {
     public function testResumeRequestsSelectionThenInstallsTheChosenHistoryOnlyOnTheSecondInvocation(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'owner');
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
         $stored = $store->create();
         SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
         $active = $store->create();
@@ -53,7 +53,7 @@ final class SelectionTest extends TestCase
 
     public function testResumeNormalizesItsOwnWhitespaceArguments(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'owner');
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
         $stored = $store->create();
         SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
         $conversation = new Conversation(new Agent(), $store->create());
@@ -69,7 +69,7 @@ final class SelectionTest extends TestCase
 
     public function testResumeWithAKeyNeedsNoPriorSelectionAndUnknownKeysLeaveTheSessionUnchanged(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $store = new SessionStore($storage, 'owner');
         $stored = $store->create();
         SessionHistory::of($stored)->addMessage(new UserMessage('Direct resume'));
@@ -97,7 +97,7 @@ final class SelectionTest extends TestCase
 
     public function testResumeWithoutStoredHistoryNotifiesInsteadOfRequestingAnEmptySelection(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'owner');
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands(new ResumeCommand($store)));
         $events = iterator_to_array($conversation->sendInput('/resume'));

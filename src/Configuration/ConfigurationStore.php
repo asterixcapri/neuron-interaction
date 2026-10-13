@@ -7,8 +7,8 @@ namespace NeuronInteraction\Configuration;
 use InvalidArgumentException;
 use JsonException;
 use NeuronInteraction\Storage\DuplicateKeyException;
-use NeuronInteraction\Storage\EntryStorageInterface;
 use NeuronInteraction\Storage\MissingEntryException;
+use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
 use function hash;
@@ -27,14 +27,13 @@ use const JSON_THROW_ON_ERROR;
 
 final class ConfigurationStore
 {
-    // Direct preferences never read or overwrite legacy named configurations.
     private const string NAMESPACE = 'preferences';
 
     // Keep numeric preference names as object fields despite PHP array-key coercion.
     private const string FIELD_PREFIX = 'preference-';
 
     public function __construct(
-        private readonly EntryStorageInterface $storage,
+        private readonly StorageInterface $storage,
         private readonly string $userId,
     ) {}
 

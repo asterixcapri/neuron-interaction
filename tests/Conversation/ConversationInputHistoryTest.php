@@ -20,8 +20,8 @@ use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\FileEntryStorage;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\FileStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -60,8 +60,8 @@ final class ConversationInputHistoryTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testOriginalInputsAreRecordedBeforeProcessingAndGeneratedPromptsAreExcluded(bool $files): void
     {
-        $storage = new InMemoryEntryStorage();
-        $history = new InputHistory($files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage(), 'owner');
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $history = new InputHistory($storage, 'owner');
         $provider = new FakeAIProvider(new AssistantMessage('Answer'), new AssistantMessage('Summary'));
         $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore($storage, 'owner'))->create());
         self::assertNull($conversation->inputHistory());
@@ -124,8 +124,8 @@ final class ConversationInputHistoryTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testInputIsRetainedWhenPreparationFails(bool $files): void
     {
-        $storage = new InMemoryEntryStorage();
-        $history = new InputHistory($files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage(), 'owner');
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
+        $history = new InputHistory($storage, 'owner');
         $conversation = new Conversation(new Agent(), (new SessionStore($storage, 'owner'))->create());
         $conversation->setInputHistory($history);
         $processor = $this->createStub(MessageProcessorInterface::class);

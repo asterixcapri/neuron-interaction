@@ -16,7 +16,7 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -30,7 +30,7 @@ final class UserMessagePreparationTest extends TestCase
         $second = new PreparationRecorder('B');
         $processors = new MessageProcessors($first, $second);
         $provider = new FakeAIProvider(new AssistantMessage('One'), new AssistantMessage('Two'), new AssistantMessage('Three'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryEntryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
         $conversation->setMessageProcessors($processors);
         $original = new UserMessage('First');
         $original->addMetadata('origin', 'human');
@@ -70,7 +70,7 @@ final class UserMessagePreparationTest extends TestCase
             }
         };
         $provider = new FakeAIProvider();
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryEntryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
         $conversation->setMessageProcessors(new MessageProcessors($processor));
         foreach (['fail', 'empty'] as $text) {
             $original = new UserMessage($text);
@@ -99,7 +99,7 @@ final class UserMessagePreparationTest extends TestCase
                 return clone $input;
             }
         };
-        $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), (new SessionStore(new InMemoryEntryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), (new SessionStore(new InMemoryStorage(), 'local'))->create());
         $conversation->setMessageProcessors(new MessageProcessors($processor));
         $otherStream = null;
         $processor->onPrepare = static function () use ($conversation, $processor, &$otherStream): void {
@@ -118,7 +118,7 @@ final class UserMessagePreparationTest extends TestCase
     public function testNonTextAttachmentAndMetadataAreAcceptedWithoutText(): void
     {
         $provider = new FakeAIProvider(new AssistantMessage('Image response'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryEntryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
         $image = (new ImageContent('https://example.com/image.png', SourceType::URL))->addMetadata('image', 'original');
         $message = new UserMessage($image);
         $message->addMetadata('origin', 'attachment');

@@ -15,7 +15,7 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 
 use function iterator_to_array;
@@ -45,7 +45,7 @@ final class ConversationMessagesTest extends TestCase
                 return $display;
             }
         };
-        $sessionStore = new SessionStore(new InMemoryEntryStorage(), 'local');
+        $sessionStore = new SessionStore(new InMemoryStorage(), 'local');
         $session = $sessionStore->create();
         $agent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Summary')));
         $conversation = new Conversation($agent, $session);

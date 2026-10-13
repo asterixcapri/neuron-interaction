@@ -14,8 +14,7 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\FileEntryStorage;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\FileStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
 
@@ -48,7 +47,7 @@ final class LanguageCommand implements CommandInterface
     }
 }
 
-$storage = new FileEntryStorage(\dirname(__DIR__) . '/.storage/custom-command');
+$storage = new FileStorage(\dirname(__DIR__) . '/.storage/custom-command');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
 $language = $configurationStore->get('language', 'English');
 
@@ -56,8 +55,7 @@ $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 $agent->setInstructions("Always respond in {$language}, regardless of the user's language.");
 
-$sessionStorage = new InMemoryEntryStorage();
-$sessionStore = new SessionStore($sessionStorage, 'demo-user');
+$sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
 
 $conversation = new Conversation($agent, $session);

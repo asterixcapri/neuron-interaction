@@ -9,7 +9,7 @@ use NeuronAI\Chat\History\PaginatesMessages;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\MessageDeserializer;
 use NeuronInteraction\Storage\DuplicateKeyException;
-use NeuronInteraction\Storage\EntryStorageInterface;
+use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
 use function is_array;
@@ -29,7 +29,7 @@ final readonly class SessionMessageStore implements MessageStoreInterface
 {
     use PaginatesMessages;
 
-    public function __construct(private EntryStorageInterface $storage, private string $userId) {}
+    public function __construct(private StorageInterface $storage, private string $userId) {}
 
     public function loadActive(string $threadId): array
     {

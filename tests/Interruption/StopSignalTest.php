@@ -6,8 +6,8 @@ namespace NeuronInteraction\Tests\Interruption;
 
 use InvalidArgumentException;
 use NeuronInteraction\Interruption\StopSignal;
-use NeuronInteraction\Storage\EntryStorageInterface;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -18,7 +18,7 @@ final class StopSignalTest extends TestCase
 {
     public function testCreatingACallbackDoesNotAccessStorage(): void
     {
-        $storage = $this->createMock(EntryStorageInterface::class);
+        $storage = $this->createMock(StorageInterface::class);
         $storage->expects(self::never())->method('get');
         $storage->expects(self::never())->method('set');
         $storage->expects(self::never())->method('delete');
@@ -31,7 +31,7 @@ final class StopSignalTest extends TestCase
 
     public function testACallbackConsumesSuccessiveRequestsWithoutLatchingTheStop(): void
     {
-        $signal = new StopSignal(new InMemoryEntryStorage(), 'chat');
+        $signal = new StopSignal(new InMemoryStorage(), 'chat');
         $callback = $signal->stopCallback(pollInterval: 0);
         self::assertFalse($callback());
         $signal->request();
@@ -45,7 +45,7 @@ final class StopSignalTest extends TestCase
 
     public function testEachCallbackHasItsOwnPollingSchedule(): void
     {
-        $storage = $this->createMock(EntryStorageInterface::class);
+        $storage = $this->createMock(StorageInterface::class);
         $storage->expects(self::exactly(2))->method('get')->willReturn(null);
         $signal = new StopSignal($storage, 'chat');
         $first = $signal->stopCallback(pollInterval: 3600);
@@ -67,7 +67,7 @@ final class StopSignalTest extends TestCase
     #[DataProvider('invalidPollIntervals')]
     public function testInvalidPollingIntervalsAreRejected(float $interval): void
     {
-        $signal = new StopSignal(new InMemoryEntryStorage(), 'chat');
+        $signal = new StopSignal(new InMemoryStorage(), 'chat');
         $this->expectException(InvalidArgumentException::class);
         $signal->stopCallback(pollInterval: $interval);
     }

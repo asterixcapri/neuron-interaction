@@ -96,7 +96,7 @@ The following examples build on the objects above unless stated otherwise.
 | Object | Responsibility |
 | --- | --- |
 | `Agent` (Neuron AI) | Calls the provider, runs tools and maintains the model context. |
-| `StorageInterface` | Persists JSON documents. Included implementations use files or memory. |
+| `StorageInterface` | Persists ordered JSON-array entries by namespace and key, in files or memory. |
 | `SessionStore` | Creates, lists, retrieves and deletes sessions for one user. |
 | `Session` | Identifies a saved conversation and exposes its messages, title and metadata. |
 | `Conversation` | Binds the Agent to a Session, dispatches input and returns a stream. |
@@ -170,16 +170,21 @@ $conversation->useSession($restored);
 ```
 
 `list()` returns `SessionSummary` objects, most recently used first, with
-`getKey()`, `getTitle()`, `getLastUsedAt()` and `getSize()` (JSON data size in bytes).
+`getKey()`, `getTitle()` and `getLastUsedAt()`. Ties use the Session key.
+Listing reads small Session records without loading message histories.
 Sessions appear in listings once they contain user-authored text or attachments.
-Empty sessions can still be retrieved by key. `get()` returns `null` for missing
+Creation immediately persists an empty Session, which can be retrieved by key.
+`get()` returns `null` for missing
 sessions or sessions belonging to another user. `delete($key)` removes that
-user's session and does nothing if it is absent.
+user's Session record and all its saved messages, and does nothing if it is absent.
 
 Metadata keys use camelCase and values are strings. Use `getMetadata()`,
 `setMetadata($key, $value)` and `removeMetadata($key)` to manage them.
 Listing filters use exact equality and combine with AND. Updating metadata or
-a title preserves messages and the last-used time. Titles are optional;
+a title changes only the requested fields and preserves messages and the last-used time.
+Each successfully inserted message advances last use, including direct Agent use;
+replaying a saved message ID leaves the original message and last-use time intact.
+Titles are optional;
 `setTitle()` requires nonblank text.
 
 Read saved history through the Session or Conversation:
@@ -200,7 +205,10 @@ applies configured display processors to user messages. Both accept `limit` and
 `before`: pages are chronological, `before` excludes the message with that ID,
 and an unknown ID returns an empty page. Reads load the current saved history.
 The Agent's active model context may be shorter because Neuron archives older
-messages while trimming its context window.
+messages while trimming its context window. Clearing Neuron's history removes
+active and archived messages and hides the empty Session from listings. Reappending
+messages after summarization restores its content flag. The `/clear` command
+starts a new Session and retains the previous one.
 
 To enable automatic title generation, configure a SessionTitleGenerator on the Conversation,
 just as you configure input history:
@@ -447,29 +455,30 @@ use NeuronInteraction\Configuration\ConfigurationStore;
 $settings = new ConfigurationStore($storage, 'local-user');
 $conversation->setConfigurationStore($settings);
 
-$settings->write('model', $model);
-$settings->write('temperature', 0.5);
-$model = $settings->read('model', $model);
-$temperature = $settings->read('temperature', 0.5);
+$settings->set('model', $model);
+$settings->set('temperature', 0.5);
+$model = $settings->get('model', $model);
+$temperature = $settings->get('temperature', 0.5);
 $settings->delete('obsoleteOption');
-$preferences = $settings->entries();
+$preferences = $settings->list();
 ```
 
-Writes persist immediately and preserve other preferences. Values must be
-JSON-compatible scalars, `null` or PHP arrays. Keys are literal preference names.
-The fallback passed to `read()` selects the expected PHP type; a missing or
+Each user has one preferences record. Changes persist immediately through field
+updates and preserve independent preference changes from other instances.
+Values must be JSON-compatible scalars, `null` or PHP arrays. Keys are literal preference names.
+The fallback passed to `get()` selects the expected PHP type; a missing or
 incompatible value returns that fallback without rewriting storage.
 
-| Read | Accepted stored value |
+| Lookup | Accepted stored value |
 | --- | --- |
-| `read('model', 'default-model')` | Nonempty string. |
-| `read('retries', 3)` | Integer. |
-| `read('temperature', 0.5)` | Float; integers are not converted. |
-| `read('enabled', false)` | Boolean. |
-| `read('tools', [])` | Array; validate its elements in your application. |
-| `read('model')` | Nonempty string, otherwise `null`. |
+| `get('model', 'default-model')` | Nonempty string. |
+| `get('retries', 3)` | Integer. |
+| `get('temperature', 0.5)` | Float; integers are not converted. |
+| `get('enabled', false)` | Boolean. |
+| `get('tools', [])` | Array; validate its elements in your application. |
+| `get('model')` | Nonempty string, otherwise `null`. |
 
-An empty string fallback is invalid. `entries()` returns raw stored values,
+An empty string fallback is invalid. `list()` returns raw stored values,
 including nulls and empty strings. Storage errors propagate.
 A Conversation without a supplied ConfigurationStore uses its own transient
 in-memory store. Persisting a model preference does not configure the Agent's
@@ -483,21 +492,27 @@ conversation. Use it to implement recall in a terminal or web composer:
 ```php
 use NeuronInteraction\InputHistory\InputHistory;
 
-$inputs = new InputHistory($storage);
+$inputs = new InputHistory($storage, 'local-user');
 $conversation->setInputHistory($inputs);
 $submitted = $inputs->list(); // UserMessage objects, oldest first.
+$recentInputs = $inputs->list(20); // Latest 20 inputs, still oldest first.
 ```
 
 With this configured, `sendInput()` records original messages and commands
 before processing or execution, even if those later fail. Prompts generated by
 commands are excluded. Attachments and metadata are preserved; blank inputs are
-ignored and only consecutive identical submissions are collapsed.
+ignored; reasoning-only inputs are skipped and meaningful non-text inputs retained.
+Only consecutive identical authored submissions are collapsed, ignoring Neuron's
+generated message ID.
 
 The application owns navigation, keyboard handling and draft restoration.
 You can also call `append(new UserMessage($text))` directly when recording input
-outside Conversation. InputHistory has no user ID parameter: its entries are
-shared by all instances using the same storage. Give each user a separate storage
-location or a storage adapter that scopes access when histories must be private.
+outside Conversation. InputHistory requires the authenticated user's identity;
+its namespace is shared across that user's Sessions and isolated from other users.
+Every submission is a separate entry, and there is no automatic truncation.
+A limit bounds the returned result, but file-backed recall may scan the whole
+namespace. Comparing the last input and inserting its successor are separate
+operations, so simultaneous identical submissions may both be recorded.
 
 ## Message processors
 
@@ -603,22 +618,78 @@ provider calls in the turn, or guarantee cancellation of remote generation.
 
 ## Storage and web integration
 
-Use `FileStorage($directory)` for JSON files or `InMemoryStorage` for transient
-state. Sessions, preferences, input history and stop signals can share a storage
-implementation. For database or distributed storage, implement `StorageInterface`:
+Use one Storage dependency for Sessions, messages, preferences, input history and
+stop signals. FileStorage writes one complete JSON file per entry; InMemoryStorage
+keeps the same contract in one process. The modules establish their own namespaces:
+SessionStore, ConfigurationStore and InputHistory receive the authenticated user ID.
+The default Session message adapter uses the same Storage; a MessageStoreInterface
+override is optional.
+
+```php
+use NeuronInteraction\Configuration\ConfigurationStore;
+use NeuronInteraction\InputHistory\InputHistory;
+use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\FileStorage;
+
+$storage = new FileStorage(__DIR__ . '/interaction-state');
+$userId = 'local-user'; // Use the authenticated identity in your application.
+$sessions = new SessionStore($storage, $userId);
+$settings = new ConfigurationStore($storage, $userId);
+$inputs = new InputHistory($storage, $userId);
+```
+
+Implement `StorageInterface` for another persistence backend:
 
 | Method | Contract |
 | --- | --- |
-| `create($namespace, $data, $metadata, $key)` | Return a StoredDocument with the supplied or generated key; fail if the key already exists. |
-| `read($namespace, $key)` | Return a StoredDocument or `null` when absent. |
-| `write($namespace, $key, $data, $metadata)` | Create or replace the document and return it. |
-| `delete($namespace, $key)` | Remove the document if present. |
-| `entries($namespace, $metadata)` | Iterate documents matching all metadata filters exactly. |
+| `create($namespace, $value, $key = null)` | Insert without replacement and return the supplied or generated opaque string key. An existing supplied key throws `DuplicateKeyException`. |
+| `get($namespace, $key)` | Return the array value or `null` when absent. Missing reads create no storage state. |
+| `set($namespace, $key, $value)` | Insert or replace the complete value. Replacement preserves insertion position. |
+| `update($namespace, $key, $assignments = [], $removals = [])` | Atomically assign or remove selected fields of an existing entry. Absence throws `MissingEntryException`. |
+| `delete($namespace, $key)` | Remove the entry if present. Recreating it gives it a new insertion position. |
+| `list($namespace, $limit = null)` | Return key/value pairs oldest insertion first. A positive limit selects the latest entries in that order; zero returns none and negatives are invalid. |
+| `clear($namespace)` | Remove all entries in that namespace, leaving other namespaces intact. |
 
-`StoredDocument` exposes `key`, `data`, `metadata` and `size()`. Documents contain
-JSON-compatible array data and string metadata. Included adapters require
-namespaces and keys to start with a letter or digit, followed by letters, digits,
-dots, underscores or hyphens. Metadata names use camelCase.
+Values are JSON-compatible PHP arrays containing arrays, scalars and nulls;
+objects, recursive arrays, invalid UTF-8 and non-finite numbers are rejected.
+Stored values and returned snapshots are detached from caller references. Namespace
+and key identifiers start with a letter or digit, followed by letters, digits,
+dots, underscores or hyphens. Numeric-looking keys remain strings in list results.
+Storage has no document metadata, metadata filters or message-specific operations.
+
+Field paths contain literal string segments. A dot in a segment is part of the
+name. Assigning null retains the field; removals delete it. For example:
+
+```php
+$key = $storage->create('application', ['metadata' => ['project' => 'alpha', 'obsolete' => true]]);
+$storage->update('application', $key, [
+    ['path' => ['metadata', 'project'], 'value' => 'beta'],
+    ['path' => ['metadata', 'note'], 'value' => null],
+], removals: [['metadata', 'obsolete']]);
+```
+
+Missing intermediate objects can be created by assignments. Traversing a scalar
+or indexed list fails; replace a list as a whole instead. Empty paths and overlapping
+paths are rejected, and any invalid update leaves the entire entry unchanged.
+An empty update is a no-op on an existing entry. Delete and clear are idempotent.
+
+Both adapters guarantee atomic individual operations, including supplied-key
+creation and nested updates. FileStorage coordinates namespace mutations and readers,
+publishes complete values through atomic file replacement and preserves ordering
+when reopened. A write changes the affected entry, rather than rewriting a growing
+history. Listing scans and sorts the namespace: a result limit does not guarantee
+bounded filesystem work. There is no persistent query index, JSONL log or compaction.
+More entries also mean more files to read; this design makes no throughput claim.
+
+These guarantees do not extend to transactions across entries or namespaces.
+Message insertion and Session-use registration, Session deletion and batch
+archiving are multi-operation workflows, and failures propagate. The Host
+Application serializes overlapping turns, archive, clear and delete for one Session.
+Independent ChatHistory instances do not coordinate a conversation automatically.
+
+The Storage API and file format are breaking changes. Existing documents are not
+migrated or automatically backfilled. Use a fresh root for new state; see the
+[pending Storage release notes](docs/release-notes/storage-redesign.md) for API changes.
 
 For each web request, authenticate the user, build their SessionStore, retrieve
 or create the authorized Session, configure the Agent, and construct Conversation.

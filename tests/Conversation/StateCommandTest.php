@@ -20,7 +20,7 @@ use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SessionChanged;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -31,7 +31,7 @@ final class StateCommandTest extends TestCase
 {
     public function testClearStartsANewSessionWithoutDeletingTheOldOneAndResumeRestoresIt(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'owner');
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
         $original = $store->create();
         $original->setTitle('Previous subject');
         SessionHistory::of($original)->addMessage(new UserMessage('Saved history'));
@@ -52,7 +52,7 @@ final class StateCommandTest extends TestCase
 
     public function testStateChangesAreImmediateAndEventsPrecedeTheOriginalCommandFailure(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'owner');
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
         $selected = $store->create();
         $selected->setTitle('Selected');
         $replacement = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('New answer')));
@@ -109,8 +109,8 @@ final class StateCommandTest extends TestCase
 
     public function testCommandCanSelectASessionProvidedByItsOwnStore(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'owner');
-        $selected = (new SessionStore(new InMemoryEntryStorage(), 'other'))->create();
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $selected = (new SessionStore(new InMemoryStorage(), 'other'))->create();
         $replacement = new Agent();
         $command = $this->switchCommand($selected, $replacement);
         $conversation = new Conversation(new Agent(), $store->create());
@@ -128,7 +128,7 @@ final class StateCommandTest extends TestCase
 
     public function testAnAlreadyStartedResponseRetainsItsAgentAndSessionWhenACommandSwitchesThem(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'owner');
+        $store = new SessionStore(new InMemoryStorage(), 'owner');
         $original = $store->create();
         $selected = $store->create();
         $newAgent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Selected answer')));

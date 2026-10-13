@@ -17,7 +17,7 @@ use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 
 use function iterator_to_array;
@@ -28,7 +28,7 @@ final class HelpAndExitTest extends TestCase
     {
         $conversation = new Conversation(
             new Agent(),
-            (new SessionStore(new InMemoryEntryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
         );
         $conversation->setCommands(new Commands(new HelpCommand('/guide'), new ExitCommand('/quit')));
         $stream = $conversation->sendInput('/guide');
@@ -43,11 +43,11 @@ final class HelpAndExitTest extends TestCase
 
     public function testExitCanBeIgnoredWithoutEndingConversationOrStoppingResponse(): void
     {
-        $stop = new StopSignal(new InMemoryEntryStorage(), 'response');
+        $stop = new StopSignal(new InMemoryStorage(), 'response');
         $provider = new FakeAIProvider(new AssistantMessage('Still available'));
         $conversation = new Conversation(
             (new Agent())->setAiProvider($provider),
-            (new SessionStore(new InMemoryEntryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
         );
         $conversation->setStopSignal($stop);
         $conversation->setCommands(new Commands(new ExitCommand(), new HelpCommand()));
@@ -85,7 +85,7 @@ final class HelpAndExitTest extends TestCase
         };
         $conversation = new Conversation(
             new Agent(),
-            (new SessionStore(new InMemoryEntryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
         );
         $conversation->setCommands(new Commands($command));
         $events = iterator_to_array($conversation->sendInput('/ordered'));

@@ -7,9 +7,9 @@ namespace NeuronInteraction\Tests\Configuration;
 use InvalidArgumentException;
 use JsonSerializable;
 use NeuronInteraction\Configuration\ConfigurationStore;
-use NeuronInteraction\Storage\EntryStorageInterface;
-use NeuronInteraction\Storage\FileEntryStorage;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\FileStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -44,10 +44,10 @@ final class ConfigurationStoreTest extends TestCase
     {
         $script = <<<'PHP'
             use NeuronInteraction\Configuration\ConfigurationStore;
-            use NeuronInteraction\Storage\FileEntryStorage;
+            use NeuronInteraction\Storage\FileStorage;
 
             require $argv[1];
-            $store = new ConfigurationStore(new FileEntryStorage($argv[2]), 'alice');
+            $store = new ConfigurationStore(new FileStorage($argv[2]), 'alice');
             echo "ready\n";
             fgets(STDIN);
             $store->set($argv[3], 'value:' . $argv[3]);
@@ -88,7 +88,7 @@ final class ConfigurationStoreTest extends TestCase
             }
         }
 
-        $reopened = new ConfigurationStore(new FileEntryStorage($this->directory), 'alice');
+        $reopened = new ConfigurationStore(new FileStorage($this->directory), 'alice');
         self::assertCount(8, $reopened->list());
         for ($index = 0; $index < 8; ++$index) {
             self::assertSame('value:preference.' . $index, $reopened->get('preference.' . $index));
@@ -113,7 +113,7 @@ final class ConfigurationStoreTest extends TestCase
 
     public function testInitializationFailuresAreNotTreatedAsDuplicateConflicts(): void
     {
-        $storage = $this->createMock(EntryStorageInterface::class);
+        $storage = $this->createMock(StorageInterface::class);
         $storage->expects(self::once())->method('create')->willThrowException(new RuntimeException('Initialization failed'));
         $storage->expects(self::never())->method('update');
         $store = new ConfigurationStore($storage, 'alice');
@@ -168,14 +168,14 @@ final class ConfigurationStoreTest extends TestCase
         yield 'file' => [true];
     }
 
-    private function storage(bool $file): EntryStorageInterface
+    private function storage(bool $file): StorageInterface
     {
-        return $file ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        return $file ? new FileStorage($this->directory) : new InMemoryStorage();
     }
 
     public function testInvalidFallbackIsRejectedEvenWhenTheStoredValueIsUsable(): void
     {
-        $store = new ConfigurationStore(new InMemoryEntryStorage(), 'alice');
+        $store = new ConfigurationStore(new InMemoryStorage(), 'alice');
         $store->set('model', 'chosen-model');
         foreach (['', INF, NAN, "\xB1", new stdClass(), [new stdClass()]] as $fallback) {
             try {
@@ -240,7 +240,7 @@ final class ConfigurationStoreTest extends TestCase
         $store->set('temperature', 1.0);
         $store->set('model', 'second');
         $store->set('nothing', null);
-        $reopened = new ConfigurationStore($file ? new FileEntryStorage($this->directory) : $storage, 'alice');
+        $reopened = new ConfigurationStore($file ? new FileStorage($this->directory) : $storage, 'alice');
         self::assertSame('second', $reopened->get('model'));
         self::assertSame('fallback', $reopened->get('nothing', 'fallback'));
         self::assertSame(['model' => 'second', 'temperature' => 1.0, 'nothing' => null], $reopened->list());
@@ -324,8 +324,8 @@ final class ConfigurationStoreTest extends TestCase
 
     public function testIndependentMemoryAdaptersDoNotSharePreferences(): void
     {
-        $first = new ConfigurationStore(new InMemoryEntryStorage(), 'alice');
-        $second = new ConfigurationStore(new InMemoryEntryStorage(), 'alice');
+        $first = new ConfigurationStore(new InMemoryStorage(), 'alice');
+        $second = new ConfigurationStore(new InMemoryStorage(), 'alice');
         $first->set('model', 'first');
         self::assertSame([], $second->list());
     }
@@ -343,7 +343,7 @@ final class ConfigurationStoreTest extends TestCase
 
     public function testMissingReadsAndDeletesDoNotRequireWritableStorage(): void
     {
-        $storage = $this->createStub(EntryStorageInterface::class);
+        $storage = $this->createStub(StorageInterface::class);
         $storage->method('get')->willReturn(null);
         $storage->method('update')->willThrowException(new RuntimeException('Storage is read-only'));
         $storage->method('create')->willThrowException(new RuntimeException('Storage is read-only'));
@@ -356,7 +356,7 @@ final class ConfigurationStoreTest extends TestCase
 
     public function testWriteFailuresRemainObservable(): void
     {
-        $storage = $this->createStub(EntryStorageInterface::class);
+        $storage = $this->createStub(StorageInterface::class);
         $storage->method('update')->willThrowException(new RuntimeException('Storage unavailable'));
         $store = new ConfigurationStore($storage, 'alice');
         $this->expectException(RuntimeException::class);
@@ -381,7 +381,7 @@ final class ConfigurationStoreTest extends TestCase
 
     public function testDeletionFailureRemainsObservableAndPreservesTheValue(): void
     {
-        $storage = $this->createStub(EntryStorageInterface::class);
+        $storage = $this->createStub(StorageInterface::class);
         $storage->method('get')->willReturn(['preference-model' => 'previous']);
         $storage->method('update')->willThrowException(new RuntimeException('Storage unavailable'));
         $storage->method('delete')->willThrowException(new RuntimeException('Storage unavailable'));

@@ -6,8 +6,8 @@ namespace NeuronInteraction\Tests\Storage;
 
 use InvalidArgumentException;
 use NeuronInteraction\Storage\DuplicateKeyException;
-use NeuronInteraction\Storage\EntryStorageInterface;
 use NeuronInteraction\Storage\MissingEntryException;
+use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
@@ -16,9 +16,9 @@ use function array_column;
 use const INF;
 
 /** Shared public outcomes: each adapter supplies only its factory. */
-abstract class EntryStorageContract extends TestCase
+abstract class StorageContract extends TestCase
 {
-    abstract protected function storage(): EntryStorageInterface;
+    abstract protected function storage(): StorageInterface;
 
     public function testCreateAndMissingReads(): void
     {

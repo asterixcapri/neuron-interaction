@@ -6,7 +6,7 @@ namespace NeuronInteraction\Interruption;
 
 use Closure;
 use InvalidArgumentException;
-use NeuronInteraction\Storage\EntryStorageInterface;
+use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
 use function hrtime;
@@ -18,7 +18,7 @@ final readonly class StopSignal
 {
     private const string NAMESPACE = 'response-stops';
 
-    public function __construct(private EntryStorageInterface $storage, private string $key) {}
+    public function __construct(private StorageInterface $storage, private string $key) {}
 
     /**
      * Creates a polling callback for Neuron's native stoppable HTTP client.

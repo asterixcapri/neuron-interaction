@@ -10,9 +10,9 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionSummary;
-use NeuronInteraction\Storage\EntryStorageInterface;
-use NeuronInteraction\Storage\FileEntryStorage;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\FileStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -65,9 +65,9 @@ final class SessionMetadataTest extends TestCase
         return ['memory' => [false], 'files' => [true]];
     }
 
-    private function storage(bool $files): EntryStorageInterface
+    private function storage(bool $files): StorageInterface
     {
-        return $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        return $files ? new FileStorage($this->directory) : new InMemoryStorage();
     }
 
     #[DataProvider('storageKinds')]
@@ -77,7 +77,7 @@ final class SessionMetadataTest extends TestCase
         $store = new SessionStore($storage, 'alice');
         $session = $store->create(['projectId' => 'alpha', 'userId' => 'bob', 'lastUsedAt' => 'application value']);
         self::assertSame(['projectId' => 'alpha', 'userId' => 'bob', 'lastUsedAt' => 'application value'], $session->getMetadata());
-        $initial = (new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'alice'))->get($session->getKey());
+        $initial = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice'))->get($session->getKey());
         self::assertNotNull($initial);
         self::assertSame($session->getMetadata(), $initial->getMetadata());
         $messageStore = new SessionMessageStore($storage, 'alice');
@@ -89,7 +89,7 @@ final class SessionMetadataTest extends TestCase
         $session->removeMetadata('absent');
         self::assertEquals($lastUsed, $store->list()[0]->getLastUsedAt());
 
-        $fresh = new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'alice');
+        $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
         $reopened = $fresh->get($session->getKey());
         self::assertNotNull($reopened);
         self::assertSame('alice', $reopened->getUserId());
@@ -111,7 +111,7 @@ final class SessionMetadataTest extends TestCase
         $question = 'Next question';
         $messages->append($session->getKey(), new UserMessage($question));
         $messages->archive($session->getKey(), 2);
-        $fresh = new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'alice');
+        $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
         $reopened = $fresh->get($session->getKey());
         self::assertNotNull($reopened);
         self::assertSame(['projectId' => 'alpha'], $reopened->getMetadata());
@@ -145,7 +145,7 @@ final class SessionMetadataTest extends TestCase
         (new SessionMessageStore($storage, 'bob'))->append((new SessionStore($storage, 'bob'))->create(['projectId' => 'alpha', 'branchName' => 'main', 'userId' => 'bob'])->getKey(), new UserMessage('Another owner'));
         $messageStore->append($first->getKey(), new AssistantMessage('Latest answer'));
         $filter = ['projectId' => 'alpha', 'branchName' => 'main'];
-        $fresh = new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'alice');
+        $fresh = new SessionStore($files ? new FileStorage($this->directory) : $storage, 'alice');
         self::assertSame(['First title', 'Second title'], array_map(static fn(SessionSummary $summary): ?string => $summary->getTitle(), $fresh->list($filter)));
         self::assertSame([], $fresh->list(['missingKey' => 'value']));
         self::assertCount(1, $fresh->list(['userId' => 'bob']));
@@ -155,7 +155,7 @@ final class SessionMetadataTest extends TestCase
 
     public function testInvalidMetadataNamesAreRejectedBeforeWriting(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'alice');
+        $store = new SessionStore(new InMemoryStorage(), 'alice');
         $session = $store->create(['validKey' => 'value']);
         try {
             $session->setMetadata('invalid_key', 'bad');

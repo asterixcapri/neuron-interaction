@@ -35,7 +35,7 @@ final class StorageWorker
     {
         $script = <<<'PHP'
             require $argv[1];
-            $storage = new NeuronInteraction\Storage\FileEntryStorage($argv[2]);
+            $storage = new NeuronInteraction\Storage\FileStorage($argv[2]);
             echo "ready\n";
             flush();
             while (($line = fgets(STDIN)) !== false) {

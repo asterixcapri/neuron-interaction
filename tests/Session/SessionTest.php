@@ -20,8 +20,8 @@ use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Tools\ToolCall;
 use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\FileEntryStorage;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\FileStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use UnexpectedValueException;
@@ -79,7 +79,7 @@ final class SessionTest extends TestCase
 
     public function testItRepresentsAnOwnedEmptyConversation(): void
     {
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local-user'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
 
         self::assertSame([], $session->getMessages());
         self::assertNotSame('', $session->getKey());
@@ -88,7 +88,7 @@ final class SessionTest extends TestCase
 
     public function testReopeningDefersMessageValidationUntilMessagesAreRead(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $store = new SessionStore($storage, 'local-user');
         $created = $store->create();
         $storage->set($created->messageNamespace(), 'malformed', ['message' => [42], 'archived' => false]);
@@ -105,7 +105,7 @@ final class SessionTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testMessagesRoundTripWithTheirSupportedContent(bool $files): void
     {
-        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
         $question = new UserMessage([
             (new TextContent('What is shown?'))->setMetadata(['part' => 1]),
@@ -134,7 +134,7 @@ final class SessionTest extends TestCase
         $messageStore->append($history->getKey(), new ToolCallMessage(tools: [$tool]));
         $messageStore->append($history->getKey(), new ToolResultMessage([$result]));
 
-        $reopened = (new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
 
         self::assertNotNull($reopened);
         $messages = $reopened->getMessages();
@@ -158,7 +158,7 @@ final class SessionTest extends TestCase
 
     public function testSavingReplacesOnlyTheSelectedStorageValue(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $sessionStore = new SessionStore($storage, 'local-user');
         $other = $sessionStore->create();
         $messageStore = new SessionMessageStore($storage, 'local-user');
@@ -180,7 +180,7 @@ final class SessionTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testArchivedMessagesRemainAvailableWhenReopeningTheSession(bool $files): void
     {
-        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
         $messages = new SessionMessageStore($storage, 'local-user');
         $messages->append($history->getKey(), new UserMessage('Earlier question'));
@@ -189,14 +189,14 @@ final class SessionTest extends TestCase
         $messages->append($history->getKey(), new UserMessage($question));
         $messages->archive($history->getKey(), 2);
 
-        $reopened = (new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
         self::assertNotNull($reopened);
         self::assertCount(3, $reopened->getMessages());
         self::assertSame(
             [$question],
             array_map(
                 static fn(Message $message): ?string => $message->getContent(),
-                (new SessionMessageStore($files ? new FileEntryStorage($this->directory) : $storage, 'local-user'))->loadActive($reopened->getKey()),
+                (new SessionMessageStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->loadActive($reopened->getKey()),
             ),
         );
     }
@@ -204,14 +204,14 @@ final class SessionTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testClearingPersistsAnEmptyHistory(bool $files): void
     {
-        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = (new SessionStore($storage, 'local-user'))->create();
         $messageStore = new SessionMessageStore($storage, 'local-user');
         $messageStore->append($history->getKey(), new UserMessage('Remove me'));
 
         $messageStore->clear($history->getKey());
 
-        $reopened = (new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'local-user'))->get($history->getKey());
         self::assertNotNull($reopened);
         self::assertSame(
             [],
@@ -221,7 +221,7 @@ final class SessionTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testImmediateRecordAndDirectAgentUseTrackContentAndDates(bool $files): void
     {
-        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $sessions = new SessionStore($storage, 'owner');
         $session = $sessions->create(['projectId' => 'one']);
         self::assertNotNull($sessions->get($session->getKey()));
@@ -240,7 +240,7 @@ final class SessionTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testDuplicatePreservesArchivedPayloadOrderAndLastUse(bool $files): void
     {
-        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $sessions = new SessionStore($storage, 'owner');
         $session = $sessions->create();
         $store = new SessionMessageStore($storage, 'owner');
@@ -264,7 +264,7 @@ final class SessionTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testResetClearsArchivedEntriesAndReappendRestoresVisibility(bool $files): void
     {
-        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $sessions = new SessionStore($storage, 'owner');
         $session = $sessions->create(['projectId' => 'one']);
         $session->setTitle('Saved title');
@@ -294,7 +294,7 @@ final class SessionTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testSummarizationClearAndReappendPersistsRetainedIds(bool $files): void
     {
-        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $session = (new SessionStore($storage, 'owner'))->create();
         $agent = $session->bindToAgent((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Newest answer'))));
         $agent->setContextWindow(PHP_INT_MAX);
@@ -307,7 +307,7 @@ final class SessionTest extends TestCase
         $history->addMessage($retained);
         $latest = new UserMessage('Latest question');
         $agent->chat($latest);
-        $reopened = (new SessionStore($files ? new FileEntryStorage($this->directory) : $storage, 'owner'))->get($session->getKey());
+        $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, 'owner'))->get($session->getKey());
         self::assertNotNull($reopened);
         $messages = $reopened->getMessages();
         self::assertCount(4, $messages);
@@ -320,7 +320,7 @@ final class SessionTest extends TestCase
 
     public function testNonPersonMessagesNeverCreateOrResetContentVisibility(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $sessions = new SessionStore($storage, 'owner');
         $session = $sessions->create();
         $store = new SessionMessageStore($storage, 'owner');

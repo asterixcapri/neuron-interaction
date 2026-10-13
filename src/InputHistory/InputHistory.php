@@ -8,7 +8,7 @@ use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Message\UserMessageFactory;
-use NeuronInteraction\Storage\EntryStorageInterface;
+use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
 use function hash;
@@ -18,6 +18,7 @@ use function json_decode;
 use function json_encode;
 use function trim;
 
+use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
 
 /** Submitted inputs shared across Sessions and interaction Adapters. */
@@ -25,7 +26,7 @@ final class InputHistory
 {
     private readonly string $namespace;
 
-    public function __construct(private readonly EntryStorageInterface $storage, string $userId)
+    public function __construct(private readonly StorageInterface $storage, string $userId)
     {
         $this->namespace = 'input-history-' . hash('sha256', $userId);
     }
@@ -77,7 +78,7 @@ final class InputHistory
     /** @return array<string, mixed> */
     private function serialize(UserMessage $message): array
     {
-        $decoded = json_decode(json_encode($message, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+        $decoded = json_decode(json_encode($message, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, flags: JSON_THROW_ON_ERROR);
         if (!is_array($decoded)) {
             throw new UnexpectedValueException('A serialized input must be an object.');
         }

@@ -15,8 +15,8 @@ use NeuronAI\Tools\ToolCall;
 use NeuronAI\Tools\ToolOutput;
 use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\EntryStorageInterface;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use UnexpectedValueException;
@@ -27,7 +27,7 @@ final class SessionMessageStoreTest extends TestCase
 {
     public function testArchivingRetainsMessagesAndAppendIsIdempotent(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'alice'))->create();
         $store = new SessionMessageStore($storage, 'alice');
         $threadId = $session->getKey();
@@ -48,7 +48,7 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testMessageIdentitiesAndMetadataRemainStableAcrossReads(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'alice'))->create();
         $store = new SessionMessageStore($storage, 'alice');
         $original = (new UserMessage('Earlier'))->setMetadata(['source' => 'original']);
@@ -65,7 +65,7 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testStructuredToolErrorsRoundTrip(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'alice'))->create();
         $store = new SessionMessageStore($storage, 'alice');
         $call = (new ToolCall(name: 'lookup', callId: 'call-1'))->setResult(ToolOutput::error('Invalid input'));
@@ -80,7 +80,7 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testStoreRejectsAnotherUsersThread(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'bob'))->create();
         $store = new SessionMessageStore($storage, 'alice');
         $this->expectException(UnexpectedValueException::class);
@@ -89,7 +89,7 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testBindingAnotherSessionReturnsAnAgentCopyAndKeepsTheOriginalConversation(): void
     {
-        $sessions = new SessionStore(new InMemoryEntryStorage(), 'alice');
+        $sessions = new SessionStore(new InMemoryStorage(), 'alice');
         $first = $sessions->create();
         $second = $sessions->create();
         $provider = new FakeAIProvider(new AssistantMessage('First answer'), new AssistantMessage('Second answer'));
@@ -107,7 +107,7 @@ final class SessionMessageStoreTest extends TestCase
     }
     public function testBindingPreservesTheAgentsContextWindowAndLeavesTheOriginalUnbound(): void
     {
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'alice'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'alice'))->create();
         $provider = new FakeAIProvider();
         $original = (new Agent())->setAiProvider($provider)->setContextWindow(PHP_INT_MAX);
         $bound = $session->bindToAgent($original);
@@ -124,7 +124,7 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testArchivedConversationsRemainListedAndReadableThroughTheSession(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $sessions = new SessionStore($storage, 'alice');
         $session = $sessions->create();
         $store = new SessionMessageStore($storage, 'alice');
@@ -139,7 +139,7 @@ final class SessionMessageStoreTest extends TestCase
     public function testAppendPropagatesValidationAndIoFailuresWithoutRegisteringUse(): void
     {
         foreach ([new InvalidArgumentException('invalid payload'), new RuntimeException('publication failure')] as $failure) {
-            $storage = $this->createMock(EntryStorageInterface::class);
+            $storage = $this->createMock(StorageInterface::class);
             $storage->expects(self::once())->method('get')->willReturn([]);
             $storage->expects(self::once())->method('create')->willThrowException($failure);
             $storage->expects(self::never())->method('update');
@@ -155,7 +155,7 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testOwnershipIsRequiredForEveryMessageOperation(): void
     {
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'bob'))->create();
         $owner = new SessionMessageStore($storage, 'bob');
         $owner->append($session->getKey(), new UserMessage('Owned content'));

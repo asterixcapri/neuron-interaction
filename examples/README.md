@@ -117,14 +117,16 @@ It does not use XML tags or an abstract processor class.
 
 Conversation automatically records original submissions through `setInputHistory()`: a question
 and `/help`, independently of Session messages. The script lists the saved inputs. Navigation and draft restoration belong to
-the consumer.
+the consumer. InputHistory receives `demo-user` and the same Storage as SessionStore;
+recall follows that user across Sessions, with one saved entry per submission.
+`list(20)` returns the latest 20 inputs in insertion order; history is not truncated.
 
 ## 09 — Configuration
 
 Run `composer configuration` to save Spanish for `demo-user` and apply it to an
 Agent answering an English question. Another user has no saved language.
 ConfigurationStore handles persistence and user scope; the Host applies the
-preference through Agent instructions.
+preference through Agent instructions. The Session uses the same FileStorage.
 
 ## Dependencies, storage and validation
 
@@ -134,8 +136,9 @@ library's Composer installation does not install these example dependencies.
 
 File-backed examples store their state under `.storage/`. SessionStore and
 ConfigurationStore use `demo-user`; an application supplies its authenticated
-user's identity. For InputHistory, the Host supplies Storage scoped to that user. Sessions, input
-history and preferences have separate example directories. Selection, stop and
+user's identity. InputHistory also receives that identity and keeps a user-specific
+namespace. Modules can share one Storage instance and root; the separate example
+directories only keep the demonstrations independent. Selection, stop and
 processor examples use memory so each run begins with only its own data.
 
 Run `composer stan` here to analyse the scripts and shared example code. The

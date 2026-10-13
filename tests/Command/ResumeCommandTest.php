@@ -15,8 +15,8 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\FileEntryStorage;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\FileStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -80,7 +80,7 @@ final class ResumeCommandTest extends TestCase
 
     private function selectionOption(DateTimeImmutable $lastUsedAt, string $content, bool $files): SelectionOption
     {
-        $storage = $files ? new FileEntryStorage($this->directory) : new InMemoryEntryStorage();
+        $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $store = new SessionStore($storage, 'alice');
         $session = $store->create();
         SessionHistory::of($session)->addMessage(new UserMessage($content));

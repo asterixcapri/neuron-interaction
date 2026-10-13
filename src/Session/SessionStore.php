@@ -6,7 +6,7 @@ namespace NeuronInteraction\Session;
 
 use DateTimeImmutable;
 use NeuronAI\Chat\History\MessageStoreInterface;
-use NeuronInteraction\Storage\EntryStorageInterface;
+use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
 use function is_array;
@@ -17,7 +17,7 @@ use function usort;
 /** Owns lookup and lifecycle delegation within one user's Session namespace. */
 final readonly class SessionStore
 {
-    public function __construct(private EntryStorageInterface $storage, private string $userId, private ?MessageStoreInterface $messageStore = null) {}
+    public function __construct(private StorageInterface $storage, private string $userId, private ?MessageStoreInterface $messageStore = null) {}
 
     /** @param array<string, string> $metadata */
     public function create(array $metadata = []): Session

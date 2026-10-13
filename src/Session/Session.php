@@ -13,8 +13,8 @@ use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronInteraction\Storage\EntryStorageInterface;
 use NeuronInteraction\Storage\MissingEntryException;
+use NeuronInteraction\Storage\StorageInterface;
 use UnexpectedValueException;
 
 use function array_values;
@@ -35,7 +35,7 @@ final readonly class Session
     private string $namespace;
 
     public function __construct(
-        private EntryStorageInterface $storage,
+        private StorageInterface $storage,
         private string $key,
         private string $userId,
         ?MessageStoreInterface $messageStore = null,
@@ -45,7 +45,7 @@ final readonly class Session
     }
 
     /** @param array<string, string> $metadata */
-    public static function create(EntryStorageInterface $storage, string $userId, array $metadata = [], ?MessageStoreInterface $messageStore = null): self
+    public static function create(StorageInterface $storage, string $userId, array $metadata = [], ?MessageStoreInterface $messageStore = null): self
     {
         $now = self::now();
         $key = $storage->create(self::namespaceForUser($userId), [

@@ -19,7 +19,7 @@ use NeuronAI\Providers\ProviderResponse;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionTitleGenerator;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
@@ -55,7 +55,7 @@ final class SessionTitleGeneratorTest extends TestCase
             }
         };
 
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local-user'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
         foreach ([
             $input,
             new AssistantMessage('The report needs revision.'),
@@ -85,7 +85,7 @@ final class SessionTitleGeneratorTest extends TestCase
         $provider = new FakeAIProvider(new AssistantMessage('{"title":null}'));
 
 
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local-user'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
         SessionHistory::of($session)->addMessage($message);
 
         self::assertNull((new SessionTitleGenerator($provider))->generate($session));
@@ -101,7 +101,7 @@ final class SessionTitleGeneratorTest extends TestCase
             new AssistantMessage('{"title":null}'),
             new AssistantMessage('{"title":"Configurazione Redis"}'),
         );
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
         $generator = new SessionTitleGenerator($provider);
 
         foreach (['ciao', 'come stai?', 'grazie!', 'non lo so nemmeno io'] as $input) {
@@ -124,7 +124,7 @@ final class SessionTitleGeneratorTest extends TestCase
         $provider = new FakeAIProvider();
 
 
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local-user'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
 
         self::assertNull((new SessionTitleGenerator($provider))->generate($session));
         self::assertSame([], $provider->getRecorded());
@@ -134,7 +134,7 @@ final class SessionTitleGeneratorTest extends TestCase
     public function testPendingMessageIsIncludedWithoutBeingSavedToHistory(): void
     {
         $provider = new FakeAIProvider(new AssistantMessage('{"title":"Redis setup"}'));
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
         $pending = new UserMessage('Configure Redis');
 
         self::assertSame('Redis setup', (new SessionTitleGenerator($provider))->generate($session, $pending));
@@ -148,7 +148,7 @@ final class SessionTitleGeneratorTest extends TestCase
     {
         $requests = new TitleGenerationRequests(['{"title":null}', '{"title":"Redis setup"}']);
         $provider = $this->provider($requests);
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
         SessionHistory::of($session)->addMessage(new UserMessage('Hello'));
         $generator = new SessionTitleGenerator($provider);
 
@@ -171,7 +171,7 @@ final class SessionTitleGeneratorTest extends TestCase
             '{"title":null}', '{"title":null}', '{"title":"Unused"}',
         ]);
         $provider = $this->provider($requests);
-        $storage = new InMemoryEntryStorage();
+        $storage = new InMemoryStorage();
         $session = (new SessionStore($storage, 'local'))->create();
         SessionHistory::of($session)->addMessage(new UserMessage('Hello'));
 
@@ -189,7 +189,7 @@ final class SessionTitleGeneratorTest extends TestCase
     public function testErrorsPropagateAndCountTowardTheConfiguredLimit(): void
     {
         $requests = new TitleGenerationRequests([]);
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
         SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
         $generator = new SessionTitleGenerator($this->provider($requests), maxAttempts: 2);
 
@@ -212,7 +212,7 @@ final class SessionTitleGeneratorTest extends TestCase
     {
         foreach (['invalid', '-1', '1.5'] as $value) {
             $provider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
-            $session = (new SessionStore(new InMemoryEntryStorage(), 'local'))->create();
+            $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
             SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
             $session->setMetadata('titleGenerationAttempts', $value);
 
@@ -232,7 +232,7 @@ final class SessionTitleGeneratorTest extends TestCase
     public function testAnExistingTitleDoesNotStartARequest(): void
     {
         $provider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
-        $session = (new SessionStore(new InMemoryEntryStorage(), 'local'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
         SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
         $session->setTitle('Manual title');
 
@@ -244,7 +244,7 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testATitleAssignedDuringGenerationIsNotOverwritten(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'local');
+        $store = new SessionStore(new InMemoryStorage(), 'local');
         $session = $store->create();
         SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
         $otherSession = $store->get($session->getKey());
@@ -259,7 +259,7 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testASessionDeletedDuringGenerationIsNotRecreated(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'local');
+        $store = new SessionStore(new InMemoryStorage(), 'local');
         $session = $store->create();
         SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
         $requests = new TitleGenerationRequests(['{"title":"Late title"}']);
@@ -277,7 +277,7 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testNoTopicResultDoesNotRecreateASessionDeletedDuringGeneration(): void
     {
-        $store = new SessionStore(new InMemoryEntryStorage(), 'local');
+        $store = new SessionStore(new InMemoryStorage(), 'local');
         $session = $store->create();
         SessionHistory::of($session)->addMessage(new UserMessage('Can you help me?'));
         $requests = new TitleGenerationRequests(['{"title":null}']);

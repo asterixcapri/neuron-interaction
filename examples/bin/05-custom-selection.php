@@ -17,7 +17,7 @@ use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\InMemoryEntryStorage;
+use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
 
@@ -69,7 +69,7 @@ final class ModelCommand implements CommandInterface
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5-nano'));
 
-$storage = new InMemoryEntryStorage();
+$storage = new InMemoryStorage();
 $sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
 
