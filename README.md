@@ -516,54 +516,11 @@ Return a new message without modifying the input or its content blocks, and
 preserve attachments and metadata you do not deliberately transform.
 `forDisplay()` should be deterministic and have no side effects.
 
-For reference expansion, extend `AbstractUserMessageTagProcessor`. This
-`FileUserMessageProcessor` expands `@` references to files within a configured
-directory, such as `@README.md` or `@src/Conversation.php`:
-
-```php
-use NeuronInteraction\Message\AbstractUserMessageTagProcessor;
-use NeuronInteraction\Message\UserMessageProcessors;
-
-final class FileUserMessageProcessor extends AbstractUserMessageTagProcessor
-{
-    public function __construct(private readonly string $directory) {}
-
-    protected function tagName(): string
-    {
-        return 'file';
-    }
-
-    protected function contentFor(string $reference): ?string
-    {
-        $directory = realpath($this->directory);
-        if ($directory === false) {
-            throw new RuntimeException('File directory does not exist.');
-        }
-
-        $root = rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-        $path = realpath($root . $reference);
-        if ($path === false || !str_starts_with($path, $root) || !is_file($path)) {
-            return null;
-        }
-
-        $content = file_get_contents($path);
-        if ($content === false) {
-            throw new RuntimeException('Cannot read file: ' . $reference);
-        }
-        return $content;
-    }
-}
-
-$conversation->setUserMessageProcessors(new UserMessageProcessors(
-    new FileUserMessageProcessor(__DIR__),
-));
-$stream = $conversation->sendInput('Summarize @README.md');
-```
-
-The base class expands the reference to `<file name="README.md">...</file>`,
-preserves the original text for display and avoids expanding its prepared blocks
-again. Returning `null` leaves a reference unchanged. Override `referencePrefix()`
-(default `@`) or `attributesFor()` when needed.
+A processor can keep the person's text intact and append a `TextContent` with
+file contents or Skill instructions. Mark the generated block in its metadata.
+`forDisplay()` returns a copy without that block; the Host Application can call
+`getContent()` on the copy as usual. The Agent and saved History retain the full
+message. Reference recognition and loading belong to the concrete processor.
 
 A `UserMessageProcessors` collection applies preparation in registration order
 and display in reverse order. `addProcessor()` extends the collection;

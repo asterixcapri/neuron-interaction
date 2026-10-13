@@ -99,18 +99,19 @@ handler. This interrupts the HTTP response, not the execution of local tools.
 
 ## 07 — Processors
 
-The user submits `@README.md`. The processor turns it into a
-`<file name="README.md">` tag containing the repository's existing README before
-execution; the response should summarize the project. The script
-confirms through `Conversation::getMessages()` that the saved message includes
-the README, then prints all Session messages through `getDisplayMessages()`.
-The user message shows the original `@README.md` reference, followed by the
-Agent's response, without dumping the whole file.
+The user submits a request containing `@README.md`. The processor keeps that
+text intact and adds a separate `TextContent` containing the repository's README.
+Metadata identifies the added block. Both blocks are sent to the Agent and saved
+in the Session; the response should summarize the project.
 
-`FileUserMessageProcessor` is defined in the example file. Its `tagName()`
-method tells `AbstractUserMessageTagProcessor` to produce a `file` tag from `@` references.
-The base class handles replacement and display; the example class resolves any
-named text file inside the configured directory and returns its contents.
+The script prints Session messages through `getDisplayMessages()`. The processor
+removes its generated blocks from the display copy, so the user message shows
+only the original request, followed by the Agent's response.
+
+`FileUserMessageProcessor` directly implements `UserMessageProcessorInterface`.
+Its `forAgent()` recognizes references, reads files inside the configured
+directory and adds each file once. Its `forDisplay()` filters blocks by metadata.
+It does not use XML tags or an abstract processor class.
 
 ## 08 — Input history
 

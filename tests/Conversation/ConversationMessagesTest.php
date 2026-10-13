@@ -12,7 +12,7 @@ use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Conversation;
-use NeuronInteraction\Message\AbstractUserMessageTagProcessor;
+use NeuronInteraction\Message\UserMessageProcessorInterface;
 use NeuronInteraction\Message\UserMessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -24,15 +24,25 @@ final class ConversationMessagesTest extends TestCase
 {
     public function testDisplayMessagesRestoreReferencesWithoutChangingSavedHistoryOrAttachments(): void
     {
-        $processor = new class extends AbstractUserMessageTagProcessor {
-            protected function tagName(): string
+        $processor = new class implements UserMessageProcessorInterface {
+            public function forAgent(UserMessage $message): UserMessage
             {
-                return 'file';
+                $prepared = clone $message;
+                $prepared->addContent((new TextContent("File: README.md\n\nFile contents"))->addMetadata('file', 'README.md'));
+                return $prepared;
             }
 
-            protected function contentFor(string $reference): string
+            public function forDisplay(UserMessage $message): UserMessage
             {
-                return 'File contents';
+                $display = clone $message;
+                $blocks = [];
+                foreach ($display->getContentBlocks() as $block) {
+                    if (!$block instanceof TextContent || $block->getMetadata('file') !== 'README.md') {
+                        $blocks[] = $block;
+                    }
+                }
+                $display->setContents($blocks);
+                return $display;
             }
         };
         $sessionStore = new SessionStore(new InMemoryStorage(), 'local');
@@ -49,7 +59,9 @@ final class ConversationMessagesTest extends TestCase
         $displayed = $conversation->getDisplayMessages();
 
         self::assertCount(2, $saved);
-        self::assertSame('Read <file name="README.md">File contents</file>', $saved[0]->getContent());
+        self::assertCount(3, $saved[0]->getContentBlocks());
+        self::assertCount(2, $displayed[0]->getContentBlocks());
+        self::assertSame("Read @README.md File: README.md\n\nFile contents", $saved[0]->getContent());
         self::assertSame('Read @README.md', $displayed[0]->getContent());
         self::assertSame('human', $displayed[0]->getMetadata('origin'));
         self::assertSame($saved[0]->getContentBlocks()[1]->jsonSerialize(), $displayed[0]->getContentBlocks()[1]->jsonSerialize());

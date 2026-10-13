@@ -3,9 +3,12 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
+use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Conversation;
-use NeuronInteraction\Message\AbstractUserMessageTagProcessor;
+use NeuronInteraction\Message\UserMessageProcessorInterface;
 use NeuronInteraction\Message\UserMessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
@@ -17,29 +20,60 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
-/** Expands @file references into <file> tags with their text contents. */
-final class FileUserMessageProcessor extends AbstractUserMessageTagProcessor
+/** Adds file contents in separate blocks, keeping the person's text intact. */
+final readonly class FileUserMessageProcessor implements UserMessageProcessorInterface
 {
-    public function __construct(private readonly string $directory) {}
+    private const string FILE_KEY = 'demo:file';
 
-    protected function tagName(): string
+    public function __construct(private string $directory) {}
+
+    public function forAgent(UserMessage $message): UserMessage
     {
-        return 'file';
+        $prepared = clone $message;
+        $loaded = [];
+        foreach ($prepared->getContentBlocks() as $block) {
+            if ($block instanceof TextContent && \is_string($name = $block->getMetadata(self::FILE_KEY))) {
+                $loaded[$name] = true;
+            }
+        }
+        foreach ($prepared->getContentBlocks() as $block) {
+            if (!$block instanceof TextContent || $block instanceof ReasoningContent
+                || \is_string($block->getMetadata(self::FILE_KEY))) {
+                continue;
+            }
+            \preg_match_all('~(?<!\S)@([A-Za-z0-9_./-]+)(?=\s|$)~', $block->content, $matches);
+            foreach ($matches[1] as $name) {
+                if (isset($loaded[$name])) {
+                    continue;
+                }
+                $loaded[$name] = true;
+                $path = \realpath($this->directory . '/' . $name);
+                if ($path === false || !\str_starts_with($path, $this->directory . '/') || !\is_file($path)) {
+                    throw new RuntimeException("File {$name} does not exist in the configured directory.");
+                }
+                $contents = \file_get_contents($path);
+                if ($contents === false) {
+                    throw new RuntimeException("File {$name} could not be read.");
+                }
+                $prepared->addContent((new TextContent("File: {$name}\n\n{$contents}"))->addMetadata(self::FILE_KEY, $name));
+            }
+        }
+
+        return $prepared;
     }
 
-    protected function contentFor(string $name): string
+    public function forDisplay(UserMessage $message): UserMessage
     {
-        $path = \realpath($this->directory . '/' . $name);
-        if ($path === false) {
-            throw new RuntimeException("File {$name} does not exist.");
+        $display = clone $message;
+        $blocks = [];
+        foreach ($display->getContentBlocks() as $block) {
+            if (!$block instanceof TextContent || !\is_string($block->getMetadata(self::FILE_KEY))) {
+                $blocks[] = $block;
+            }
         }
+        $display->setContents($blocks);
 
-        $contents = \file_get_contents($path);
-        if ($contents === false) {
-            throw new RuntimeException("File {$name} could not be read.");
-        }
-
-        return $contents;
+        return $display;
     }
 }
 
@@ -58,7 +92,7 @@ $conversation->setUserMessageProcessors(new UserMessageProcessors(
     new FileUserMessageProcessor(\dirname(__DIR__, 2))
 ));
 
-// Conversation expands @README.md before executing the Agent.
+// Conversation adds the README contents before executing the Agent.
 $input = 'Summarize @README.md in one short sentence.';
 echo 'You: ' . $input . \PHP_EOL;
 echo 'Agent: ';
