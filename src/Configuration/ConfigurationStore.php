@@ -6,9 +6,10 @@ namespace NeuronInteraction\Configuration;
 
 use InvalidArgumentException;
 use JsonException;
-use NeuronInteraction\Storage\StorageInterface;
+use NeuronInteraction\Storage\DuplicateKeyException;
+use NeuronInteraction\Storage\EntryStorageInterface;
+use NeuronInteraction\Storage\MissingEntryException;
 
-use function array_key_exists;
 use function hash;
 use function is_array;
 use function is_bool;
@@ -26,7 +27,7 @@ final class ConfigurationStore
     private const string NAMESPACE = 'preferences';
 
     public function __construct(
-        private readonly StorageInterface $storage,
+        private readonly EntryStorageInterface $storage,
         private readonly string $userId,
     ) {}
 
@@ -40,14 +41,14 @@ final class ConfigurationStore
      *     ($fallback is float ? float :
      *     ($fallback is bool ? bool : array<array-key, mixed>)))))
      */
-    public function read(string $key, mixed $fallback = null): mixed
+    public function get(string $key, mixed $fallback = null): mixed
     {
         self::guardJson($fallback);
         if ($fallback === '') {
             throw new InvalidArgumentException('A string fallback must be non-empty.');
         }
 
-        $values = $this->entries();
+        $values = $this->list();
 
         $value = $values[$key] ?? null;
 
@@ -62,45 +63,39 @@ final class ConfigurationStore
         };
     }
 
-    public function write(string $key, mixed $value): void
+    public function set(string $key, mixed $value): void
     {
         self::guardJson($value);
-        $values = $this->entries();
-        $values[$key] = $value;
-        $this->storage->write(
+        try {
+            $this->storage->create(self::NAMESPACE, [], $this->storageKey());
+        } catch (DuplicateKeyException) {
+            // Another writer has already established this user's record.
+        }
+
+        $this->storage->update(
             self::NAMESPACE,
             $this->storageKey(),
-            self::snapshotArray($values),
-            ['userId' => $this->userId],
+            [['path' => [$key], 'value' => $value]],
         );
     }
 
     public function delete(string $key): void
     {
-        $values = $this->entries();
-        if (!array_key_exists($key, $values)) {
+        if ($this->storage->get(self::NAMESPACE, $this->storageKey()) === null) {
             return;
         }
 
-        unset($values[$key]);
-        $this->storage->write(
-            self::NAMESPACE,
-            $this->storageKey(),
-            self::snapshotArray($values),
-            ['userId' => $this->userId],
-        );
+        try {
+            $this->storage->update(self::NAMESPACE, $this->storageKey(), removals: [[$key]]);
+        } catch (MissingEntryException) {
+            // Removing a preference from an absent record is already complete.
+        }
     }
 
     /** @return array<array-key, mixed> */
-    public function entries(): array
+    public function list(): array
     {
-        $document = $this->storage->read(self::NAMESPACE, $this->storageKey());
-
-        if ($document === null || ($document->metadata['userId'] ?? null) !== $this->userId) {
-            return [];
-        }
-
-        return self::snapshotArray($document->data);
+        return $this->storage->get(self::NAMESPACE, $this->storageKey()) ?? [];
     }
 
     private function storageKey(): string

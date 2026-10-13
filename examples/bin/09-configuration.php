@@ -7,7 +7,7 @@ use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Storage\FileStorage;
+use NeuronInteraction\Storage\FileEntryStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
@@ -16,19 +16,19 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
-$storage = new FileStorage(\dirname(__DIR__) . '/.storage/preferences');
+$storage = new FileEntryStorage(\dirname(__DIR__) . '/.storage/preferences');
 $configurationStore = new ConfigurationStore($storage, 'demo-user');
 
 $language = 'Spanish';
-$configurationStore->write('language', $language);
+$configurationStore->set('language', $language);
 
-echo 'Saved language: ' . $configurationStore->read('language') . \PHP_EOL;
+echo 'Saved language: ' . $configurationStore->get('language') . \PHP_EOL;
 
 $configurationStoreAnotherUser = new ConfigurationStore($storage, 'another-user');
-echo "Another user's language: " . $configurationStoreAnotherUser->read('language') . \PHP_EOL;
+echo "Another user's language: " . $configurationStoreAnotherUser->get('language') . \PHP_EOL;
 
 // Apply the saved preference to the Agent, even when the input is in another language.
-$language = $configurationStore->read('language');
+$language = $configurationStore->get('language');
 
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));

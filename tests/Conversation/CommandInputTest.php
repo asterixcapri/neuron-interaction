@@ -18,6 +18,7 @@ use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\InMemoryEntryStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -81,7 +82,7 @@ final class CommandInputTest extends TestCase
             }
             public function run(CommandContext $context, string $value): void
             {
-                $context->configurationStore()->write('changed', true);
+                $context->configurationStore()->set('changed', true);
                 $context->notify($value);
                 if ($value === 'fail') {
                     throw $this->failure;
@@ -93,7 +94,7 @@ final class CommandInputTest extends TestCase
         $stream->rewind();
         self::assertInstanceOf(Notification::class, $stream->current());
         self::assertSame('fail', $stream->current()->text);
-        self::assertTrue($conversation->configurationStore()->read('changed', false));
+        self::assertTrue($conversation->configurationStore()->get('changed', false));
         try {
             $stream->next();
             self::fail('Expected original failure');
@@ -107,9 +108,9 @@ final class CommandInputTest extends TestCase
     {
         $first = $this->conversation();
         $second = $this->conversation();
-        $first->configurationStore()->write('key', 'first');
-        self::assertNull($second->configurationStore()->read('key'));
-        $store = new ConfigurationStore(new InMemoryStorage(), 'owner');
+        $first->configurationStore()->set('key', 'first');
+        self::assertNull($second->configurationStore()->get('key'));
+        $store = new ConfigurationStore(new InMemoryEntryStorage(), 'owner');
         $provided = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
         $provided->setConfigurationStore($store);
         self::assertSame($store, $provided->configurationStore());
