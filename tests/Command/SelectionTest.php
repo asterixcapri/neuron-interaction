@@ -40,7 +40,7 @@ final class SelectionTest extends TestCase
         $request = $events[0];
         self::assertSame('/return', $request->command);
         self::assertSame($stored->getKey(), $request->options[0]->value);
-        self::assertSame('New session', $request->options[0]->label);
+        self::assertSame('Untitled session', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
         $events = iterator_to_array($conversation->sendInput(new CommandInput($request->command, $request->options[0]->value)));

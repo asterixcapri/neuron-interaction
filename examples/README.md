@@ -75,6 +75,9 @@ This interactive example registers `/resume`, `/clear` and `/exit`. Send a
 normal message, use `/clear`, then choose the earlier Session with `/resume`.
 Sessions remain in memory for this run.
 
+The list shows each Session's title, last use and key. A saved Session without
+a title is labelled “Untitled session”; choose its number to restore the chat.
+
 The consumer displays each SelectionRequest, reads an option number and sends a
 CommandInput on the next loop iteration, after consuming the previous stream.
 Enter cancels the choice. SessionChanged shows where a client refreshes its

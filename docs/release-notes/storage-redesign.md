@@ -67,6 +67,8 @@ excludes empty Sessions, filters application metadata and orders by latest use
 with a key tie-breaker, without reading message histories. SessionSummary::getSize()
 and the ResumeCommand byte-size label are removed. Title and metadata changes
 preserve messages and last use through field updates.
+ResumeCommand labels saved Sessions without a title as “Untitled session”.
+The selection example displays last use and the Session key alongside the label.
 
 Message IDs, structured payloads and archived messages survive reopening. Replayed
 IDs do not replace saved messages, reset archive state or advance Session use.

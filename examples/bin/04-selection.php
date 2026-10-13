@@ -75,7 +75,9 @@ while (true) {
         } elseif ($event instanceof SelectionRequest) {
             echo $event->prompt . \PHP_EOL;
             foreach ($event->options as $index => $option) {
-                echo ($index + 1) . '. ' . $option->label . \PHP_EOL;
+                echo ($index + 1) . '. ' . $option->label
+                    . ' — ' . $option->description
+                    . ' [' . $option->value . ']' . \PHP_EOL;
             }
 
             echo 'Choose an option number (Enter to cancel): ';
