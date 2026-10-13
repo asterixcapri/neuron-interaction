@@ -122,6 +122,21 @@ final class ConfigurationStoreTest extends TestCase
         $store->set('model', 'new');
     }
 
+    #[DataProvider('adapters')]
+    public function testNumericNamesRemainEditableWhenInsertedFirst(bool $file): void
+    {
+        $store = new ConfigurationStore($this->storage($file), 'alice');
+        $store->set('0', 'zero');
+        $store->set('1', 'one');
+        $store->set('0', 'updated');
+        self::assertSame([0 => 'updated', 1 => 'one'], $store->list());
+        $store->delete('0');
+        self::assertSame([1 => 'one'], $store->list());
+        $store->set('preference-1', 'distinct');
+        self::assertSame('one', $store->get('1'));
+        self::assertSame('distinct', $store->get('preference-1'));
+    }
+
     private string $directory;
 
     protected function setUp(): void
@@ -367,7 +382,7 @@ final class ConfigurationStoreTest extends TestCase
     public function testDeletionFailureRemainsObservableAndPreservesTheValue(): void
     {
         $storage = $this->createStub(EntryStorageInterface::class);
-        $storage->method('get')->willReturn(['model' => 'previous']);
+        $storage->method('get')->willReturn(['preference-model' => 'previous']);
         $storage->method('update')->willThrowException(new RuntimeException('Storage unavailable'));
         $storage->method('delete')->willThrowException(new RuntimeException('Storage unavailable'));
         $store = new ConfigurationStore($storage, 'alice');

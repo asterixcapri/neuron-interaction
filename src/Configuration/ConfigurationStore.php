@@ -9,6 +9,7 @@ use JsonException;
 use NeuronInteraction\Storage\DuplicateKeyException;
 use NeuronInteraction\Storage\EntryStorageInterface;
 use NeuronInteraction\Storage\MissingEntryException;
+use UnexpectedValueException;
 
 use function hash;
 use function is_array;
@@ -18,6 +19,9 @@ use function is_int;
 use function is_object;
 use function is_string;
 use function json_encode;
+use function str_starts_with;
+use function strlen;
+use function substr;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -25,6 +29,9 @@ final class ConfigurationStore
 {
     // Direct preferences never read or overwrite legacy named configurations.
     private const string NAMESPACE = 'preferences';
+
+    // Keep numeric preference names as object fields despite PHP array-key coercion.
+    private const string FIELD_PREFIX = 'preference-';
 
     public function __construct(
         private readonly EntryStorageInterface $storage,
@@ -75,7 +82,7 @@ final class ConfigurationStore
         $this->storage->update(
             self::NAMESPACE,
             $this->storageKey(),
-            [['path' => [$key], 'value' => $value]],
+            [['path' => [self::FIELD_PREFIX . $key], 'value' => $value]],
         );
     }
 
@@ -86,7 +93,7 @@ final class ConfigurationStore
         }
 
         try {
-            $this->storage->update(self::NAMESPACE, $this->storageKey(), removals: [[$key]]);
+            $this->storage->update(self::NAMESPACE, $this->storageKey(), removals: [[self::FIELD_PREFIX . $key]]);
         } catch (MissingEntryException) {
             // Removing a preference from an absent record is already complete.
         }
@@ -95,7 +102,15 @@ final class ConfigurationStore
     /** @return array<array-key, mixed> */
     public function list(): array
     {
-        return $this->storage->get(self::NAMESPACE, $this->storageKey()) ?? [];
+        $preferences = [];
+        foreach ($this->storage->get(self::NAMESPACE, $this->storageKey()) ?? [] as $field => $value) {
+            if (!is_string($field) || !str_starts_with($field, self::FIELD_PREFIX)) {
+                throw new UnexpectedValueException('A stored preference field must use its encoded name.');
+            }
+            $preferences[substr($field, strlen(self::FIELD_PREFIX))] = $value;
+        }
+
+        return $preferences;
     }
 
     private function storageKey(): string
