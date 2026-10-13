@@ -75,6 +75,10 @@ This interactive example registers `/resume`, `/clear` and `/exit`. Send a
 normal message, use `/clear`, then choose the earlier Session with `/resume`.
 Sessions remain in memory for this run.
 
+Conversation automatically generates a title once a concrete topic emerges,
+using the same provider as the Agent. SessionTitleChanged prints the generated
+title; the configuration also applies to new Sessions started with `/clear`.
+
 The list shows each Session's title, last use and key. A saved Session without
 a title is labelled “Untitled session”; choose its number to restore the chat.
 
