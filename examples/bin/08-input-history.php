@@ -10,6 +10,7 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
+use NeuronInteraction\Storage\FileEntryStorage;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteractionDemo\AIProviderFactory;
 use Symfony\Component\Dotenv\Dotenv;
@@ -26,7 +27,7 @@ $storage = new FileStorage(\dirname(__DIR__) . '/.storage/input-history');
 $sessionStore = new SessionStore($storage, 'demo-user');
 $session = $sessionStore->create();
 
-$inputHistory = new InputHistory($storage);
+$inputHistory = new InputHistory(new FileEntryStorage(\dirname(__DIR__) . '/.storage/input-history'), 'demo-user');
 
 $conversation = new Conversation($agent, $session);
 $conversation->setCommands(new Commands(new HelpCommand()));
