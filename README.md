@@ -146,6 +146,12 @@ pass through without conversion. After fully consuming the stream, `getReturn()`
 returns the last `AgentState`, or `null` if no Agent prompt executed.
 
 Preparation, provider and storage exceptions propagate to your application.
+When Agent execution fails, Conversation checks the committed history. If its
+last message is a user input or tool result, it appends an assistant note marking
+the interrupted response so the next input can start a new turn. Empty histories,
+completed responses and tool calls without results remain unchanged. Recovery
+runs only on execution errors; it never retries tools. If recovery also fails,
+the stream emits an error Notification before propagating the original exception.
 Handle preparation errors around `sendInput()` and execution errors around
 iteration. Breaking the loop pauses the generator; it does not request a stop.
 Release an abandoned generator and its other references, for example with

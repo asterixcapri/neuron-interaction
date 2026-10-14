@@ -9,6 +9,7 @@ use Generator;
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Agent\AgentState;
+use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\UserMessage;
@@ -29,6 +30,7 @@ use NeuronInteraction\Storage\InMemoryStorage;
 use Throwable;
 
 use function array_any;
+use function end;
 use function is_string;
 use function trim;
 
@@ -326,8 +328,30 @@ final class Conversation
         }
 
         $session->assertExists();
-        $state = yield from $agent->stream($message);
+        try {
+            $state = yield from $agent->stream($message);
+        } catch (Throwable $exception) {
+            try {
+                $this->closeInterruptedTurn($agent);
+            } catch (Throwable $recoveryError) {
+                yield new Notification(
+                    'Conversation recovery failed: ' . $recoveryError->getMessage(),
+                    NotificationLevel::Error,
+                );
+            }
+            throw $exception;
+        }
         $session->registerUse();
         return $state;
+    }
+
+    /** Close only a committed input or tool result still awaiting an answer. */
+    private function closeInterruptedTurn(Agent $agent): void
+    {
+        $history = $agent->getChatHistory();
+        $messages = $history->getMessages();
+        if (end($messages) instanceof UserMessage) {
+            $history->addMessage(new AssistantMessage('The previous response was interrupted by an error.'));
+        }
     }
 }
