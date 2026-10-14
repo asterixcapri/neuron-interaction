@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\FileMessageStore;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
@@ -33,7 +34,8 @@ $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 $agent->setInstructions("Always respond in {$language}, regardless of the user's language.");
 
-$sessionStore = new SessionStore($storage, 'demo-user');
+$messageStore = new FileMessageStore(\dirname(__DIR__) . '/.storage/preferences/messages');
+$sessionStore = new SessionStore($storage, $messageStore, 'demo-user');
 $session = $sessionStore->create();
 
 $conversation = new Conversation($agent, $session);

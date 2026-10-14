@@ -8,6 +8,7 @@ use Closure;
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\UserMessage;
@@ -26,11 +27,12 @@ final class UserMessagePreparationTest extends TestCase
 {
     public function testEverySubmissionIsPreparedEagerlyOnceInRegistrationOrder(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $first = new PreparationRecorder('A');
         $second = new PreparationRecorder('B');
         $processors = new MessageProcessors($first, $second);
         $provider = new FakeAIProvider(new AssistantMessage('One'), new AssistantMessage('Two'), new AssistantMessage('Three'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
         $conversation->setMessageProcessors($processors);
         $original = new UserMessage('First');
         $original->addMetadata('origin', 'human');
@@ -54,6 +56,7 @@ final class UserMessagePreparationTest extends TestCase
 
     public function testRejectedPreparationCannotReserveOrQueueAndPreservesOriginal(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $processor = new class implements MessageProcessorInterface {
             public function forAgent(UserMessage $input): UserMessage
             {
@@ -70,7 +73,7 @@ final class UserMessagePreparationTest extends TestCase
             }
         };
         $provider = new FakeAIProvider();
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
         $conversation->setMessageProcessors(new MessageProcessors($processor));
         foreach (['fail', 'empty'] as $text) {
             $original = new UserMessage($text);
@@ -87,6 +90,7 @@ final class UserMessagePreparationTest extends TestCase
 
     public function testPreparationDoesNotEnforceAdmissionAfterAProcessorStartsExecution(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $processor = new class implements MessageProcessorInterface {
             public ?Closure $onPrepare = null;
             public function forAgent(UserMessage $input): UserMessage
@@ -99,7 +103,7 @@ final class UserMessagePreparationTest extends TestCase
                 return clone $input;
             }
         };
-        $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
         $conversation->setMessageProcessors(new MessageProcessors($processor));
         $otherStream = null;
         $processor->onPrepare = static function () use ($conversation, $processor, &$otherStream): void {
@@ -117,8 +121,9 @@ final class UserMessagePreparationTest extends TestCase
 
     public function testNonTextAttachmentAndMetadataAreAcceptedWithoutText(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider(new AssistantMessage('Image response'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
         $image = (new ImageContent('https://example.com/image.png', SourceType::URL))->addMetadata('image', 'original');
         $message = new UserMessage($image);
         $message->addMetadata('origin', 'attachment');

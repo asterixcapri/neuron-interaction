@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandInput;
 use NeuronInteraction\Command\Commands;
@@ -25,15 +26,16 @@ final class SelectionTest extends TestCase
 {
     public function testResumeRequestsSelectionThenInstallsTheChosenHistoryOnlyOnTheSecondInvocation(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
         $stored = $store->create();
-        SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
+        SessionHistory::append($stored, new UserMessage('Stored subject'));
         $active = $store->create();
         $conversation = new Conversation(new Agent(), $active);
         $conversation->setCommands(new Commands(new ResumeCommand($store, '/return')));
         $events = iterator_to_array($conversation->sendInput('/return'));
 
-        self::assertSame($active->getKey(), $conversation->agent()->getThreadId());
+        self::assertSame($active->messageNamespace(), $conversation->agent()->getThreadId());
         self::assertSame($active->getKey(), $conversation->session()->getKey());
         self::assertCount(1, $events);
         self::assertInstanceOf(SelectionRequest::class, $events[0]);
@@ -53,9 +55,10 @@ final class SelectionTest extends TestCase
 
     public function testResumeNormalizesItsOwnWhitespaceArguments(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
         $stored = $store->create();
-        SessionHistory::of($stored)->addMessage(new UserMessage('Stored subject'));
+        SessionHistory::append($stored, new UserMessage('Stored subject'));
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands(new ResumeCommand($store)));
         $selection = iterator_to_array($conversation->sendInput('/resume   '));
@@ -69,11 +72,12 @@ final class SelectionTest extends TestCase
 
     public function testResumeWithAKeyNeedsNoPriorSelectionAndUnknownKeysLeaveTheSessionUnchanged(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $storage = new InMemoryStorage();
-        $store = new SessionStore($storage, 'owner');
+        $store = new SessionStore($storage, $nativeMessages, 'owner');
         $stored = $store->create();
-        SessionHistory::of($stored)->addMessage(new UserMessage('Direct resume'));
-        $foreign = (new SessionStore($storage, 'other'))->create();
+        SessionHistory::append($stored, new UserMessage('Direct resume'));
+        $foreign = (new SessionStore($storage, $nativeMessages, 'other'))->create();
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands(new ResumeCommand($store)));
         $events = iterator_to_array($conversation->sendInput(new CommandInput('/resume', $stored->getKey())));
@@ -97,7 +101,8 @@ final class SelectionTest extends TestCase
 
     public function testResumeWithoutStoredHistoryNotifiesInsteadOfRequestingAnEmptySelection(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands(new ResumeCommand($store)));
         $events = iterator_to_array($conversation->sendInput('/resume'));

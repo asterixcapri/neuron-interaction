@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Command;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Command\CommandContext;
@@ -26,9 +27,10 @@ final class HelpAndExitTest extends TestCase
 {
     public function testHelpListsTheRegisteredCommandsInOrder(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $conversation = new Conversation(
             new Agent(),
-            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
         );
         $conversation->setCommands(new Commands(new HelpCommand('/guide'), new ExitCommand('/quit')));
         $stream = $conversation->sendInput('/guide');
@@ -43,11 +45,12 @@ final class HelpAndExitTest extends TestCase
 
     public function testExitCanBeIgnoredWithoutEndingConversationOrStoppingResponse(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $stop = new StopSignal(new InMemoryStorage(), 'response');
         $provider = new FakeAIProvider(new AssistantMessage('Still available'));
         $conversation = new Conversation(
             (new Agent())->setAiProvider($provider),
-            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
         );
         $conversation->setStopSignal($stop);
         $conversation->setCommands(new Commands(new ExitCommand(), new HelpCommand()));
@@ -65,6 +68,7 @@ final class HelpAndExitTest extends TestCase
 
     public function testExitPreservesTheOrderAndDoesNotCancelLaterRequests(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $command = new class implements CommandInterface {
             public function name(): string
             {
@@ -85,7 +89,7 @@ final class HelpAndExitTest extends TestCase
         };
         $conversation = new Conversation(
             new Agent(),
-            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
         );
         $conversation->setCommands(new Commands($command));
         $events = iterator_to_array($conversation->sendInput('/ordered'));

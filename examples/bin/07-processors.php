@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
@@ -80,7 +81,8 @@ $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
 $storage = new InMemoryStorage();
-$sessionStore = new SessionStore($storage, 'demo-user');
+$messageStore = new InMemoryMessageStore();
+$sessionStore = new SessionStore($storage, $messageStore, 'demo-user');
 
 $session = $sessionStore->create();
 $session->setTitle('A README summary');

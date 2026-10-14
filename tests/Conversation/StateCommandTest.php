@@ -6,6 +6,7 @@ namespace NeuronInteraction\Tests\Conversation;
 
 use NeuronAI\Agent\Agent;
 use NeuronAI\Agent\AgentState;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
@@ -31,10 +32,11 @@ final class StateCommandTest extends TestCase
 {
     public function testClearStartsANewSessionWithoutDeletingTheOldOneAndResumeRestoresIt(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
         $original = $store->create();
         $original->setTitle('Previous subject');
-        SessionHistory::of($original)->addMessage(new UserMessage('Saved history'));
+        SessionHistory::append($original, new UserMessage('Saved history'));
         $conversation = new Conversation(new Agent(), $original);
         $conversation->setCommands(new Commands(new ClearCommand($store, '/fresh'), new ResumeCommand($store)));
         $events = iterator_to_array($conversation->sendInput('/fresh'));
@@ -42,7 +44,7 @@ final class StateCommandTest extends TestCase
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame($conversation->session(), $events[0]->session);
         self::assertNotSame($original->getKey(), $conversation->session()->getKey());
-        self::assertSame($conversation->session()->getKey(), $conversation->agent()->getThreadId());
+        self::assertSame($conversation->session()->messageNamespace(), $conversation->agent()->getThreadId());
         self::assertSame([], $conversation->session()->getMessages());
         self::assertSame('Saved history', $store->get($original->getKey())?->getMessages()[0]->getContent());
         iterator_to_array($conversation->sendInput('/resume ' . $original->getKey()));
@@ -52,7 +54,8 @@ final class StateCommandTest extends TestCase
 
     public function testStateChangesAreImmediateAndEventsPrecedeTheOriginalCommandFailure(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
         $selected = $store->create();
         $selected->setTitle('Selected');
         $replacement = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('New answer')));
@@ -98,8 +101,8 @@ final class StateCommandTest extends TestCase
         self::assertInstanceOf(AgentChanged::class, $events[2]);
         self::assertSame($conversation->agent(), $events[2]->agent);
         self::assertInstanceOf(Notification::class, $events[3]);
-        self::assertSame('Selected:' . $selected->getKey(), $events[3]->text);
-        self::assertSame('yes', $store->get($selected->getKey())?->getMetadata()['changed']);
+        self::assertSame('Selected:' . $selected->messageNamespace(), $events[3]->text);
+        self::assertSame('yes', $store->get($selected->getKey())?->getMetadataValue('changed'));
         $stream = $conversation->sendInput('Next question');
         iterator_to_array($stream);
         self::assertInstanceOf(AgentState::class, $stream->getReturn());
@@ -109,8 +112,9 @@ final class StateCommandTest extends TestCase
 
     public function testCommandCanSelectASessionProvidedByItsOwnStore(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'owner');
-        $selected = (new SessionStore(new InMemoryStorage(), 'other'))->create();
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
+        $selected = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'other'))->create();
         $replacement = new Agent();
         $command = $this->switchCommand($selected, $replacement);
         $conversation = new Conversation(new Agent(), $store->create());
@@ -123,12 +127,13 @@ final class StateCommandTest extends TestCase
         self::assertSame($selected, $events[0]->session);
         self::assertSame($selected, $conversation->session());
         self::assertInstanceOf(AgentChanged::class, $events[1]);
-        self::assertSame($selected->getKey(), $conversation->agent()->getThreadId());
+        self::assertSame($selected->messageNamespace(), $conversation->agent()->getThreadId());
     }
 
     public function testAnAlreadyStartedResponseRetainsItsAgentAndSessionWhenACommandSwitchesThem(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'owner');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
         $original = $store->create();
         $selected = $store->create();
         $newAgent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Selected answer')));

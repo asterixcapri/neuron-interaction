@@ -6,6 +6,8 @@ namespace NeuronInteraction\Tests\Conversation;
 
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\History\FileMessageStore;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
@@ -60,10 +62,11 @@ final class ConversationInputHistoryTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testOriginalInputsAreRecordedBeforeProcessingAndGeneratedPromptsAreExcluded(bool $files): void
     {
+        $nativeMessages = $files ? new FileMessageStore($this->directory . '/messages') : new InMemoryMessageStore();
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = new InputHistory($storage, 'owner');
         $provider = new FakeAIProvider(new AssistantMessage('Answer'), new AssistantMessage('Summary'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore($storage, 'owner'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore($storage, $nativeMessages, 'owner'))->create());
         self::assertNull($conversation->inputHistory());
         $conversation->setInputHistory($history);
         self::assertSame($history, $conversation->inputHistory());
@@ -124,9 +127,10 @@ final class ConversationInputHistoryTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testInputIsRetainedWhenPreparationFails(bool $files): void
     {
+        $nativeMessages = $files ? new FileMessageStore($this->directory . '/messages') : new InMemoryMessageStore();
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
         $history = new InputHistory($storage, 'owner');
-        $conversation = new Conversation(new Agent(), (new SessionStore($storage, 'owner'))->create());
+        $conversation = new Conversation(new Agent(), (new SessionStore($storage, $nativeMessages, 'owner'))->create());
         $conversation->setInputHistory($history);
         $processor = $this->createStub(MessageProcessorInterface::class);
         $processor->method('forAgent')->willThrowException(new RuntimeException('Cannot expand'));

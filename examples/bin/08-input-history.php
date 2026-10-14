@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\FileMessageStore;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Command\HelpCommand;
@@ -23,7 +24,8 @@ $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
 $storage = new FileStorage(\dirname(__DIR__) . '/.storage/input-history');
 
-$sessionStore = new SessionStore($storage, 'demo-user');
+$messageStore = new FileMessageStore(\dirname(__DIR__) . '/.storage/input-history/messages');
+$sessionStore = new SessionStore($storage, $messageStore, 'demo-user');
 $session = $sessionStore->create();
 
 $inputHistory = new InputHistory($storage, 'demo-user');

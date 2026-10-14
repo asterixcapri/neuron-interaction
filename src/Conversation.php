@@ -325,6 +325,9 @@ final class Conversation
             }
         }
 
-        return yield from $agent->stream($message);
+        $session->assertExists();
+        $state = yield from $agent->stream($message);
+        $session->registerUse();
+        return $state;
     }
 }

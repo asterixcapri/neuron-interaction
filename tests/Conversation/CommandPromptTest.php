@@ -10,6 +10,7 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Agent\AgentState;
 use NeuronAI\Agent\Interrupt\ApprovalRequest;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
@@ -194,6 +195,7 @@ final class CommandPromptTest extends TestCase
      */
     private function conversation(Closure $run, Closure $stream, ?MessageProcessorInterface $processors = null, ?StopSignal $stopSignal = null): Conversation
     {
+        $nativeMessages = new InMemoryMessageStore();
         $command = new class ($run) implements CommandInterface {
             /** @param Closure(CommandContext): void $run */
             public function __construct(private Closure $run) {}
@@ -222,7 +224,7 @@ final class CommandPromptTest extends TestCase
                 return yield from ($this->stream)($messages);
             }
         };
-        $conversation = new Conversation($agent, (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $conversation = new Conversation($agent, (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create());
         if ($processors !== null) {
             $conversation->setMessageProcessors(new MessageProcessors($processors));
         }

@@ -7,8 +7,8 @@ namespace NeuronInteraction\Command;
 use DateTimeImmutable;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Formatting\RelativeTimeFormatter;
+use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
-use NeuronInteraction\Session\SessionSummary;
 
 use function trim;
 
@@ -76,7 +76,7 @@ final readonly class ResumeCommand implements CommandInterface
     }
 
     private function formatDescription(
-        SessionSummary $session,
+        Session $session,
         DateTimeImmutable $now,
     ): string {
         return RelativeTimeFormatter::format($session->getLastUsedAt(), $now);

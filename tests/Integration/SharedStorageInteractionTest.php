@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Integration;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\FileMessageStore;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Command\ClearCommand;
@@ -14,11 +16,11 @@ use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Interruption\StopSignal;
-use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Tests\History\SessionHistory;
+use NeuronInteraction\Tests\History\SessionMessages;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -55,8 +57,9 @@ final class SharedStorageInteractionTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testOneStorageSupportsCaptureResumeArchiveClearPreferencesAndSignals(bool $files): void
     {
+        $nativeMessages = $files ? new FileMessageStore($this->directory . '/messages') : new InMemoryMessageStore();
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
-        $sessions = new SessionStore($storage, 'alice');
+        $sessions = new SessionStore($storage, $nativeMessages, 'alice');
         $preferences = new ConfigurationStore($storage, 'alice');
         $inputs = new InputHistory($storage, 'alice');
         $preferences->set('language', 'Italian');
@@ -83,7 +86,7 @@ final class SharedStorageInteractionTest extends TestCase
         iterator_to_array($conversation->sendInput('Continue'));
 
         $reopened = $files ? new FileStorage($this->directory) : $storage;
-        $freshSessions = new SessionStore($reopened, 'alice');
+        $freshSessions = new SessionStore($reopened, $nativeMessages, 'alice');
         $restored = $freshSessions->get($key);
         self::assertNotNull($restored);
         self::assertSame('Saved title', $restored->getTitle());
@@ -91,14 +94,14 @@ final class SharedStorageInteractionTest extends TestCase
         self::assertCount(4, $restored->getMessages());
         self::assertSame('Italian', (new ConfigurationStore($reopened, 'alice'))->get('language'));
         self::assertCount(4, (new InputHistory($reopened, 'alice'))->list());
-        self::assertNull((new SessionStore($reopened, 'bob'))->get($key));
+        self::assertNull((new SessionStore($reopened, $nativeMessages, 'bob'))->get($key));
         self::assertSame([], (new InputHistory($reopened, 'bob'))->list());
 
-        $messages = new SessionMessageStore($reopened, 'alice');
+        $messages = new SessionMessages($reopened, $nativeMessages, 'alice');
         $messages->archive($key, 2);
         self::assertCount(2, $messages->loadActive($key));
         self::assertCount(4, $restored->getMessages());
-        SessionHistory::of($restored)->flushAll();
+        SessionHistory::clear($restored);
         self::assertSame([], $messages->loadAll($key));
         self::assertSame([], $freshSessions->list());
         self::assertCount(4, $inputs->list());

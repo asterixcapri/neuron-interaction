@@ -6,6 +6,8 @@ namespace NeuronInteraction\Tests\Command;
 
 use DateTimeImmutable;
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\FileMessageStore;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandInput;
 use NeuronInteraction\Command\Commands;
@@ -80,10 +82,11 @@ final class ResumeCommandTest extends TestCase
 
     private function selectionOption(DateTimeImmutable $lastUsedAt, string $content, bool $files): SelectionOption
     {
+        $nativeMessages = $files ? new FileMessageStore($this->directory . '/messages') : new InMemoryMessageStore();
         $storage = $files ? new FileStorage($this->directory) : new InMemoryStorage();
-        $store = new SessionStore($storage, 'alice');
+        $store = new SessionStore($storage, $nativeMessages, 'alice');
         $session = $store->create();
-        SessionHistory::of($session)->addMessage(new UserMessage($content));
+        SessionHistory::append($session, new UserMessage($content));
         $storage->update(Session::namespaceForUser('alice'), $session->getKey(), [
             ['path' => ['lastUsedAt'], 'value' => $lastUsedAt->format('Y-m-d\TH:i:s.uP')],
         ]);

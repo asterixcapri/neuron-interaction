@@ -25,10 +25,6 @@ Host Application may fulfill or ignore it; the Conversation is not terminated.
 A saved conversation belonging to a user, with an identity, messages, title and
 application metadata.
 
-**SessionSummary**:
-An immutable snapshot of the information used to recognize a Session in a listing:
-its identity, title and last use.
-
 **Notification**:
 Feedback intended for the person, with text and a severity level. It is presented
 by the Host Application and is not a prompt to the Agent.

@@ -6,6 +6,8 @@ namespace NeuronInteraction\Tests\InputHistory;
 
 use InvalidArgumentException;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\History\FileMessageStore;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
@@ -113,17 +115,18 @@ final class InputHistoryTest extends TestCase
     #[DataProvider('storageKinds')]
     public function testSessionsDoNotReplaceInputHistoryOrRecordGeneratedPrompts(bool $files): void
     {
+        $nativeMessages = $files ? new FileMessageStore($this->directory . '/messages') : new InMemoryMessageStore();
         $storage = $files
             ? new FileStorage($this->directory)
             : new InMemoryStorage();
         $inputs = new InputHistory($storage, 'local-user');
-        $sessionStore = new SessionStore($storage, 'local-user');
+        $sessionStore = new SessionStore($storage, $nativeMessages, 'local-user');
         $history = $sessionStore->create();
 
         $inputs->append(new UserMessage('/summarize'));
-        SessionHistory::of($history)->addMessage(new UserMessage('A generated prompt for the Agent'));
+        SessionHistory::append($history, new UserMessage('A generated prompt for the Agent'));
         $key = $sessionStore->list()[0]->getKey();
-        SessionHistory::of($sessionStore->create())->addMessage(new UserMessage('Another conversation'));
+        SessionHistory::append($sessionStore->create(), new UserMessage('Another conversation'));
         $inputs->append(new UserMessage('A submitted message'));
         $sessionStore->get($key);
 

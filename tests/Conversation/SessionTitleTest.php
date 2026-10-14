@@ -7,6 +7,7 @@ namespace NeuronInteraction\Tests\Conversation;
 use Generator;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Agent\AgentState;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Providers\ProviderResponse;
@@ -65,7 +66,7 @@ final class SessionTitleTest extends TestCase
             self::assertSame([], $this->titleEvents(iterator_to_array($conversation->sendInput($input), false)));
         }
         self::assertNull($conversation->session()->getTitle());
-        self::assertSame('3', $conversation->session()->getMetadata()['titleGenerationAttempts']);
+        self::assertSame('3', $conversation->session()->getMetadataValue('titleGenerationAttempts'));
         $events = $this->titleEvents(iterator_to_array($conversation->sendInput('Configure Redis'), false));
         self::assertCount(1, $events);
         self::assertSame('Redis setup', $conversation->session()->getTitle());
@@ -90,7 +91,7 @@ final class SessionTitleTest extends TestCase
         }
 
         self::assertCount(5, $provider->getRecorded());
-        self::assertSame('5', $conversation->session()->getMetadata()['titleGenerationAttempts']);
+        self::assertSame('5', $conversation->session()->getMetadataValue('titleGenerationAttempts'));
         self::assertNull($conversation->session()->getTitle());
         self::assertCount(12, $conversation->session()->getMessages());
     }
@@ -114,14 +115,15 @@ final class SessionTitleTest extends TestCase
         self::assertInstanceOf(Notification::class, $warnings[0]);
         self::assertSame(NotificationLevel::Warning, $warnings[0]->level);
         self::assertStringContainsString('Title provider unavailable', $warnings[0]->text);
-        self::assertSame('1', $conversation->session()->getMetadata()['titleGenerationAttempts']);
+        self::assertSame('1', $conversation->session()->getMetadataValue('titleGenerationAttempts'));
     }
 
     public function testSessionReplacementDoesNotRedirectTheTitleAndNewSessionsAreEligible(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $conversation = $this->conversation('First', 'Second');
         $original = $conversation->session();
-        $selected = (new SessionStore(new InMemoryStorage(), 'other'))->create();
+        $selected = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'other'))->create();
         $provider = new FakeAIProvider(new AssistantMessage('{"title":"Original topic"}'), new AssistantMessage('{"title":"New topic"}'));
         $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
         $stream = $conversation->sendInput('Original question');
@@ -168,13 +170,14 @@ final class SessionTitleTest extends TestCase
 
     public function testResponseFailureStillPropagatesAfterTitleGeneration(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $agentProvider = new class (new AssistantMessage('Unused')) extends FakeAIProvider {
             protected function streamChunks(Message $response): Generator
             {
                 throw new RuntimeException('Response failed');
             }
         };
-        $conversation = new Conversation((new Agent())->setAiProvider($agentProvider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($agentProvider), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
         $titleProvider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
         $conversation->setSessionTitleGenerator(new SessionTitleGenerator($titleProvider));
         try {
@@ -189,8 +192,9 @@ final class SessionTitleTest extends TestCase
 
     private function conversation(string ...$answers): Conversation
     {
+        $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider(...array_map(static fn(string $answer): AssistantMessage => new AssistantMessage($answer), $answers));
-        return new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'local'))->create());
+        return new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
     }
 
     /**

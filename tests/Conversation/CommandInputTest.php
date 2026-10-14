@@ -6,6 +6,7 @@ namespace NeuronInteraction\Tests\Conversation;
 
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
@@ -46,8 +47,9 @@ final class CommandInputTest extends TestCase
 
     public function testExplicitUserMessageIsNeverParsedAndBlankStringsDoNothing(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider(new AssistantMessage('Literal slash'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'owner'))->create());
         $blank = $conversation->sendInput('   ');
         self::assertSame([], iterator_to_array($blank));
         self::assertNull($blank->getReturn());
@@ -105,12 +107,13 @@ final class CommandInputTest extends TestCase
 
     public function testConfigurationDefaultsAreIsolatedAndSuppliedStoreIsReused(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $first = $this->conversation();
         $second = $this->conversation();
         $first->configurationStore()->set('key', 'first');
         self::assertNull($second->configurationStore()->get('key'));
         $store = new ConfigurationStore(new InMemoryStorage(), 'owner');
-        $provided = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $provided = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'owner'))->create());
         $provided->setConfigurationStore($store);
         self::assertSame($store, $provided->configurationStore());
     }
@@ -173,7 +176,7 @@ final class CommandInputTest extends TestCase
 
     private function conversation(Commands $commands = new Commands()): Conversation
     {
-        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'owner'))->create());
         $conversation->setCommands($commands);
         return $conversation;
     }

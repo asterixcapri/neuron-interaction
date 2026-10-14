@@ -6,6 +6,7 @@ namespace NeuronInteraction\Tests\Conversation;
 
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInput;
 use NeuronInteraction\Command\CommandInterface;
@@ -29,8 +30,9 @@ final class SelectionRequestTest extends TestCase
 {
     public function testSeparateHttpRequestsRestoreOnlySessionAndStoresAndForwardOpaqueValues(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $storage = new InMemoryStorage();
-        $sessions = new SessionStore($storage, 'owner');
+        $sessions = new SessionStore($storage, $nativeMessages, 'owner');
         $preferences = new InMemoryStorage();
         $configuration = new ConfigurationStore($preferences, 'owner');
         $configuration->set('account', 'original owner');
@@ -56,7 +58,7 @@ final class SelectionRequestTest extends TestCase
         unset($request, $events, $first, $sessions, $configuration);
 
         // A new HTTP request needs no SelectionRequest or previous Command instance.
-        $secondStore = new SessionStore($storage, 'owner');
+        $secondStore = new SessionStore($storage, $nativeMessages, 'owner');
         $session = $secondStore->get($sessionKey);
         self::assertNotNull($session);
         $second = new Conversation(
@@ -73,13 +75,14 @@ final class SelectionRequestTest extends TestCase
             self::assertSame($value, $events[0]->text);
             self::assertNull($stream->getReturn());
             self::assertSame($value, $second->configurationStore()->get('chosen'));
-            self::assertSame($value, $secondStore->get($sessionKey)?->getMetadata()['chosen']);
-            self::assertSame($sessionKey, $second->agent()->getThreadId());
+            self::assertSame($value, $secondStore->get($sessionKey)?->getMetadataValue('chosen'));
+            self::assertSame($second->session()->messageNamespace(), $second->agent()->getThreadId());
         }
     }
 
     public function testMultipleSelectionsAreEmittedInOrderAndNextInvocationCanRequestAnotherStep(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $first = new SelectionRequest('/steps', 'First', [new SelectionOption('second', 'Next')]);
         $second = new SelectionRequest('/steps', 'Second', [new SelectionOption('finish', 'Finish')]);
         $command = new class ($first, $second) implements CommandInterface {
@@ -108,7 +111,7 @@ final class SelectionRequestTest extends TestCase
                 }
             }
         };
-        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), 'owner'))->create());
+        $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create());
         $conversation->setCommands(new Commands($command));
         $events = iterator_to_array($conversation->sendInput('/steps'));
         self::assertCount(3, $events);

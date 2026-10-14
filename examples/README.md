@@ -144,7 +144,9 @@ library's Composer installation does not install these example dependencies.
 File-backed examples store their state under `.storage/`. SessionStore and
 ConfigurationStore use `demo-user`; an application supplies its authenticated
 user's identity. InputHistory also receives that identity and keeps a user-specific
-namespace. Modules can share one Storage instance and root; the separate example
+namespace. SessionStore also receives a native Neuron MessageStore: InMemoryMessageStore
+for temporary examples, FileMessageStore under each example’s `messages/`
+directory for persistent examples. Modules can share one Storage instance and root; the separate example
 directories only keep the demonstrations independent. Selection, stop and
 processor examples use memory so each run begins with only its own data.
 

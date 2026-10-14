@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\HttpClient\Amp\AmpHttpClient;
 use NeuronAI\HttpClient\StoppableHttpClient;
@@ -18,7 +19,8 @@ require_once __DIR__ . '/../vendor/autoload.php';
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
 $storage = new InMemoryStorage();
-$sessionStore = new SessionStore($storage, 'demo-user');
+$messageStore = new InMemoryMessageStore();
+$sessionStore = new SessionStore($storage, $messageStore, 'demo-user');
 
 $stopSignal = new StopSignal($storage, 'demo-response');
 $httpClient = new StoppableHttpClient(new AmpHttpClient(), $stopSignal->stopCallback());

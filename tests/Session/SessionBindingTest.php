@@ -6,6 +6,8 @@ namespace NeuronInteraction\Tests\Session;
 
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
+use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Chat\Messages\Usage;
@@ -13,23 +15,23 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Tools\ToolCall;
 use NeuronAI\Tools\ToolOutput;
-use NeuronInteraction\Session\SessionMessageStore;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
-use NeuronInteraction\Storage\StorageInterface;
+use NeuronInteraction\Tests\History\SessionMessages;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use UnexpectedValueException;
 
 use const PHP_INT_MAX;
 
-final class SessionMessageStoreTest extends TestCase
+final class SessionBindingTest extends TestCase
 {
     public function testArchivingRetainsMessagesAndAppendIsIdempotent(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $storage = new InMemoryStorage();
-        $session = (new SessionStore($storage, 'alice'))->create();
-        $store = new SessionMessageStore($storage, 'alice');
+        $session = (new SessionStore($storage, $nativeMessages, 'alice'))->create();
+        $store = new SessionMessages($storage, $nativeMessages, 'alice');
         $threadId = $session->getKey();
         $first = new UserMessage('First');
         $second = new AssistantMessage('Second');
@@ -48,9 +50,10 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testMessageIdentitiesAndMetadataRemainStableAcrossReads(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $storage = new InMemoryStorage();
-        $session = (new SessionStore($storage, 'alice'))->create();
-        $store = new SessionMessageStore($storage, 'alice');
+        $session = (new SessionStore($storage, $nativeMessages, 'alice'))->create();
+        $store = new SessionMessages($storage, $nativeMessages, 'alice');
         $original = (new UserMessage('Earlier'))->setMetadata(['source' => 'original']);
         $store->append($session->getKey(), $original);
         $first = $store->loadActive($session->getKey())[0];
@@ -65,9 +68,10 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testStructuredToolErrorsRoundTrip(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $storage = new InMemoryStorage();
-        $session = (new SessionStore($storage, 'alice'))->create();
-        $store = new SessionMessageStore($storage, 'alice');
+        $session = (new SessionStore($storage, $nativeMessages, 'alice'))->create();
+        $store = new SessionMessages($storage, $nativeMessages, 'alice');
         $call = (new ToolCall(name: 'lookup', callId: 'call-1'))->setResult(ToolOutput::error('Invalid input'));
         $store->append($session->getKey(), new ToolResultMessage([$call]));
         $message = $store->loadAll($session->getKey())[0];
@@ -80,16 +84,18 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testStoreRejectsAnotherUsersThread(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $storage = new InMemoryStorage();
-        $session = (new SessionStore($storage, 'bob'))->create();
-        $store = new SessionMessageStore($storage, 'alice');
+        $session = (new SessionStore($storage, $nativeMessages, 'bob'))->create();
+        $store = new SessionMessages($storage, $nativeMessages, 'alice');
         $this->expectException(UnexpectedValueException::class);
         $store->append($session->getKey(), new UserMessage('Unauthorized'));
     }
 
     public function testBindingAnotherSessionReturnsAnAgentCopyAndKeepsTheOriginalConversation(): void
     {
-        $sessions = new SessionStore(new InMemoryStorage(), 'alice');
+        $nativeMessages = new InMemoryMessageStore();
+        $sessions = new SessionStore(new InMemoryStorage(), $nativeMessages, 'alice');
         $first = $sessions->create();
         $second = $sessions->create();
         $provider = new FakeAIProvider(new AssistantMessage('First answer'), new AssistantMessage('Second answer'));
@@ -97,8 +103,8 @@ final class SessionMessageStoreTest extends TestCase
         $agent->chat(new UserMessage('First question'));
         $replacement = $second->bindToAgent($agent);
         self::assertNotSame($agent, $replacement);
-        self::assertSame($first->getKey(), $agent->getThreadId());
-        self::assertSame($second->getKey(), $replacement->getThreadId());
+        self::assertSame($first->messageNamespace(), $agent->getThreadId());
+        self::assertSame($second->messageNamespace(), $replacement->getThreadId());
         $replacement->chat(new UserMessage('Second question'));
         self::assertCount(2, $agent->getChatHistory()->getMessages());
         self::assertCount(2, $replacement->getChatHistory()->getMessages());
@@ -107,7 +113,8 @@ final class SessionMessageStoreTest extends TestCase
     }
     public function testBindingPreservesTheAgentsContextWindowAndLeavesTheOriginalUnbound(): void
     {
-        $session = (new SessionStore(new InMemoryStorage(), 'alice'))->create();
+        $nativeMessages = new InMemoryMessageStore();
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'alice'))->create();
         $provider = new FakeAIProvider();
         $original = (new Agent())->setAiProvider($provider)->setContextWindow(PHP_INT_MAX);
         $bound = $session->bindToAgent($original);
@@ -124,10 +131,11 @@ final class SessionMessageStoreTest extends TestCase
 
     public function testArchivedConversationsRemainListedAndReadableThroughTheSession(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $storage = new InMemoryStorage();
-        $sessions = new SessionStore($storage, 'alice');
+        $sessions = new SessionStore($storage, $nativeMessages, 'alice');
         $session = $sessions->create();
-        $store = new SessionMessageStore($storage, 'alice');
+        $store = new SessionMessages($storage, $nativeMessages, 'alice');
         $message = new UserMessage('Saved subject');
         $store->append($session->getKey(), $message);
         $store->archive($session->getKey(), 1);
@@ -136,30 +144,37 @@ final class SessionMessageStoreTest extends TestCase
         self::assertSame($session->getKey(), $sessions->list()[0]->getKey());
     }
 
-    public function testAppendPropagatesValidationAndIoFailuresWithoutRegisteringUse(): void
+    public function testAppendPropagatesFailuresWithoutReadingHistoryOrRegisteringUse(): void
     {
         foreach ([new InvalidArgumentException('invalid payload'), new RuntimeException('publication failure')] as $failure) {
-            $storage = $this->createMock(StorageInterface::class);
-            $storage->expects(self::once())->method('get')->willReturn([]);
-            $storage->expects(self::once())->method('create')->willThrowException($failure);
-            $storage->expects(self::never())->method('update');
-            $store = new SessionMessageStore($storage, 'owner');
+            $storage = new InMemoryStorage();
+            $messages = $this->createMock(MessageStoreInterface::class);
+            $messages->expects(self::never())->method('loadAll');
+            $messages->expects(self::once())->method('append')->willThrowException($failure);
+            $sessions = new SessionStore($storage, $messages, 'owner');
+            $session = $sessions->create();
+            $lastUsed = $session->getLastUsedAt();
+            $store = new SessionMessages($storage, $messages, 'owner');
             try {
-                $store->append('thread', new UserMessage('Question'));
-                self::fail('Non-conflict failures must propagate.');
+                $store->append($session->getKey(), new UserMessage('Question'));
+                self::fail('Message failures must propagate.');
             } catch (InvalidArgumentException|RuntimeException $caught) {
                 self::assertSame($failure, $caught);
             }
+            self::assertFalse($session->hasContent());
+            self::assertEquals($lastUsed, $session->getLastUsedAt());
+            self::assertSame([], $sessions->list());
         }
     }
 
     public function testOwnershipIsRequiredForEveryMessageOperation(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $storage = new InMemoryStorage();
-        $session = (new SessionStore($storage, 'bob'))->create();
-        $owner = new SessionMessageStore($storage, 'bob');
+        $session = (new SessionStore($storage, $nativeMessages, 'bob'))->create();
+        $owner = new SessionMessages($storage, $nativeMessages, 'bob');
         $owner->append($session->getKey(), new UserMessage('Owned content'));
-        $stranger = new SessionMessageStore($storage, 'alice');
+        $stranger = new SessionMessages($storage, $nativeMessages, 'alice');
         foreach ([
             fn() => $stranger->loadActive($session->getKey()),
             fn() => $stranger->loadAll($session->getKey()),

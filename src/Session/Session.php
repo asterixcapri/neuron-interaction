@@ -9,10 +9,7 @@ use DateTimeZone;
 use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\History\MessageStoreInterface;
-use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Message;
-use NeuronAI\Chat\Messages\ToolResultMessage;
-use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Storage\StorageInterface;
 
@@ -25,35 +22,22 @@ use function trim;
  * Hosts serialize turns, archive, clear and delete for one Session; operations
  * across message entries and this record are not a transaction.
  */
-final readonly class Session
+final class Session
 {
-    private MessageStoreInterface $store;
-    private string $namespace;
-
+    private readonly string $namespace;
+    /** @param array<string, string> $metadata */
     public function __construct(
-        private StorageInterface $storage,
-        private string $key,
-        private string $userId,
-        ?MessageStoreInterface $messageStore = null,
+        private readonly StorageInterface $storage,
+        private readonly MessageStoreInterface $messageStore,
+        private readonly string $key,
+        private readonly string $userId,
+        private ?string $title,
+        private readonly DateTimeImmutable $createdAt,
+        private DateTimeImmutable $lastUsedAt,
+        private bool $hasContent,
+        private array $metadata,
     ) {
         $this->namespace = self::namespaceForUser($userId);
-        $this->store = $messageStore === null || $messageStore instanceof SessionMessageStore
-            ? $messageStore ?? new SessionMessageStore($storage, $userId)
-            : new SessionTrackingMessageStore($this, $messageStore);
-    }
-
-    /** @param array<string, string> $metadata */
-    public static function create(StorageInterface $storage, string $userId, array $metadata = [], ?MessageStoreInterface $messageStore = null): self
-    {
-        $now = self::now();
-        $key = $storage->create(self::namespaceForUser($userId), [
-            'title' => null,
-            'createdAt' => $now,
-            'lastUsedAt' => $now,
-            'hasContent' => false,
-            'metadata' => SessionMetadata::validate($metadata),
-        ]);
-        return new self($storage, $key, $userId, $messageStore);
     }
 
     public static function namespaceForUser(string $userId): string
@@ -66,15 +50,20 @@ final readonly class Session
         return 'messages-' . hash('sha256', $this->userId) . '-' . $this->key;
     }
 
-    /** @return list<Message> */
+    /**
+     * @return list<Message>
+     * @phpstan-impure
+     */
     public function getMessages(?int $limit = null, ?string $before = null): array
     {
-        return array_values($this->store->loadAll($this->key, $limit, $before));
+        $this->assertExists();
+        return array_values($this->messageStore->loadAll($this->messageNamespace(), $limit, $before));
     }
 
     public function bindToAgent(Agent $agent): Agent
     {
-        return $agent->for($this->key)->setMessageStore($this->store);
+        $this->assertExists();
+        return $agent->for($this->messageNamespace())->setMessageStore($this->messageStore);
     }
 
     public function getKey(): string
@@ -87,10 +76,9 @@ final readonly class Session
         return $this->userId;
     }
 
-    /** @phpstan-impure */
     public function getTitle(): ?string
     {
-        return $this->record()->title;
+        return $this->title;
     }
 
     public function setTitle(string $title): void
@@ -100,91 +88,86 @@ final readonly class Session
             throw new InvalidArgumentException('A Session title cannot be blank.');
         }
         $this->storage->update($this->namespace, $this->key, [['path' => ['title'], 'value' => $title]]);
+        $this->title = $title;
     }
 
-    /** @return array<string, string>
-     * @phpstan-impure
-     */
+    /** @return array<string, string> */
     public function getMetadata(): array
     {
-        return $this->record()->metadata;
+        return $this->metadata;
+    }
+
+    public function getMetadataValue(string $key): ?string
+    {
+        return $this->metadata[$key] ?? null;
     }
 
     public function setMetadata(string $key, string $value): void
     {
-        SessionMetadata::key($key);
+        if ($key === '') {
+            throw new InvalidArgumentException('Metadata key cannot be empty.');
+        }
         $this->storage->update($this->namespace, $this->key, [['path' => ['metadata', $key], 'value' => $value]]);
+        $this->metadata[$key] = $value;
     }
 
     public function removeMetadata(string $key): void
     {
-        SessionMetadata::key($key);
+        if ($key === '') {
+            throw new InvalidArgumentException('Metadata key cannot be empty.');
+        }
         $this->storage->update($this->namespace, $this->key, removals: [['metadata', $key]]);
+        unset($this->metadata[$key]);
     }
 
-    /** @phpstan-impure */
     public function getCreatedAt(): DateTimeImmutable
     {
-        return $this->record()->createdAt;
+        return $this->createdAt;
     }
 
-    /** @phpstan-impure */
     public function getLastUsedAt(): DateTimeImmutable
     {
-        return $this->record()->lastUsedAt;
+        return $this->lastUsedAt;
     }
 
-    /** @phpstan-impure */
     public function hasContent(): bool
     {
-        return $this->record()->hasContent;
+        return $this->hasContent;
     }
 
-    /** Called only after successful message insertion, including direct Agent use. */
-    public function registerUse(Message $message): void
+    /** @internal Checks the stored record before message operations. */
+    public function assertExists(): void
     {
-        $assignments = [['path' => ['lastUsedAt'], 'value' => self::now()]];
-        if ($this->isPersonContent($message)) {
-            $assignments[] = ['path' => ['hasContent'], 'value' => true];
+        if ($this->storage->get($this->namespace, $this->key) === null) {
+            throw new MissingEntryException('The Session no longer exists.');
         }
-        $this->storage->update($this->namespace, $this->key, $assignments);
     }
 
+    /** Records a successfully completed Conversation turn. */
+    public function registerUse(): void
+    {
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $this->storage->update($this->namespace, $this->key, [
+            ['path' => ['lastUsedAt'], 'value' => $now->format('Y-m-d\TH:i:s.uP')],
+            ['path' => ['hasContent'], 'value' => true],
+        ]);
+        $this->lastUsedAt = $now;
+        $this->hasContent = true;
+    }
+
+    /** Resets listing visibility after the native message history has been cleared. */
     public function resetContent(): void
     {
         $this->storage->update($this->namespace, $this->key, [['path' => ['hasContent'], 'value' => false]]);
+        $this->hasContent = false;
     }
 
     public function delete(): void
     {
-        $this->store->clear($this->key);
+        $this->assertExists();
+        $this->messageStore->clear($this->messageNamespace());
+        $this->resetContent();
         $this->storage->delete($this->namespace, $this->key);
     }
 
-    private function isPersonContent(Message $message): bool
-    {
-        if (!$message instanceof UserMessage || $message instanceof ToolResultMessage) {
-            return false;
-        }
-        if (trim($message->getContent() ?? '') !== '') {
-            return true;
-        }
-        foreach ($message->getContentBlocks() as $block) {
-            if (!$block instanceof TextContent) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private function record(): SessionRecord
-    {
-        return SessionRecord::fromArray($this->storage->get($this->namespace, $this->key)
-            ?? throw new MissingEntryException('The Session no longer exists.'));
-    }
-
-    private static function now(): string
-    {
-        return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.uP');
-    }
 }

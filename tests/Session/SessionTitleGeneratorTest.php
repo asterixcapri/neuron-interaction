@@ -7,6 +7,7 @@ namespace NeuronInteraction\Tests\Session;
 use Closure;
 use InvalidArgumentException;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
@@ -32,6 +33,7 @@ final class SessionTitleGeneratorTest extends TestCase
 {
     public function testGenerationUsesHistoryTextAndAttachmentsWithoutChangingSources(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $input = new UserMessage([
             new TextContent('Expanded skill instructions'),
             new ReasoningContent('Private reasoning'),
@@ -55,20 +57,20 @@ final class SessionTitleGeneratorTest extends TestCase
             }
         };
 
-        $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local-user'))->create();
         foreach ([
             $input,
             new AssistantMessage('The report needs revision.'),
             new ToolCallMessage('Technical tool instructions', []),
             new ToolResultMessage([]),
         ] as $message) {
-            SessionHistory::of($session)->addMessage($message);
+            SessionHistory::append($session, $message);
         }
         $title = (new SessionTitleGenerator($provider))->generate($session);
 
         self::assertSame('Report review', $title);
         self::assertSame($title, $session->getTitle());
-        self::assertSame('1', $session->getMetadata()['titleGenerationAttempts']);
+        self::assertSame('1', $session->getMetadataValue('titleGenerationAttempts'));
         self::assertStringContainsString('Expanded skill instructions', $capture->text);
         self::assertStringContainsString('[File: report.pdf]', $capture->text);
         self::assertStringNotContainsString('The report needs revision.', $capture->text);
@@ -80,13 +82,14 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testNoTopicReturnsNullAndDoesNotChangeSessionData(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $message = new UserMessage('ciao, /caveman');
         $original = $message->jsonSerialize();
         $provider = new FakeAIProvider(new AssistantMessage('{"title":null}'));
 
 
-        $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
-        SessionHistory::of($session)->addMessage($message);
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local-user'))->create();
+        SessionHistory::append($session, $message);
 
         self::assertNull((new SessionTitleGenerator($provider))->generate($session));
         self::assertSame($original, $message->jsonSerialize());
@@ -94,6 +97,7 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testTitleCanBeGeneratedOnTheFifthAttemptAfterNoTopicResults(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider(
             new AssistantMessage('{"title":null}'),
             new AssistantMessage('{"title":null}'),
@@ -101,30 +105,31 @@ final class SessionTitleGeneratorTest extends TestCase
             new AssistantMessage('{"title":null}'),
             new AssistantMessage('{"title":"Configurazione Redis"}'),
         );
-        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create();
         $generator = new SessionTitleGenerator($provider);
 
         foreach (['ciao', 'come stai?', 'grazie!', 'non lo so nemmeno io'] as $input) {
-            SessionHistory::of($session)->addMessage(new UserMessage($input));
-            SessionHistory::of($session)->addMessage(new AssistantMessage('Ciao! Posso aiutarti con PHP, Neuron-TUI o Redis.'));
+            SessionHistory::append($session, new UserMessage($input));
+            SessionHistory::append($session, new AssistantMessage('Ciao! Posso aiutarti con PHP, Neuron-TUI o Redis.'));
             self::assertNull($generator->generate($session));
             self::assertNull($session->getTitle());
         }
         self::assertCount(4, $provider->getRecorded());
-        self::assertSame('4', $session->getMetadata()['titleGenerationAttempts']);
+        self::assertSame('4', $session->getMetadataValue('titleGenerationAttempts'));
 
-        SessionHistory::of($session)->addMessage(new UserMessage('Come configurare Redis?'));
+        SessionHistory::append($session, new UserMessage('Come configurare Redis?'));
         self::assertSame('Configurazione Redis', $generator->generate($session));
-        self::assertSame('5', $session->getMetadata()['titleGenerationAttempts']);
+        self::assertSame('5', $session->getMetadataValue('titleGenerationAttempts'));
         self::assertCount(5, $provider->getRecorded());
     }
 
     public function testEmptySessionDoesNotCallTheProvider(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider();
 
 
-        $session = (new SessionStore(new InMemoryStorage(), 'local-user'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local-user'))->create();
 
         self::assertNull((new SessionTitleGenerator($provider))->generate($session));
         self::assertSame([], $provider->getRecorded());
@@ -133,8 +138,9 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testPendingMessageIsIncludedWithoutBeingSavedToHistory(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider(new AssistantMessage('{"title":"Redis setup"}'));
-        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create();
         $pending = new UserMessage('Configure Redis');
 
         self::assertSame('Redis setup', (new SessionTitleGenerator($provider))->generate($session, $pending));
@@ -146,18 +152,19 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testNullIsRetriedAndASavedTitleStopsFurtherGeneration(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $requests = new TitleGenerationRequests(['{"title":null}', '{"title":"Redis setup"}']);
         $provider = $this->provider($requests);
-        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
-        SessionHistory::of($session)->addMessage(new UserMessage('Hello'));
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create();
+        SessionHistory::append($session, new UserMessage('Hello'));
         $generator = new SessionTitleGenerator($provider);
 
         self::assertNull($generator->generate($session));
         self::assertNull($session->getTitle());
-        self::assertSame('1', $session->getMetadata()['titleGenerationAttempts']);
+        self::assertSame('1', $session->getMetadataValue('titleGenerationAttempts'));
 
-        SessionHistory::of($session)->addMessage(new AssistantMessage('Hello!'));
-        SessionHistory::of($session)->addMessage(new UserMessage('Configure Redis'));
+        SessionHistory::append($session, new AssistantMessage('Hello!'));
+        SessionHistory::append($session, new UserMessage('Configure Redis'));
         self::assertSame('Redis setup', $generator->generate($session));
         self::assertNull($generator->generate($session));
         self::assertSame(2, $requests->count);
@@ -166,31 +173,34 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testNullResultsExhaustTheFiveAttemptBudgetAcrossReloads(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $requests = new TitleGenerationRequests([
             '{"title":null}', '{"title":null}', '{"title":null}',
             '{"title":null}', '{"title":null}', '{"title":"Unused"}',
         ]);
         $provider = $this->provider($requests);
         $storage = new InMemoryStorage();
-        $session = (new SessionStore($storage, 'local'))->create();
-        SessionHistory::of($session)->addMessage(new UserMessage('Hello'));
+        $session = (new SessionStore($storage, $nativeMessages, 'local'))->create();
+        SessionHistory::append($session, new UserMessage('Hello'));
 
         for ($turn = 0; $turn < 6; ++$turn) {
-            $reloaded = (new SessionStore($storage, 'local'))->get($session->getKey());
+            $reloaded = (new SessionStore($storage, $nativeMessages, 'local'))->get($session->getKey());
             self::assertNotNull($reloaded);
             self::assertNull((new SessionTitleGenerator($provider))->generate($reloaded));
         }
 
         self::assertSame(5, $requests->count);
-        self::assertSame('5', $session->getMetadata()['titleGenerationAttempts']);
+        self::assertNull($session->getMetadataValue('titleGenerationAttempts'));
+        self::assertSame('5', $reloaded->getMetadataValue('titleGenerationAttempts'));
         self::assertNull($session->getTitle());
     }
 
     public function testErrorsPropagateAndCountTowardTheConfiguredLimit(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $requests = new TitleGenerationRequests([]);
-        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
-        SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create();
+        SessionHistory::append($session, new UserMessage('A subject'));
         $generator = new SessionTitleGenerator($this->provider($requests), maxAttempts: 2);
 
         for ($attempt = 0; $attempt < 2; ++$attempt) {
@@ -204,21 +214,22 @@ final class SessionTitleGeneratorTest extends TestCase
 
         self::assertNull($generator->generate($session));
         self::assertSame(2, $requests->count);
-        self::assertSame('2', $session->getMetadata()['titleGenerationAttempts']);
+        self::assertSame('2', $session->getMetadataValue('titleGenerationAttempts'));
         self::assertNull($session->getTitle());
     }
 
     public function testInvalidAttemptMetadataDoesNotStartARequest(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         foreach (['invalid', '-1', '1.5'] as $value) {
             $provider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
-            $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
-            SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
+            $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create();
+            SessionHistory::append($session, new UserMessage('A subject'));
             $session->setMetadata('titleGenerationAttempts', $value);
 
             self::assertNull((new SessionTitleGenerator($provider))->generate($session));
             self::assertSame([], $provider->getRecorded());
-            self::assertSame($value, $session->getMetadata()['titleGenerationAttempts']);
+            self::assertSame($value, $session->getMetadataValue('titleGenerationAttempts'));
         }
     }
 
@@ -231,9 +242,10 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testAnExistingTitleDoesNotStartARequest(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider(new AssistantMessage('{"title":"Unused"}'));
-        $session = (new SessionStore(new InMemoryStorage(), 'local'))->create();
-        SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
+        $session = (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create();
+        SessionHistory::append($session, new UserMessage('A subject'));
         $session->setTitle('Manual title');
 
         self::assertNull((new SessionTitleGenerator($provider))->generate($session));
@@ -242,15 +254,14 @@ final class SessionTitleGeneratorTest extends TestCase
         self::assertArrayNotHasKey('titleGenerationAttempts', $session->getMetadata());
     }
 
-    public function testATitleAssignedDuringGenerationIsNotOverwritten(): void
+    public function testATitleAssignedToTheSameSessionDuringGenerationIsNotOverwritten(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'local');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'local');
         $session = $store->create();
-        SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
-        $otherSession = $store->get($session->getKey());
-        self::assertNotNull($otherSession);
+        SessionHistory::append($session, new UserMessage('A subject'));
         $requests = new TitleGenerationRequests(['{"title":"Automatic title"}']);
-        $requests->onRequest = static fn() => $otherSession->setTitle('Manual title');
+        $requests->onRequest = static fn() => $session->setTitle('Manual title');
 
         self::assertNull((new SessionTitleGenerator($this->provider($requests)))->generate($session));
         self::assertSame(1, $requests->count);
@@ -259,9 +270,10 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testASessionDeletedDuringGenerationIsNotRecreated(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'local');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'local');
         $session = $store->create();
-        SessionHistory::of($session)->addMessage(new UserMessage('A subject'));
+        SessionHistory::append($session, new UserMessage('A subject'));
         $requests = new TitleGenerationRequests(['{"title":"Late title"}']);
         $requests->onRequest = static fn() => $store->delete($session->getKey());
 
@@ -269,7 +281,7 @@ final class SessionTitleGeneratorTest extends TestCase
             (new SessionTitleGenerator($this->provider($requests)))->generate($session);
             self::fail('Saving a title to a deleted Session must fail.');
         } catch (MissingEntryException $error) {
-            self::assertSame('The Session no longer exists.', $error->getMessage());
+            self::assertSame('The storage entry does not exist.', $error->getMessage());
         }
 
         self::assertNull($store->get($session->getKey()));
@@ -277,9 +289,10 @@ final class SessionTitleGeneratorTest extends TestCase
 
     public function testNoTopicResultDoesNotRecreateASessionDeletedDuringGeneration(): void
     {
-        $store = new SessionStore(new InMemoryStorage(), 'local');
+        $nativeMessages = new InMemoryMessageStore();
+        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'local');
         $session = $store->create();
-        SessionHistory::of($session)->addMessage(new UserMessage('Can you help me?'));
+        SessionHistory::append($session, new UserMessage('Can you help me?'));
         $requests = new TitleGenerationRequests(['{"title":null}']);
         $requests->onRequest = static fn() => $store->delete($session->getKey());
 

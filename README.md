@@ -51,6 +51,7 @@ it arrives. Set `OPENAI_API_KEY` and `OPENAI_MODEL` in your environment first.
 require __DIR__ . '/vendor/autoload.php';
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\FileMessageStore;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
 use NeuronInteraction\Conversation;
@@ -68,7 +69,8 @@ $agent = Agent::make();
 $agent->setAiProvider($provider);
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');
-$sessionStore = new SessionStore($storage, 'local-user');
+$messageStore = new FileMessageStore(__DIR__ . '/interaction-state/messages');
+$sessionStore = new SessionStore($storage, $messageStore, 'local-user');
 $session = $sessionStore->create();
 $conversation = new Conversation($agent, $session);
 
@@ -158,8 +160,8 @@ $session = $sessionStore->create(['projectId' => 'alpha']);
 $session->setTitle('PHP generator discussion');
 $session->setMetadata('branchName', 'main');
 
-foreach ($sessionStore->list(['projectId' => 'alpha']) as $summary) {
-    echo $summary->getKey() . ': ' . ($summary->getTitle() ?? 'Untitled') . PHP_EOL;
+foreach ($sessionStore->list(['projectId' => 'alpha']) as $info) {
+    echo $info->getKey() . ': ' . ($info->getTitle() ?? 'Untitled') . PHP_EOL;
 }
 
 $restored = $sessionStore->get($sessionKey);
@@ -169,8 +171,11 @@ if ($restored === null) {
 $conversation->useSession($restored);
 ```
 
-`list()` returns `SessionSummary` objects, most recently used first, with
-`getKey()`, `getTitle()` and `getLastUsedAt()`. Ties use the Session key.
+`list()` returns `Session` objects, most recently used first, with
+`getKey()`, `getTitle()`, `getCreatedAt()`, `getLastUsedAt()`, `hasContent()` and
+`getMetadata()` and `getMetadataValue($key)`. Data getters use the fields loaded when each Session was constructed. Successful
+writes update that instance; changes made through another instance are visible
+after loading the Session again with `get()`. Ties use the Session key.
 Listing reads small Session records without loading message histories.
 Sessions appear in listings once they contain user-authored text or attachments.
 Creation immediately persists an empty Session, which can be retrieved by key.
@@ -178,12 +183,16 @@ Creation immediately persists an empty Session, which can be retrieved by key.
 sessions or sessions belonging to another user. `delete($key)` removes that
 user's Session record and all its saved messages, and does nothing if it is absent.
 
-Metadata keys use camelCase and values are strings. Use `getMetadata()`,
+Metadata keys are non-empty strings and values are strings. Names such as
+`project_id` and `Branch.Name` are literal keys; dots do not denote nested fields. Use `getMetadata()` for the complete array or `getMetadataValue($key)` for one
+value (null when absent, with empty strings preserved). Use
 `setMetadata($key, $value)` and `removeMetadata($key)` to manage them.
 Listing filters use exact equality and combine with AND. Updating metadata or
 a title changes only the requested fields and preserves messages and the last-used time.
-Each successfully inserted message advances last use, including direct Agent use;
-replaying a saved message ID leaves the original message and last-use time intact.
+Each successfully completed Conversation turn advances last use and makes the
+Session visible. Direct Agent use does not update the Session record. Replaying a
+saved message ID leaves the original message intact; a successful Conversation
+turn still advances the last-use time.
 Titles are optional;
 `setTitle()` requires nonblank text.
 
@@ -618,19 +627,26 @@ provider calls in the turn, or guarantee cancellation of remote generation.
 
 ## Storage and web integration
 
-Use one Storage dependency for Sessions, messages, preferences, input history and
-stop signals. FileStorage writes one complete JSON file per entry; InMemoryStorage
-keeps the same contract in one process. The modules establish their own namespaces:
-SessionStore, ConfigurationStore and InputHistory receive the authenticated user ID.
-The default Session message adapter uses the same Storage; a MessageStoreInterface
-override is optional. An override is wrapped to preserve Session ownership and
-lifecycle: its thread ID includes the owning user and Session identity, rather
-than the bare Session key. Newly appended messages update Session use and clear
-resets content visibility. Duplicate detection on an override reads that thread's
-saved messages before append; the normal Storage adapter uses atomic creation
-without that scan. The Host serializes the override's comparison and insertion.
+Use StorageInterface for Session records, preferences, input history and stop
+signals. Supply a Neuron MessageStoreInterface separately for messages. FileStorage
+writes one complete JSON file per entry; InMemoryStorage keeps the same contract
+in one process. SessionStore, ConfigurationStore and InputHistory receive the
+authenticated user ID.
+
+SessionStore takes dependencies in this order: StorageInterface,
+MessageStoreInterface, user ID. Session binds the Agent directly to the supplied
+Neuron message store. The Agent thread ID includes the owning user and Session
+identity, rather than the bare Session key. Neuron handles message persistence,
+archiving and duplicate IDs.
+
+After a Conversation turn returns successfully, Conversation updates lastUsedAt
+and sets hasContent to true. Failed or abandoned turns do not update these fields,
+even if Neuron saved messages before a later failure. Direct Agent or ChatHistory
+use persists messages without updating the Session record. The /clear Command
+starts a new empty Session and preserves the previous one.
 
 ```php
+use NeuronAI\Chat\History\FileMessageStore;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\InputHistory\InputHistory;
 use NeuronInteraction\Session\SessionStore;
@@ -638,7 +654,8 @@ use NeuronInteraction\Storage\FileStorage;
 
 $storage = new FileStorage(__DIR__ . '/interaction-state');
 $userId = 'local-user'; // Use the authenticated identity in your application.
-$sessions = new SessionStore($storage, $userId);
+$messageStore = new FileMessageStore(__DIR__ . '/interaction-state/messages');
+$sessions = new SessionStore($storage, $messageStore, $userId);
 $settings = new ConfigurationStore($storage, $userId);
 $inputs = new InputHistory($storage, $userId);
 ```
@@ -691,6 +708,14 @@ Message insertion and Session-use registration, Session deletion and batch
 archiving are multi-operation workflows, and failures propagate. The Host
 Application serializes overlapping turns, archive, clear and delete for one Session.
 Independent ChatHistory instances do not coordinate a conversation automatically.
+
+Session message persistence also changes: SessionMessageStore has been removed.
+Session uses the supplied Neuron message store directly, without a decorator.
+Provide a native InMemoryMessageStore, FileMessageStore or SQLMessageStore.
+Existing per-message Storage entries are not read or automatically migrated into
+the supplied Neuron store; configure a fresh state root when adopting this change.
+FileMessageStore replaces the thread's complete message file on each append;
+use a suitable database message store for concurrent workers.
 
 The Storage API and file format are breaking changes. Existing documents are not
 migrated or automatically backfilled. Use a fresh root for new state; see the

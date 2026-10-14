@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Conversation;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Command\CommandContext;
@@ -26,13 +27,14 @@ final class CommandAdmissionTest extends TestCase
 {
     public function testAdmissionIsLazyAndReevaluatedForEveryInvocation(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $command = new AdmissionProbeCommand();
         $allowed = false;
         $admission = new AdmissionObservation();
         $provider = new FakeAIProvider(new AssistantMessage('Unused'));
         $conversation = new Conversation(
             (new Agent())->setAiProvider($provider),
-            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
             admitCommand: static function (CommandInterface $candidate) use (&$allowed, $admission): bool {
                 $admission->record($candidate);
                 return $allowed;
@@ -65,10 +67,11 @@ final class CommandAdmissionTest extends TestCase
 
     public function testWithoutAdmissionOrdinaryCommandsAreAllowed(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $command = new AdmissionProbeCommand();
         $conversation = new Conversation(
             new Agent(),
-            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
         );
         $conversation->setCommands(new Commands($command));
         iterator_to_array($conversation->sendInput('/probe ordinary'));
@@ -77,9 +80,10 @@ final class CommandAdmissionTest extends TestCase
 
     public function testHostCanRefuseHelpRegardlessOfTheCommandClass(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $conversation = new Conversation(
             new Agent(),
-            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
             admitCommand: static fn(CommandInterface $command): bool => false,
         );
         $conversation->setCommands(new Commands(new HelpCommand()));
@@ -91,11 +95,12 @@ final class CommandAdmissionTest extends TestCase
 
     public function testAdmissionFailurePropagatesWithoutRunningTheCommand(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $command = new AdmissionProbeCommand();
         $failure = new RuntimeException('Authorization unavailable');
         $conversation = new Conversation(
             new Agent(),
-            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
             admitCommand: static function (CommandInterface $candidate) use ($failure): bool {
                 throw $failure;
             },
@@ -113,9 +118,10 @@ final class CommandAdmissionTest extends TestCase
 
     public function testUnknownCommandDoesNotInvokeAdmission(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $conversation = new Conversation(
             new Agent(),
-            (new SessionStore(new InMemoryStorage(), 'owner'))->create(),
+            (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
             admitCommand: static function (CommandInterface $candidate): bool {
                 self::fail('An unknown Command has nothing to admit');
             },

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\FileMessageStore;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
@@ -18,7 +19,8 @@ $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
 $storage = new FileStorage(\dirname(__DIR__) . '/.storage/multiple-sessions');
-$sessionStore = new SessionStore($storage, 'demo-user');
+$messageStore = new FileMessageStore(\dirname(__DIR__) . '/.storage/multiple-sessions/messages');
+$sessionStore = new SessionStore($storage, $messageStore, 'demo-user');
 
 $lisbonSession = $sessionStore->create();
 $lisbonSession->setTitle('Trip to Lisbon');

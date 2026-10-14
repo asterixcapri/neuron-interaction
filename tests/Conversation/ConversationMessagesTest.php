@@ -6,6 +6,7 @@ namespace NeuronInteraction\Tests\Conversation;
 
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
@@ -24,6 +25,7 @@ final class ConversationMessagesTest extends TestCase
 {
     public function testDisplayMessagesRestoreReferencesWithoutChangingSavedHistoryOrAttachments(): void
     {
+        $nativeMessages = new InMemoryMessageStore();
         $processor = new class implements MessageProcessorInterface {
             public function forAgent(UserMessage $message): UserMessage
             {
@@ -45,7 +47,7 @@ final class ConversationMessagesTest extends TestCase
                 return $display;
             }
         };
-        $sessionStore = new SessionStore(new InMemoryStorage(), 'local');
+        $sessionStore = new SessionStore(new InMemoryStorage(), $nativeMessages, 'local');
         $session = $sessionStore->create();
         $agent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Summary')));
         $conversation = new Conversation($agent, $session);

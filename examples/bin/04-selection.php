@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Command\ClearCommand;
 use NeuronInteraction\Command\CommandInput;
@@ -30,7 +31,8 @@ $agent = new Agent();
 $agent->setAiProvider($provider);
 
 $storage = new InMemoryStorage();
-$sessionStore = new SessionStore($storage, 'demo-user');
+$messageStore = new InMemoryMessageStore();
+$sessionStore = new SessionStore($storage, $messageStore, 'demo-user');
 $session = $sessionStore->create();
 
 $conversation = new Conversation($agent, $session);
