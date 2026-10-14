@@ -7,6 +7,7 @@ namespace NeuronInteraction\Storage;
 use Closure;
 use InvalidArgumentException;
 use JsonException;
+use NeuronInteraction\Exception\DuplicateKeyException;
 use RuntimeException;
 use UnexpectedValueException;
 

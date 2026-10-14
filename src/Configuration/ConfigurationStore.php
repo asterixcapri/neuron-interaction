@@ -6,7 +6,7 @@ namespace NeuronInteraction\Configuration;
 
 use InvalidArgumentException;
 use JsonException;
-use NeuronInteraction\Storage\DuplicateKeyException;
+use NeuronInteraction\Exception\DuplicateKeyException;
 use NeuronInteraction\Storage\StorageInterface;
 use RuntimeException;
 use UnexpectedValueException;

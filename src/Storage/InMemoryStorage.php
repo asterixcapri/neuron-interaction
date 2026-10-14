@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Storage;
 
 use InvalidArgumentException;
+use NeuronInteraction\Exception\DuplicateKeyException;
 
 use function array_slice;
 use function array_values;

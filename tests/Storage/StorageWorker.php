@@ -51,7 +51,7 @@ final class StorageWorker
                         'clear' => $storage->clear('items'),
                     };
                     echo json_encode(['result' => $result], JSON_THROW_ON_ERROR) . "\n";
-                } catch (NeuronInteraction\Storage\DuplicateKeyException) {
+                } catch (NeuronInteraction\Exception\DuplicateKeyException) {
                     echo json_encode(['conflict' => true], JSON_THROW_ON_ERROR) . "\n";
                 }
                 flush();

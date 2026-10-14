@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace NeuronInteraction\Storage;
+namespace NeuronInteraction\Exception;
 
 use RuntimeException;
 

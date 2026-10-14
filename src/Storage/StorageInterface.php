@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Storage;
 
 use InvalidArgumentException;
+use NeuronInteraction\Exception\DuplicateKeyException;
 
 /**
  * Ordered namespaced JSON-array entries with atomic individual operations.

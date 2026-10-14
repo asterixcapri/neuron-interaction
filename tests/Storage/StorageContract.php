@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NeuronInteraction\Tests\Storage;
 
 use InvalidArgumentException;
-use NeuronInteraction\Storage\DuplicateKeyException;
+use NeuronInteraction\Exception\DuplicateKeyException;
 use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\TestCase;
 use stdClass;
