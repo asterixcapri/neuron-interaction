@@ -38,14 +38,15 @@ interface StorageInterface
     /**
      * Atomically assign or remove fields. Null assignment retains a field.
      * Paths are literal field names, never dot notation or list indexes.
-     * An empty request still requires an existing entry. Invalid requests are atomic.
+     * Returns false when the target is absent; never creates an entry.
+     * Returns true for existing entries, including empty or unchanged updates.
+     * Invalid requests are atomic.
      *
      * @param list<array{path: list<string>, value: mixed}> $assignments
      * @param list<list<string>> $removals
      * @throws InvalidArgumentException when identifiers, paths or values are invalid
-     * @throws MissingEntryException when the target does not exist
      */
-    public function update(string $namespace, string $key, array $assignments = [], array $removals = []): void;
+    public function update(string $namespace, string $key, array $assignments = [], array $removals = []): bool;
 
     /** Idempotent removal; recreation gives the key a new insertion position. */
     public function delete(string $namespace, string $key): void;

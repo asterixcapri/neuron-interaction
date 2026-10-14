@@ -131,6 +131,7 @@ final class FileStorageTest extends StorageContract
         $storage = $this->storage();
         self::assertNull($storage->get('items', 'absent'));
         self::assertSame([], $storage->list('items'));
+        self::assertFalse($storage->update('items', 'absent'));
         $storage->delete('items', 'absent');
         $storage->clear('items');
         self::assertDirectoryDoesNotExist($this->directory);
@@ -245,7 +246,7 @@ final class FileStorageTest extends StorageContract
                 ]]);
             }
             foreach ($workers as $worker) {
-                self::assertSame(['result' => null], $worker->receive());
+                self::assertSame(['result' => true], $worker->receive());
             }
             $value = $this->storage()->get('items', 'record');
             self::assertNotNull($value);

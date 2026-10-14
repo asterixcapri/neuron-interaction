@@ -7,8 +7,8 @@ namespace NeuronInteraction\Configuration;
 use InvalidArgumentException;
 use JsonException;
 use NeuronInteraction\Storage\DuplicateKeyException;
-use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Storage\StorageInterface;
+use RuntimeException;
 use UnexpectedValueException;
 
 use function hash;
@@ -78,11 +78,13 @@ final class ConfigurationStore
             // Another writer has already established this user's record.
         }
 
-        $this->storage->update(
+        if (!$this->storage->update(
             self::NAMESPACE,
             $this->storageKey(),
             [['path' => [self::FIELD_PREFIX . $key], 'value' => $value]],
-        );
+        )) {
+            throw new RuntimeException('The preference record no longer exists.');
+        }
     }
 
     public function delete(string $key): void
@@ -91,11 +93,7 @@ final class ConfigurationStore
             return;
         }
 
-        try {
-            $this->storage->update(self::NAMESPACE, $this->storageKey(), removals: [[self::FIELD_PREFIX . $key]]);
-        } catch (MissingEntryException) {
-            // Removing a preference from an absent record is already complete.
-        }
+        $this->storage->update(self::NAMESPACE, $this->storageKey(), removals: [[self::FIELD_PREFIX . $key]]);
     }
 
     /** @return array<array-key, mixed> */

@@ -10,8 +10,8 @@ use InvalidArgumentException;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\History\MessageStoreInterface;
 use NeuronAI\Chat\Messages\Message;
-use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Storage\StorageInterface;
+use RuntimeException;
 
 use function array_values;
 use function hash;
@@ -87,7 +87,7 @@ final class Session
         if ($title === '') {
             throw new InvalidArgumentException('A Session title cannot be blank.');
         }
-        $this->storage->update($this->namespace, $this->key, [['path' => ['title'], 'value' => $title]]);
+        $this->updateRecord([['path' => ['title'], 'value' => $title]]);
         $this->title = $title;
     }
 
@@ -107,7 +107,7 @@ final class Session
         if ($key === '') {
             throw new InvalidArgumentException('Metadata key cannot be empty.');
         }
-        $this->storage->update($this->namespace, $this->key, [['path' => ['metadata', $key], 'value' => $value]]);
+        $this->updateRecord([['path' => ['metadata', $key], 'value' => $value]]);
         $this->metadata[$key] = $value;
     }
 
@@ -116,7 +116,7 @@ final class Session
         if ($key === '') {
             throw new InvalidArgumentException('Metadata key cannot be empty.');
         }
-        $this->storage->update($this->namespace, $this->key, removals: [['metadata', $key]]);
+        $this->updateRecord(removals: [['metadata', $key]]);
         unset($this->metadata[$key]);
     }
 
@@ -139,7 +139,7 @@ final class Session
     public function assertExists(): void
     {
         if ($this->storage->get($this->namespace, $this->key) === null) {
-            throw new MissingEntryException('The Session no longer exists.');
+            throw new RuntimeException('The Session no longer exists.');
         }
     }
 
@@ -147,7 +147,7 @@ final class Session
     public function registerUse(): void
     {
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-        $this->storage->update($this->namespace, $this->key, [
+        $this->updateRecord([
             ['path' => ['lastUsedAt'], 'value' => $now->format('Y-m-d\TH:i:s.uP')],
             ['path' => ['hasContent'], 'value' => true],
         ]);
@@ -158,7 +158,7 @@ final class Session
     /** Resets listing visibility after the native message history has been cleared. */
     public function resetContent(): void
     {
-        $this->storage->update($this->namespace, $this->key, [['path' => ['hasContent'], 'value' => false]]);
+        $this->updateRecord([['path' => ['hasContent'], 'value' => false]]);
         $this->hasContent = false;
     }
 
@@ -168,6 +168,17 @@ final class Session
         $this->messageStore->clear($this->messageNamespace());
         $this->resetContent();
         $this->storage->delete($this->namespace, $this->key);
+    }
+
+    /**
+     * @param list<array{path: list<string>, value: mixed}> $assignments
+     * @param list<list<string>> $removals
+     */
+    private function updateRecord(array $assignments = [], array $removals = []): void
+    {
+        if (!$this->storage->update($this->namespace, $this->key, $assignments, $removals)) {
+            throw new RuntimeException('The Session no longer exists.');
+        }
     }
 
 }

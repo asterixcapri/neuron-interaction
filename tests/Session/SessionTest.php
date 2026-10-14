@@ -28,7 +28,6 @@ use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
-use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Tests\History\SessionMessages;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -283,7 +282,7 @@ final class SessionTest extends TestCase
         self::assertCount(1, $sessions->list());
         $sessions->delete($session->getKey());
         self::assertSame([], $messages->loadAll($session->messageNamespace()));
-        $this->expectException(MissingEntryException::class);
+        $this->expectException(RuntimeException::class);
         iterator_to_array($conversation->sendInput('Deleted Session'));
     }
 
@@ -341,7 +340,7 @@ final class SessionTest extends TestCase
             hasContent: $owned->hasContent(),
             metadata: $owned->getMetadata(),
         );
-        $this->expectException(MissingEntryException::class);
+        $this->expectException(RuntimeException::class);
         $session->bindToAgent(new Agent());
     }
 

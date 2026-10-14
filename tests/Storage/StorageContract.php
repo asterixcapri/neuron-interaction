@@ -6,7 +6,6 @@ namespace NeuronInteraction\Tests\Storage;
 
 use InvalidArgumentException;
 use NeuronInteraction\Storage\DuplicateKeyException;
-use NeuronInteraction\Storage\MissingEntryException;
 use NeuronInteraction\Storage\StorageInterface;
 use PHPUnit\Framework\TestCase;
 use stdClass;
@@ -53,7 +52,7 @@ abstract class StorageContract extends TestCase
         $storage->set('items', 'first', ['old' => true]);
         $storage->set('items', 'second', []);
         $storage->set('items', 'first', ['new' => true]);
-        $storage->update('items', 'first', [['path' => ['new'], 'value' => false]]);
+        self::assertTrue($storage->update('items', 'first', [['path' => ['new'], 'value' => false]]));
         self::assertSame(['new' => false], $storage->get('items', 'first'));
         self::assertSame(['first', 'second'], array_column($storage->list('items'), 'key'));
         $storage->delete('items', 'first');
@@ -132,20 +131,26 @@ abstract class StorageContract extends TestCase
             'created' => ['nested' => ['field' => 'yes']],
         ], $storage->get('items', 'one'));
         $before = $storage->list('items');
-        $storage->update('items', 'one');
+        self::assertTrue($storage->update('items', 'one'));
+        self::assertTrue($storage->update('items', 'one', [['path' => ['keep'], 'value' => true]]));
         self::assertSame($before, $storage->list('items'));
     }
 
     public function testMissingUpdateNeverCreatesAnEntry(): void
     {
         $storage = $this->storage();
-        try {
-            $storage->update('items', 'absent');
-            self::fail('A missing target must fail even with an empty update.');
-        } catch (MissingEntryException) {
-            self::assertNull($storage->get('items', 'absent'));
-            self::assertSame([], $storage->list('items'));
-        }
+        self::assertFalse($storage->update('items', 'absent'));
+        self::assertFalse($storage->update('items', 'absent', [['path' => ['field'], 'value' => true]]));
+        self::assertNull($storage->get('items', 'absent'));
+        self::assertSame([], $storage->list('items'));
+
+        $storage->create('items', ['keep' => true], 'existing');
+        self::assertFalse($storage->update('items', 'absent'));
+        self::assertSame(['keep' => true], $storage->get('items', 'existing'));
+
+        $storage->delete('items', 'existing');
+        self::assertFalse($storage->update('items', 'existing'));
+        self::assertSame([], $storage->list('items'));
     }
 
     public function testInvalidUpdateRequestsAreAtomic(): void

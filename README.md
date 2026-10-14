@@ -667,7 +667,7 @@ Implement `StorageInterface` for another persistence backend:
 | `create($namespace, $value, $key = null)` | Insert without replacement and return the supplied or generated opaque string key. An existing supplied key throws `DuplicateKeyException`. |
 | `get($namespace, $key)` | Return the array value or `null` when absent. Missing reads create no storage state. |
 | `set($namespace, $key, $value)` | Insert or replace the complete value. Replacement preserves insertion position. |
-| `update($namespace, $key, $assignments = [], $removals = [])` | Atomically assign or remove selected fields of an existing entry. Absence throws `MissingEntryException`. |
+| `update($namespace, $key, $assignments = [], $removals = [])` | Atomically assign or remove selected fields. Returns `false` when the entry is absent; `true` when it exists, including empty or unchanged updates. |
 | `delete($namespace, $key)` | Remove the entry if present. Recreating it gives it a new insertion position. |
 | `list($namespace, $limit = null)` | Return key/value pairs oldest insertion first. A positive limit selects the latest entries in that order; zero returns none and negatives are invalid. |
 | `clear($namespace)` | Remove all entries in that namespace, leaving other namespaces intact. |

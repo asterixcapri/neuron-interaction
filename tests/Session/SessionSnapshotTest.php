@@ -104,6 +104,37 @@ final class SessionSnapshotTest extends TestCase
         }
     }
 
+    public function testMissingRecordLeavesLocalFieldsUnchanged(): void
+    {
+        $storage = new InMemoryStorage();
+        $sessions = new SessionStore($storage, new InMemoryMessageStore(), 'alice');
+        $session = $sessions->create(['project' => 'one']);
+        $session->setTitle('Original');
+        $session->registerUse();
+        $lastUsedAt = $session->getLastUsedAt();
+        $storage->delete(Session::namespaceForUser('alice'), $session->getKey());
+
+        foreach ([
+            static fn() => $session->setTitle('Changed'),
+            static fn() => $session->setMetadata('project', 'two'),
+            static fn() => $session->removeMetadata('project'),
+            static fn() => $session->registerUse(),
+            static fn() => $session->resetContent(),
+        ] as $write) {
+            try {
+                $write();
+                self::fail('A missing Session must not accept local changes.');
+            } catch (RuntimeException $error) {
+                self::assertSame('The Session no longer exists.', $error->getMessage());
+            }
+            self::assertSame('Original', $session->getTitle());
+            self::assertSame(['project' => 'one'], $session->getMetadata());
+            self::assertTrue($session->hasContent());
+            self::assertSame($lastUsedAt, $session->getLastUsedAt());
+            self::assertNull($sessions->get($session->getKey()));
+        }
+    }
+
     public function testListedSessionsCanPersistChanges(): void
     {
         $sessions = new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'alice');

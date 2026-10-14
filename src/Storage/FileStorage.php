@@ -13,7 +13,6 @@ use UnexpectedValueException;
 use function array_map;
 use function array_slice;
 use function basename;
-use function bin2hex;
 use function clearstatcache;
 use function dirname;
 use function fclose;
@@ -34,7 +33,6 @@ use function json_encode;
 use function link;
 use function lstat;
 use function mkdir;
-use function random_bytes;
 use function realpath;
 use function rename;
 use function scandir;
@@ -52,7 +50,7 @@ use const LOCK_UN;
 use const PHP_INT_MAX;
 
 /** One complete JSON document per entry, coordinated by a stable namespace lock. */
-final class FileStorage implements StorageInterface
+final class FileStorage extends AbstractStorage
 {
     // The envelope adds one object around a value validated at JSON depth 512.
     // Decoding additionally counts the root level before its contents.
@@ -62,14 +60,14 @@ final class FileStorage implements StorageInterface
 
     public function create(string $namespace, array $value, ?string $key = null): string
     {
-        StorageValue::identifier($namespace);
+        $this->validateIdentifier($namespace);
         if ($key !== null) {
-            StorageValue::identifier($key);
+            $this->validateIdentifier($key);
         }
-        $value = StorageValue::snapshot($value);
+        $value = $this->snapshotValue($value);
         return $this->locked($namespace, true, true, function (string $directory) use ($value, $key): string {
             do {
-                $candidate = $key ?? bin2hex(random_bytes(16));
+                $candidate = $key ?? $this->generateKey();
                 $path = $this->path($directory, $candidate);
                 $exists = $this->regularFile($path);
                 if ($exists && $key !== null) {
@@ -84,7 +82,7 @@ final class FileStorage implements StorageInterface
 
     public function get(string $namespace, string $key): ?array
     {
-        $this->identifiers($namespace, $key);
+        $this->validateIdentifiers($namespace, $key);
         return $this->locked($namespace, false, false, function (string $directory) use ($key): ?array {
             return $this->readEntry($this->path($directory, $key))['value'] ?? null;
         });
@@ -92,8 +90,8 @@ final class FileStorage implements StorageInterface
 
     public function set(string $namespace, string $key, array $value): void
     {
-        $this->identifiers($namespace, $key);
-        $value = StorageValue::snapshot($value);
+        $this->validateIdentifiers($namespace, $key);
+        $value = $this->snapshotValue($value);
         $this->locked($namespace, true, true, function (string $directory) use ($key, $value): void {
             $path = $this->path($directory, $key);
             $entry = $this->readEntry($path);
@@ -102,29 +100,26 @@ final class FileStorage implements StorageInterface
         });
     }
 
-    public function update(string $namespace, string $key, array $assignments = [], array $removals = []): void
+    public function update(string $namespace, string $key, array $assignments = [], array $removals = []): bool
     {
-        $this->identifiers($namespace, $key);
-        $directory = $this->directory($namespace, false);
-        if ($directory === null) {
-            throw new MissingEntryException('The storage entry does not exist.');
-        }
-        $this->locked($namespace, false, true, function (string $directory) use ($key, $assignments, $removals): void {
+        $this->validateIdentifiers($namespace, $key);
+        return $this->locked($namespace, false, true, function (string $directory) use ($key, $assignments, $removals): bool {
             $path = $this->path($directory, $key);
             $entry = $this->readEntry($path);
             if ($entry === null) {
-                throw new MissingEntryException('The storage entry does not exist.');
+                return false;
             }
-            $value = StorageUpdate::apply($entry['value'], $assignments, $removals);
+            $value = $this->applyUpdate($entry['value'], $assignments, $removals);
             if ($assignments !== [] || $removals !== []) {
                 $this->publish($path, ['position' => $entry['position'], 'value' => $value]);
             }
-        });
+            return true;
+        }, missing: false) ?? false;
     }
 
     public function delete(string $namespace, string $key): void
     {
-        $this->identifiers($namespace, $key);
+        $this->validateIdentifiers($namespace, $key);
         $this->locked($namespace, false, true, function (string $directory) use ($key): void {
             $path = $this->path($directory, $key);
             if ($this->regularFile($path) && !unlink($path)) {
@@ -135,7 +130,7 @@ final class FileStorage implements StorageInterface
 
     public function list(string $namespace, ?int $limit = null): array
     {
-        StorageValue::identifier($namespace);
+        $this->validateIdentifier($namespace);
         if ($limit !== null && $limit < 0) {
             throw new InvalidArgumentException('The storage list limit cannot be negative.');
         }
@@ -143,7 +138,7 @@ final class FileStorage implements StorageInterface
             $entries = [];
             foreach ($this->entryPaths($directory) as $path) {
                 $key = substr(basename($path), 0, -5);
-                StorageValue::identifier($key);
+                $this->validateIdentifier($key);
                 $entry = $this->readEntry($path);
                 if ($entry === null) {
                     throw new RuntimeException('A listed storage entry disappeared.');
@@ -160,7 +155,7 @@ final class FileStorage implements StorageInterface
 
     public function clear(string $namespace): void
     {
-        StorageValue::identifier($namespace);
+        $this->validateIdentifier($namespace);
         $this->locked($namespace, false, true, function (string $directory): void {
             $paths = $this->entryPaths($directory);
             foreach ($paths as $path) {
@@ -262,12 +257,6 @@ final class FileStorage implements StorageInterface
         return $resolved;
     }
 
-    private function identifiers(string $namespace, string $key): void
-    {
-        StorageValue::identifier($namespace);
-        StorageValue::identifier($key);
-    }
-
     private function path(string $directory, string $key): string
     {
         return $directory . '/' . $key . '.json';
@@ -306,7 +295,7 @@ final class FileStorage implements StorageInterface
             if (!is_array($entry) || !isset($entry['position'], $entry['value']) || !is_int($entry['position']) || $entry['position'] < 1 || !is_array($entry['value'])) {
                 throw new UnexpectedValueException('The stored entry has an invalid envelope.');
             }
-            return ['position' => $entry['position'], 'value' => StorageValue::snapshot($entry['value'])];
+            return ['position' => $entry['position'], 'value' => $this->snapshotValue($entry['value'])];
         } catch (JsonException|InvalidArgumentException $exception) {
             throw new UnexpectedValueException('The stored entry contains invalid JSON data.', previous: $exception);
         }
