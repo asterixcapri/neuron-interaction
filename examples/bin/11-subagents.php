@@ -64,7 +64,7 @@ $conversation->setSubagents($subagents);
 $conversation->setCommands(new Commands(new ExitCommand()));
 
 echo 'Session: ' . $conversation->session()->getKey() . \PHP_EOL;
-echo 'Try: Delegate a comparison of A (10 EUR/month) and B (80 EUR/year) to the researcher.' . \PHP_EOL;
+echo 'Try: Delegate a comparison of A (10 EUR/month) and B (80 EUR/year) to the general agent.' . \PHP_EOL;
 echo 'Wait after the first response: the assistant will report the result automatically.' . \PHP_EOL;
 echo 'Use /exit to leave. Reopen with: composer subagents -- ' . $session->getKey() . \PHP_EOL;
 

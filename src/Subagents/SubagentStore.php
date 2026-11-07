@@ -29,7 +29,7 @@ final readonly class SubagentStore
 
     public function __construct(private StorageInterface $storage, public LockFactory $locks) {}
 
-    public function create(Session $session, string $agent, string $task, string $context = ''): Run
+    public function create(Session $session, string $agent, string $task): Run
     {
         $session->assertExists();
         if (trim($task) === '' || trim($agent) === '') {
@@ -37,7 +37,7 @@ final readonly class SubagentStore
         }
         $id = $this->storage->create(self::NAMESPACE, [
             'userId' => $session->getUserId(), 'sessionKey' => $session->getKey(),
-            'agent' => $agent, 'task' => $task, 'context' => $context, 'status' => 'queued',
+            'agent' => $agent, 'task' => $task, 'status' => 'queued',
             'result' => null, 'error' => null, 'messages' => [], 'acknowledged' => false,
         ]);
         return $this->get($id);

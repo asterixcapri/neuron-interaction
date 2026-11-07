@@ -17,6 +17,7 @@ use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\Providers\ProviderResponse;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Tools\ToolCall;
+use NeuronAI\Tools\ToolInterface;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\SubagentCompleted;
 use NeuronInteraction\Exception\ExecutionBusyException;
@@ -251,6 +252,66 @@ final class SubagentsTest extends TestCase
         self::assertCount(3, $provider->getRecorded());
         self::assertStringContainsString('Child result', json_encode($provider->getRecorded()[2]->messages, JSON_THROW_ON_ERROR));
         self::assertStringContainsString('Please delegate a comparison.', json_encode($provider->getRecorded()[2]->messages, JSON_THROW_ON_ERROR));
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function agentInstructions(): iterable
+    {
+        yield 'general' => ['general', 'Complete the supplied task and explain limitations.'];
+        yield 'specialist' => ['reviewer', 'Review changes for concurrency defects.'];
+    }
+
+    #[DataProvider('agentInstructions')]
+    public function testDelegationUsesOnlyAgentAndTaskAndPreservesFactoryInstructions(string $name, string $instructions): void
+    {
+        $child = new FakeAIProvider(new AssistantMessage('Done.'));
+        $registry = (new Registry())->register($name, 'Delegated work', static fn(): Agent
+            => (new Agent())->setAiProvider($child)->setInstructions($instructions));
+        $adapter = new class implements BackgroundAdapterInterface {
+            public function dispatch(string $runId): void {}
+        };
+        $this->subagents = new Subagents($registry, $this->runs, $adapter);
+        $task = "Compare A and B. A costs 10 EUR/month; B costs 80 EUR/year.\nReturn annual costs in a table.";
+        $parent = new FakeAIProvider(
+            new ToolCallMessage(tools: [new ToolCall('spawn_subagent', 'delegate', ['agent' => $name, 'task' => $task])]),
+            new AssistantMessage('Delegated.'),
+        );
+        iterator_to_array($this->conversation($parent)->sendInput('Private parent history.'));
+        $names = [];
+        foreach ($parent->getRecorded()[0]->tools as $tool) {
+            if ($tool instanceof ToolInterface && $tool->getName() === 'spawn_subagent') {
+                foreach ($tool->getProperties() as $property) {
+                    $names[] = $property->getName();
+                    self::assertTrue($property->isRequired());
+                }
+            }
+        }
+        self::assertSame(['agent', 'task'], $names);
+        $entries = $this->storage->list('subagent-runs');
+        self::assertCount(1, $entries);
+        self::assertArrayNotHasKey('context', $entries[0]['value']);
+        $run = (new Executor($registry, $this->runs))->execute($entries[0]['key']);
+        self::assertSame($name, $run->agent);
+        self::assertSame($task, $run->task);
+        self::assertSame('Done.', $run->result);
+        $request = $child->getRecorded()[0];
+        self::assertNotNull($request->systemPrompt);
+        self::assertSame($instructions, $request->systemPrompt->getContent());
+        self::assertCount(1, $request->messages);
+        self::assertInstanceOf(UserMessage::class, $request->messages[0]);
+        self::assertSame($task, $request->messages[0]->getContent());
+    }
+
+    public function testPreviouslyStoredContextIsIncludedInTheTaskWithoutDuplication(): void
+    {
+        $run = $this->subagents->spawn($this->session, 'researcher', 'Compare A and B.');
+        $this->storage->update('subagent-runs', $run->id, [
+            ['path' => ['context'], 'value' => 'A costs 10 EUR/month; B costs 80 EUR/year.'],
+        ]);
+        $task = "Compare A and B.\n\nContext supplied by the parent agent:\nA costs 10 EUR/month; B costs 80 EUR/year.";
+        self::assertSame($task, $this->runs->get($run->id)->task);
+        self::assertSame($task, $this->executor->execute($run->id)->task);
+        self::assertSame($task, $this->runs->get($run->id)->task);
     }
 
     public function testNoWorkAndDifferentSessionNeverInvokeTheModel(): void

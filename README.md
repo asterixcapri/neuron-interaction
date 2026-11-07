@@ -638,8 +638,21 @@ provider calls in the turn, or guarantee cancellation of remote generation.
 Enable delegation on a Conversation with `setSubagents()`. A parent can then use
 `spawn_subagent`, `subagent_status` and `send_subagent_message`. Each run belongs
 to the user and Session that started it. Switching Sessions does not redirect an
-existing run's result. Children receive their task, explicit context and later
+existing run's result. Children receive a self-contained task and later
 corrections, with independent model history.
+
+`spawn_subagent(agent, task)` accepts only the registered agent name and its task.
+Include relevant data, constraints and the expected deliverable in `task`; the
+parent's history is not inherited. The application configures each agent's system
+instructions, provider and tools in its registry factory. These are not spawn
+parameters. A general-purpose agent can take its role from the task; register a
+specialist when you need reusable instructions or a different model or tool set.
+Every factory must return a new Agent instance.
+
+PHP callers use `$subagents->spawn($session, $agentName, $task)`. Callers that
+previously passed a separate `context` argument must include that content in
+`task` instead. Existing stored runs with `context` remain readable: their context
+is appended to the task when loaded.
 
 The module stores runs in the existing `StorageInterface`; it does not need a
 second persistence implementation. Configure the same durable storage and Symfony
@@ -655,8 +668,8 @@ use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\Store\SemaphoreStore;
 
 // $storage, $session and $agent are configured as in the quick start.
-// $createResearcher is a Closure returning a NEW configured Neuron Agent.
-$registry = (new Registry())->register('researcher', 'Analyze supplied data', $createResearcher);
+// $createGeneral is a Closure returning a NEW configured Neuron Agent.
+$registry = (new Registry())->register('general', 'Complete a delegated task', $createGeneral);
 $locks = new LockFactory(new SemaphoreStore());
 $runs = new SubagentStore($storage, $locks);
 $subagents = new Subagents($registry, $runs, new ConsoleAdapter(
@@ -666,7 +679,7 @@ $subagents = new Subagents($registry, $runs, new ConsoleAdapter(
 
 $conversation = (new Conversation($agent, $session))->setSubagents($subagents);
 
-foreach ($conversation->sendInput('Delegate this comparison to the researcher.') as $event) {
+foreach ($conversation->sendInput('Delegate a comparison of A (10 EUR/month) and B (80 EUR/year) to the general agent.') as $event) {
     // Render the native stream as usual.
 }
 

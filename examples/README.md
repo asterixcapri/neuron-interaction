@@ -186,7 +186,8 @@ terminal, without an input editor that redraws partially typed lines.
 
 The terminal prints its Session key. Reopen it with
 `composer subagents -- SESSION_KEY` to collect results that finished after exit.
-The researcher has no filesystem or web tools: include the data it should analyze.
+The `general` agent has no filesystem or web tools: include the data it needs in the task.
+Its stable instructions and provider are configured in `src/Subagents/Agents.php`.
 
 For a web host, the library README shows a closure that restores the original
 Session and constructs `Conversation` directly for user turns and Messenger

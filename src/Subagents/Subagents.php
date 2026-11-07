@@ -23,10 +23,10 @@ final readonly class Subagents
         return $this->registry->catalog();
     }
 
-    public function spawn(Session $session, string $agent, string $task, string $context = ''): Run
+    public function spawn(Session $session, string $agent, string $task): Run
     {
         $this->registry->assertExists($agent);
-        $run = $this->store->create($session, $agent, $task, $context);
+        $run = $this->store->create($session, $agent, $task);
         try {
             $this->adapter->dispatch($run->id);
         } catch (Throwable $error) {

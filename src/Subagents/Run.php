@@ -7,6 +7,7 @@ namespace NeuronInteraction\Subagents;
 use UnexpectedValueException;
 
 use function array_is_list;
+use function array_key_exists;
 use function in_array;
 use function is_array;
 use function is_bool;
@@ -21,7 +22,6 @@ final readonly class Run
         public string $sessionKey,
         public string $agent,
         public string $task,
-        public string $context = '',
         public string $status = 'queued',
         public ?string $result = null,
         public ?string $error = null,
@@ -32,7 +32,7 @@ final readonly class Run
     /** @param array<array-key, mixed> $data */
     public static function fromRecord(string $id, array $data): self
     {
-        foreach (['userId', 'sessionKey', 'agent', 'task', 'context', 'status'] as $field) {
+        foreach (['userId', 'sessionKey', 'agent', 'task', 'status'] as $field) {
             if (!isset($data[$field]) || !is_string($data[$field])) {
                 throw new UnexpectedValueException('Invalid subagent field: ' . $field);
             }
@@ -55,13 +55,22 @@ final readonly class Run
             }
             $validated[] = $message;
         }
+        // Preserve context from runs queued before task became self-contained.
+        $task = $data['task'];
+        if (array_key_exists('context', $data)) {
+            if (!is_string($data['context'])) {
+                throw new UnexpectedValueException('Invalid subagent field: context');
+            }
+            if ($data['context'] !== '') {
+                $task .= "\n\nContext supplied by the parent agent:\n" . $data['context'];
+            }
+        }
         return new self(
             $id,
             $data['userId'],
             $data['sessionKey'],
             $data['agent'],
-            $data['task'],
-            $data['context'],
+            $task,
             $data['status'],
             $result,
             $error,

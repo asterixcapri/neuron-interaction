@@ -33,11 +33,7 @@ final readonly class Executor
                 $inbox = new InboxMiddleware($this->store, $run->id);
                 // A factory preserves this cursor: Neuron otherwise clones middleware.
                 $agent->addMiddleware(InferenceNode::class, static fn() => $inbox);
-                $prompt = $run->task;
-                if ($run->context !== '') {
-                    $prompt .= "\n\nContext supplied by the parent agent:\n" . $run->context;
-                }
-                $messages = [new UserMessage($prompt)];
+                $messages = [new UserMessage($run->task)];
                 do {
                     $state = $agent->chat($messages);
                     if ($state->isInterrupted()) {

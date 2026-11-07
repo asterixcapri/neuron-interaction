@@ -24,13 +24,12 @@ final class SpawnSubagent extends Tool
     {
         return [
             new ToolProperty('agent', PropertyType::STRING, json_encode($this->subagents->catalog(), JSON_THROW_ON_ERROR), true, array_keys($this->subagents->catalog())),
-            new ToolProperty('task', PropertyType::STRING, 'Self-contained task and expected deliverable.', true),
-            new ToolProperty('context', PropertyType::STRING, 'Optional relevant context; parent history is not inherited.'),
+            new ToolProperty('task', PropertyType::STRING, 'Self-contained task including relevant data, constraints and expected deliverable. Parent history is not inherited.', true),
         ];
     }
 
-    public function __invoke(string $agent, string $task, string $context = ''): string
+    public function __invoke(string $agent, string $task): string
     {
-        return json_encode($this->subagents->spawn($this->session, $agent, $task, $context)->summary(), JSON_THROW_ON_ERROR);
+        return json_encode($this->subagents->spawn($this->session, $agent, $task)->summary(), JSON_THROW_ON_ERROR);
     }
 }
