@@ -100,7 +100,7 @@ final readonly class SessionTitleGenerator
         }
         foreach ($messages as $message) {
             if ($message instanceof ToolCallMessage || $message instanceof ToolResultMessage
-                || !$message instanceof UserMessage) {
+                || !$message instanceof UserMessage || $message->getMetadata('subagent_event_id') !== null) {
                 continue;
             }
 

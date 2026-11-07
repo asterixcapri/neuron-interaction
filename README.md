@@ -1,7 +1,7 @@
 # Neuron Interaction
 
 Neuron Interaction adds saved conversations, application commands, user preferences,
-input history and response stopping to PHP applications built with
+input history, response stopping and background subagents to PHP applications built with
 [Neuron AI](https://github.com/neuron-core/neuron-ai).
 
 You configure a Neuron Agent with its provider, instructions and tools. Interaction
@@ -21,6 +21,7 @@ events, and decides how to display them in a terminal or web interface.
 - [Input history](#input-history)
 - [Message processors](#message-processors)
 - [Stopping an HTTP response](#stopping-an-http-response)
+- [Background subagents](#background-subagents)
 - [Storage and web integration](#storage-and-web-integration)
 - [Runnable examples](#runnable-examples)
 - [Development](#development)
@@ -115,7 +116,8 @@ $agent = $session->bindToAgent($agent);
 ```
 
 Your application owns rendering, authentication, input queues and coordination
-between concurrent requests. Interaction supplies the execution and persistence
+between concurrent requests. Configured Symfony locks serialize Conversation
+turns; the host still owns scheduling. Interaction supplies the execution and persistence
 APIs; it does not provide an HTTP endpoint or a UI.
 
 ## Submitting input and consuming the stream
@@ -631,6 +633,258 @@ signal works only when handlers share the same Storage instance in one process.
 Stopping an HTTP response does not cancel running local tools, prevent later
 provider calls in the turn, or guarantee cancellation of remote generation.
 
+## Background subagents
+
+Enable delegation on a Conversation with `setSubagents()`. A parent can then use
+`spawn_subagent`, `subagent_status` and `send_subagent_message`. Each run belongs
+to the user and Session that started it. Switching Sessions does not redirect an
+existing run's result. Children receive their task, explicit context and later
+corrections, with independent model history.
+
+The module stores runs in the existing `StorageInterface`; it does not need a
+second persistence implementation. Configure the same durable storage and Symfony
+Lock backend in every process. In-memory storage and locks are suitable only for
+single-process tests.
+
+```php
+use NeuronInteraction\Subagents\Registry;
+use NeuronInteraction\Subagents\SubagentStore;
+use NeuronInteraction\Subagents\Subagents;
+use NeuronInteraction\Subagents\Adapter\ConsoleAdapter;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\SemaphoreStore;
+
+// $storage, $session and $agent are configured as in the quick start.
+// $createResearcher is a Closure returning a NEW configured Neuron Agent.
+$registry = (new Registry())->register('researcher', 'Analyze supplied data', $createResearcher);
+$locks = new LockFactory(new SemaphoreStore());
+$runs = new SubagentStore($storage, $locks);
+$subagents = new Subagents($registry, $runs, new ConsoleAdapter(
+    [PHP_BINARY, '/app/bin/subagent-worker.php'],
+    '/app/var/subagents.log',
+));
+
+$conversation = (new Conversation($agent, $session))->setSubagents($subagents);
+
+foreach ($conversation->sendInput('Delegate this comparison to the researcher.') as $event) {
+    // Render the native stream as usual.
+}
+
+// Later, the host invokes this even without a new user message.
+foreach ($conversation->processCompletions() as $event) {
+    // Render the same stream, including the parent's new answer.
+}
+```
+
+`setSubagents()` installs the module's lock factory for all turns on this
+Conversation. Delegation tools are bound to the Session captured when each Agent
+turn starts, without replacing the Agent's other tools. These tool names are
+reserved when enabling the module. `Conversation` attaches them through
+`SubagentToolkit`, whose native Neuron guidelines explain background execution,
+automatic result delivery and avoiding status polling. Neuron adds these guidelines
+to each turn without replacing the Agent's configured instructions. Reporting
+preferences, including acknowledgements and combined reports, remain defined by
+the user and the application's instructions or skills. No operational
+`setInstructions()` block is required in the
+[complete terminal example](examples/bin/11-subagents.php).
+
+`processCompletions()` is lazy: consuming its generator executes at most one
+completion. An empty or busy inbox returns no events and does not invoke the
+model. A busy Session leaves its result pending for another poll. The return
+value is the last `AgentState`, or `null` for no work or a recovered answer.
+Application completion messages carry `subagent_event_id` metadata. They bypass
+human input history, message preparation/display processors and title generation.
+They remain in saved model history, explicitly labeled as application events.
+Hosts can use the metadata to distinguish them in a transcript.
+
+Completion events leave the next action to the parent, following the user's request
+and the Agent's instructions. The parent may end a turn without text, for example
+while gathering results for a single report. This still consumes the completion;
+it does not impose a wait-for-all barrier. Whether the model chooses silence
+depends on its behavior and instructions.
+
+After saving the parent's final assistant message, the stream yields
+`SubagentCompleted` with `run`, `reply` and `recovered`. The reply can have no text;
+hosts should render no response in that case. When `recovered` is true, no answer
+chunks are replayed: reload/upsert the saved reply by its message ID.
+Acknowledgement means the turn was saved, not that a terminal or browser received it.
+
+Results read through `subagent_status` are recorded on the parent's final saved
+message (`subagent_read_result_ids`). The next completion poll acknowledges those
+results without invoking the model or emitting another reply, including after a
+restart. A failed turn, a running-status check or a direct application status read
+does not consume a result. This prevents duplicate notifications; it does not
+force the model to wait for results it has not yet read.
+
+### Terminal execution
+
+Install `symfony/process` and `symfony/console` for the console adapter and command.
+`ConsoleAdapter` starts a detached POSIX process. Its entry point registers
+`Subagents\Console\WorkCommand` with an `Executor` built from the same registry,
+shared storage and lock backend. It receives `subagents:work RUN_ID`; no container
+or PHP file returning a service is required.
+
+The [terminal example](examples/bin/11-subagents.php) and
+[worker entry point](examples/bin/subagent-worker.php) show the full wiring:
+
+```bash
+cd examples
+composer install
+composer subagents
+# Reopen the Session printed by the first invocation:
+composer subagents -- SESSION_KEY
+```
+
+The terminal remains alive, queues input independently of turn execution and calls
+`processCompletions()` periodically. It starts child processes automatically;
+Messenger and Mercure are not required. After closing the terminal, completed
+results stay pending until the original Session is reopened. Console failures
+are logged and can be inspected with `subagent_status`; automatic child retry is
+not provided by the console adapter.
+
+### Messenger and Mercure
+
+Install `symfony/messenger` and the host application's transport package. Use
+`MessengerAdapter` instead of `ConsoleAdapter`, register `ExecuteSubagentHandler`
+with an `Executor`, and configure an **asynchronous** `subagents` transport.
+Use a separate `parents` transport for `ProcessCompletions` messages:
+
+```yaml
+framework:
+  messenger:
+    failure_transport: failed
+    transports:
+      subagents:
+        dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+        options: { queue_name: subagents }
+      parents:
+        dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+        options: { queue_name: parents }
+      failed:
+        dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+        options: { queue_name: failed }
+    routing:
+      'NeuronInteraction\Subagents\Adapter\ExecuteSubagent': subagents
+      'NeuronInteraction\Subagents\Adapter\ProcessCompletions': parents
+```
+
+This queue configuration targets a transport supporting `queue_name`, such as
+Doctrine. Configure retries and redelivery timeouts for your maximum task duration.
+Both adapters also attach `TransportNamesStamp` with the configured transport name.
+
+Compose these objects in your application's service configuration:
+
+```php
+use NeuronInteraction\Subagents\Executor;
+use NeuronInteraction\Subagents\Adapter\ExecuteSubagentHandler;
+use NeuronInteraction\Subagents\Adapter\MessengerAdapter;
+use NeuronInteraction\Subagents\Adapter\MessengerCompletionRelay;
+use NeuronInteraction\Subagents\Adapter\ProcessCompletionsHandler;
+use NeuronInteraction\Subagents\Console\RelayCommand;
+
+$subagents = new Subagents($registry, $runs, new MessengerAdapter($bus));
+$createConversation = static function (string $userId, string $sessionKey) use (
+    $storage, $messageStore, $subagents, $createParent,
+): Conversation {
+    $sessions = new SessionStore($storage, $messageStore, $userId);
+    $session = $sessions->get($sessionKey)
+        ?? throw new OutOfBoundsException('Unknown session for this user');
+    $conversation = new Conversation($createParent($userId, $sessionKey), $session);
+    $conversation->setSubagents($subagents);
+    return $conversation;
+};
+$childHandler = new ExecuteSubagentHandler(new Executor($registry, $runs));
+$parentHandler = new ProcessCompletionsHandler($createConversation);
+$relay = new MessengerCompletionRelay($runs, $bus);
+$relayCommand = new RelayCommand($relay);
+```
+
+Register the handlers on the bus and the command in your host's console.
+The closure looks up the user-owned Session and creates a fresh Conversation.
+Use it for both user requests and automatic turns. Queue messages carry trusted user/session IDs;
+never accept them as authorization claims from a public client.
+
+`$createParent` receives `(string $userId, string $sessionKey)` and returns a fresh
+configured Agent. To publish responses through Mercure, configure that Agent:
+
+```php
+$agent->setStreamAdapter(static fn () => new AgentChunkAdapter())
+    ->setChannel(static fn () => new MercureChannel(
+        hub: $hub,
+        topic: $authorizedTopic,
+        private: true,
+    ));
+```
+
+Here `AgentChunkAdapter` is `NeuronAI\Agent\Adapters\AgentChunkAdapter`, and
+`MercureChannel` is `NeuronAI\Workflow\Streaming\Channel\MercureChannel`.
+Derive the topic from both user and Session, and authorize subscribers in the host.
+The handler consumes the generator, which also delivers Neuron events to the
+configured channel. Interaction-specific events such as `SubagentCompleted` are
+not automatically published by that channel; a frontend reloads saved history
+for recovery/reconnection, or the host forwards those events itself.
+
+Run Messenger consumers and the relay under supervision:
+
+```bash
+php bin/console messenger:consume subagents parents
+php bin/console subagents:relay --watch --interval=5
+```
+
+Use multiple consumers if the parent must respond while another worker runs a
+child. The periodic relay rescans pending Sessions, recovering missed wakeups and
+busy turns. Duplicate wakeups are harmless. A relay command without `--watch`
+performs one pass and can be scheduled externally. Mercure transports output;
+it does not schedule turns.
+
+### Coordination and recovery
+
+Symfony Lock is a library dependency; Symfony Framework is not required.
+No lock/lease methods have been added to `StorageInterface`.
+Execution requires a **non-expiring** Symfony lock backend:
+
+- `SemaphoreStore` uses `ext-sysvsem` for processes sharing one host/IPC namespace.
+- `PostgreSqlStore` uses PostgreSQL advisory locks for processes on multiple hosts.
+  Use a dedicated connection that retains its session for the lock lifetime.
+- `InMemoryStore` is suitable for single-process tests only.
+
+Expiring backends, including RedisStore and PdoStore, are rejected at acquisition.
+A tool/provider may block longer than a TTL without yielding a renewal checkpoint;
+this implementation does not claim that refreshing between chunks solves that.
+Every process must use the same backend and resource naming. Shared locks do not
+replace shared storage: multi-host deployments need shared run and message stores.
+
+A Session lock spans model execution, saved response and completion acknowledgement.
+Human turns use the same lock and throw `ExecutionBusyException` when occupied. Locks are
+acquired on stream consumption and released in `finally`; finish consuming or
+release abandoned generators. Commands run their synchronous state changes under
+the selected Session's lock. Direct Session/history operations outside Conversation
+remain the host's responsibility to coordinate with the same resource:
+`neuron-interaction.session.` plus `Session::messageNamespace()`.
+
+Each child has its own execution lock. A separate short state lock serializes
+corrections with finalization, so an accepted correction arriving during the final
+inference causes another inference instead of being lost. Acceptance only means
+the correction was stored. Failed/completed runs reject further corrections.
+
+Final parent messages, including silent completions, carry the run identity in
+the same message-store append as the message. If acknowledgement fails afterward, retry finds the saved answer and
+acknowledges without invoking the model again. Recovery notes are not tagged as
+successful answers. Failures before a final saved answer may repeat model/tool
+work and already delivered live chunks. Durable message storage must preserve
+message IDs and metadata; this is not a general exactly-once guarantee for tools.
+Failed children remain inspectable, and Messenger applies its retry policy.
+Only completed children enter the parent's completion inbox.
+
+Interactive approval/resume of a child or automatic turn requires host integration.
+This feature does not change StopSignal or cancel descendants when stopping a
+parent response. Automatic turns do not clear a human StopSignal. If using stop
+callbacks, create a separate provider/client and execution-specific signal for
+each execution; a shared callback can otherwise affect the wrong turn.
+Deleted Sessions cannot receive automatic replies; hosts must retire associated
+pending work when implementing deletion. The file store scans runs for pending
+work; it does not add a persistent queue index or retention policy.
+
 ## Storage and web integration
 
 Use StorageInterface for Session records, preferences, input history and stop
@@ -735,9 +989,11 @@ are not themselves a wire format. Return the session key to the client so later
 requests can reopen it. Choices return as command identifiers and values.
 
 Coordinate writes when several requests or clients can operate on the same
-session or shared state. Conversation provides no busy flag, execution lock or
-pending-input queue, and storage does not provide transactions across a turn.
-Queue pending messages in the client or application layer and choose how errors,
+session or shared state. Conversation provides no pending-input queue, and
+storage does not provide transactions across a turn.
+Without a configured lock factory, the host must serialize turns itself.
+Enabling subagents configures shared Symfony locks; alternatively pass
+`lockFactory:` to the Conversation constructor. Queue pending messages in the client or application layer and choose how errors,
 reconnects and overlapping requests should behave.
 
 ## Runnable examples

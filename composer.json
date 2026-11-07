@@ -11,12 +11,16 @@
     ],
     "require": {
         "php": ">=8.4.1",
-        "neuron-core/neuron-ai": "^4.0"
+        "neuron-core/neuron-ai": "^4.0",
+        "symfony/lock": "^7.4 || ^8.0"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2.1",
-        "phpunit/phpunit": "^13.0"
+        "phpunit/phpunit": "^13.0",
+        "symfony/console": "^7.4 || ^8.0",
+        "symfony/messenger": "^7.4 || ^8.0",
+        "symfony/process": "^7.4 || ^8.0"
     },
     "autoload": {
         "psr-4": {
@@ -36,5 +40,11 @@
     },
     "config": {
         "sort-packages": true
+    },
+    "suggest": {
+        "symfony/process": "Run background subagents with ConsoleAdapter.",
+        "symfony/console": "Use the subagents:work and subagents:relay commands.",
+        "symfony/messenger": "Run subagents and completion turns through a message bus.",
+        "ext-sysvsem": "Use Symfony SemaphoreStore for process-shared execution locks on one host."
     }
 }

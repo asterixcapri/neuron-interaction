@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Session;
 
+use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
@@ -60,10 +61,13 @@ final class Session
         return array_values($this->messageStore->loadAll($this->messageNamespace(), $limit, $before));
     }
 
-    public function bindToAgent(Agent $agent): Agent
+    /** @param (Closure(MessageStoreInterface): MessageStoreInterface)|null $decorateMessages */
+    public function bindToAgent(Agent $agent, ?Closure $decorateMessages = null): Agent
     {
         $this->assertExists();
-        return $agent->for($this->messageNamespace())->setMessageStore($this->messageStore);
+        return $agent->for($this->messageNamespace())->setMessageStore(
+            $decorateMessages === null ? $this->messageStore : $decorateMessages($this->messageStore),
+        );
     }
 
     public function getKey(): string

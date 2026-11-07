@@ -163,3 +163,31 @@ updates the Agent instructions, so the next response uses Italian. Restarting
 restores the saved language. The command accepts English, Italian, Spanish and
 Portuguese. `/language English` changes it back; `/exit` ends
 the consumer's input loop. Invalid language values produce a Notification.
+
+## 11 — Background subagents
+
+Run `composer subagents` and ask the assistant to delegate an analysis of supplied
+data. The terminal starts the child process automatically and polls completions
+while waiting for input. The parent then summarizes the result without another
+user submission. Requires a POSIX host and `ext-sysvsem`; no Messenger worker or
+Mercure hub is needed.
+
+Like the other examples, `bin/11-subagents.php` shows the complete setup and
+uses `Conversation` directly: `sendInput()` handles messages and commands, while
+`processCompletions()` runs periodically even when the user is silent. It also
+handles both streams in one `foreach`, with the same `TextChunk`, `Notification`
+and `ExitRequest` branches as the other examples, plus recovered subagent replies.
+AMP reads input lines independently of turn execution: after Enter, the prompt
+returns immediately and new messages queue behind the active turn. One execution
+loop drains user input before polling completions every second. The loop also
+shows `/exit`, Session reopening and error handling. EOF drains queued input;
+`/exit` stops the reader even when stdin remains open. This is a basic streaming
+terminal, without an input editor that redraws partially typed lines.
+
+The terminal prints its Session key. Reopen it with
+`composer subagents -- SESSION_KEY` to collect results that finished after exit.
+The researcher has no filesystem or web tools: include the data it should analyze.
+
+For a web host, the library README shows a closure that restores the original
+Session and constructs `Conversation` directly for user turns and Messenger
+completion turns, together with queue, relay, lock and Mercure wiring.
