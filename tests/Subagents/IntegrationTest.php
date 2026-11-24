@@ -16,6 +16,7 @@ use NeuronAI\Workflow\Streaming\Channel\CallbackChannel;
 use NeuronAI\Workflow\Streaming\ProtocolEvent;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\SubagentCompleted;
+use NeuronInteraction\Event\SubagentDispatched;
 use NeuronInteraction\Execution\ExecutionLock;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
@@ -118,9 +119,15 @@ final class IntegrationTest extends TestCase
         self::assertNotNull($restored);
         $newRuns = new SubagentStore($reopened, $this->locks());
         $noResponses = new FakeAIProvider();
+        $events = [];
         $retry = (new Conversation((new Agent())->setAiProvider($noResponses), $restored))
-            ->setSubagents(new Subagents($this->registry(), $newRuns, $this->noDispatch()));
-        $events = iterator_to_array($retry->processCompletions());
+            ->setSubagents(new Subagents($this->registry(), $newRuns, $this->noDispatch(), onEvent: static function (SubagentDispatched|SubagentCompleted $event) use (&$events, $newRuns): void {
+                self::assertTrue($newRuns->get($event->run->id)->acknowledged);
+                $events[] = $event;
+            }));
+        $stream = $retry->processCompletions();
+        self::assertFalse($newRuns->get($run->id)->acknowledged);
+        self::assertSame([], iterator_to_array($stream));
         self::assertCount(1, $events);
         self::assertInstanceOf(SubagentCompleted::class, $events[0]);
         self::assertTrue($events[0]->recovered);

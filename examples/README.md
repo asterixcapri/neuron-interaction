@@ -176,7 +176,8 @@ Like the other examples, `bin/11-subagents.php` shows the complete setup and
 uses `Conversation` directly: `sendInput()` handles messages and commands, while
 `processCompletions()` runs periodically even when the user is silent. It also
 handles both streams in one `foreach`, with the same `TextChunk`, `Notification`
-and `ExitRequest` branches as the other examples, plus recovered subagent replies.
+and `ExitRequest` branches as the other examples. A single `onEvent` callback
+prints the run ID at dispatch and completion and displays recovered replies.
 AMP reads input lines independently of turn execution: after Enter, the prompt
 returns immediately and new messages queue behind the active turn. One execution
 loop drains user input before polling completions every second. The loop also
@@ -186,8 +187,16 @@ terminal, without an input editor that redraws partially typed lines.
 
 The terminal prints its Session key. Reopen it with
 `composer subagents -- SESSION_KEY` to collect results that finished after exit.
-The `general` agent has no filesystem or web tools: include the data it needs in the task.
-Its stable instructions and provider are configured in `src/Subagents/Agents.php`.
+The `general` subagent is defined in `src/SubagentsRegistry.php`. For tasks based
+on supplied data, include the data in the request.
+
+To try web research, set `JINA_API_KEY` in `examples/.env` before running
+`composer subagents`. Try asking the assistant to delegate a search to `general`.
+
+> Ask the general subagent to find the release date of PHP 8.4 and cite the official announcement.
+
+The worker uses Jina to search the web and read source pages. Keep the terminal
+open for the assistant's follow-up with the result and its source links.
 
 For a web host, the library README shows a closure that restores the original
 Session and constructs `Conversation` directly for user turns and Messenger

@@ -51,16 +51,21 @@ final class TerminalExampleTest extends TestCase
             self::assertIsString($source);
             $provider = '$agent->setAiProvider(AIProviderFactory::create(\'openai:gpt-5.4-nano\'));';
             self::assertStringContainsString($provider, $source);
-            // Execute the actual example loop, substituting only the network provider.
+            // Observe the actual queue operation: the display prompt is only redrawn after a reply.
+            $enqueue = '$inputs->enqueue($input);';
+            self::assertStringContainsString($enqueue, $source);
+            $source = str_replace($enqueue, $enqueue . ' echo "INPUT_QUEUED\n";', $source);
+            // Execute the actual example loop with a controlled provider.
             $files->dumpFile($directory . '/bin/example.php', str_replace($provider, '$agent->setAiProvider($testProvider);', $source));
             $input = new InputStream();
-            $process = new Process([PHP_BINARY, __DIR__ . '/terminal.php', $directory . '/bin/example.php']);
+            $release = $directory . '/release-provider';
+            $process = new Process([PHP_BINARY, __DIR__ . '/terminal.php', $directory . '/bin/example.php', $release]);
             $process->setTimeout(5);
             $process->setInput($input);
             $process->start();
             self::assertTrue($process->waitUntil(static fn(): bool => str_contains($process->getOutput(), '> ')));
             $input->write("first\n");
-            self::assertTrue($process->waitUntil(static fn(): bool => substr_count($process->getOutput(), '> ') >= 2));
+            self::assertTrue($process->waitUntil(static fn(): bool => substr_count($process->getOutput(), 'INPUT_QUEUED') >= 1));
             self::assertStringNotContainsString('FIRST_ANSWER', $process->getOutput());
             $output = $process->getOutput();
             if (!str_contains($output, 'TURN_STARTED')) {
@@ -72,13 +77,16 @@ final class TerminalExampleTest extends TestCase
                 }));
             }
             $input->write("second\n");
-            self::assertTrue($process->waitUntil(static fn(): bool => substr_count($process->getOutput(), '> ') >= 3));
+            self::assertTrue($process->waitUntil(static fn(): bool => substr_count($process->getOutput(), 'INPUT_QUEUED') >= 2));
             self::assertStringNotContainsString('FIRST_ANSWER', $process->getOutput());
             if ($eof) {
                 $input->close();
             } else {
                 $input->write("/exit\n");
+                self::assertTrue($process->waitUntil(static fn(): bool => substr_count($process->getOutput(), 'INPUT_QUEUED') >= 3));
             }
+            // Both user messages were read while the first model response was suspended.
+            $files->dumpFile($release, '');
             self::assertSame(0, $process->wait(), $process->getErrorOutput());
             self::assertSame('', $process->getErrorOutput());
             self::assertSame(1, substr_count($process->getOutput(), 'FIRST_ANSWER'));

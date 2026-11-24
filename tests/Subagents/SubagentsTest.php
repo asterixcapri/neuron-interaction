@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Subagents;
 
+use Closure;
 use Generator;
 use LogicException;
 use NeuronAI\Agent\Agent;
@@ -11,6 +12,7 @@ use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Chat\Messages\Stream\Chunks\ToolResultChunk;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Exceptions\ProviderException;
@@ -20,6 +22,7 @@ use NeuronAI\Tools\ToolCall;
 use NeuronAI\Tools\ToolInterface;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\SubagentCompleted;
+use NeuronInteraction\Event\SubagentDispatched;
 use NeuronInteraction\Exception\ExecutionBusyException;
 use NeuronInteraction\Execution\ExecutionLock;
 use NeuronInteraction\InputHistory\InputHistory;
@@ -40,6 +43,7 @@ use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\Store\InMemoryStore;
 
 use function array_filter;
+use function array_slice;
 use function array_values;
 use function count;
 use function iterator_to_array;
@@ -58,6 +62,9 @@ final class SubagentsTest extends TestCase
     private Subagents $subagents;
     private Executor $executor;
 
+    /** @var list<SubagentDispatched|SubagentCompleted> */
+    private array $events = [];
+
     protected function setUp(): void
     {
         $this->storage = new InMemoryStorage();
@@ -70,8 +77,65 @@ final class SubagentsTest extends TestCase
         $adapter = new class implements BackgroundAdapterInterface {
             public function dispatch(string $runId): void {}
         };
-        $this->subagents = new Subagents($registry, $this->runs, $adapter);
+        $this->subagents = new Subagents($registry, $this->runs, $adapter, onEvent: function (SubagentDispatched|SubagentCompleted $event): void {
+            if ($event instanceof SubagentCompleted) {
+                self::assertTrue($this->runs->get($event->run->id)->acknowledged);
+            }
+            $this->events[] = $event;
+        });
         $this->executor = new Executor($registry, $this->runs);
+    }
+
+    public function testDispatchCallbackReceivesTheReturnedRunAfterDispatch(): void
+    {
+        $registry = (new Registry())->register('researcher', 'Research', static fn(): Agent => new Agent());
+        $adapter = new class implements BackgroundAdapterInterface {
+            public ?string $dispatchedId = null;
+
+            public function dispatch(string $runId): void
+            {
+                $this->dispatchedId = $runId;
+            }
+        };
+        $events = [];
+        $subagents = new Subagents($registry, $this->runs, $adapter, static function (SubagentDispatched|SubagentCompleted $event) use (&$events, $adapter): void {
+            self::assertSame($adapter->dispatchedId, $event->run->id);
+            $events[] = $event;
+        });
+
+        $run = $subagents->spawn($this->session, 'researcher', 'Task');
+
+        self::assertCount(1, $events);
+        self::assertSame($run, $events[0]->run);
+    }
+
+    public function testDispatchFailureDoesNotInvokeTheCallback(): void
+    {
+        $registry = (new Registry())->register('researcher', 'Research', static fn(): Agent => new Agent());
+        $adapter = new class implements BackgroundAdapterInterface {
+            public ?string $dispatchedId = null;
+
+            public function dispatch(string $runId): void
+            {
+                $this->dispatchedId = $runId;
+                throw new RuntimeException('Dispatch failed');
+            }
+        };
+        $events = [];
+        $subagents = new Subagents($registry, $this->runs, $adapter, static function (SubagentDispatched|SubagentCompleted $event) use (&$events): void {
+            $events[] = $event;
+        });
+
+        try {
+            $subagents->spawn($this->session, 'researcher', 'Task');
+            self::fail('Expected dispatch failure');
+        } catch (RuntimeException $error) {
+            self::assertSame('Dispatch failed', $error->getMessage());
+        }
+
+        self::assertSame([], $events);
+        self::assertNotNull($adapter->dispatchedId);
+        self::assertSame('failed', $this->runs->get($adapter->dispatchedId)->status);
     }
 
     private function conversation(FakeAIProvider $provider, ?Session $session = null): Conversation
@@ -207,16 +271,16 @@ final class SubagentsTest extends TestCase
         foreach ($runs as $index => $run) {
             $this->executor->execute($run->id);
             $text = '';
-            $completed = [];
+            $eventOffset = count($this->events);
             foreach ($conversation->processCompletions() as $event) {
                 if ($event instanceof TextChunk) {
                     $text .= $event->content;
-                } elseif ($event instanceof SubagentCompleted) {
-                    $completed[] = $event;
                 }
             }
+            $completed = array_slice($this->events, $eventOffset);
             self::assertSame($index === 4 ? 'One report covering all five results.' : '', $text);
             self::assertCount(1, $completed);
+            self::assertInstanceOf(SubagentCompleted::class, $completed[0]);
             self::assertSame($index === 4 ? $text : null, $completed[0]->reply->getContent());
             self::assertTrue($this->runs->get($run->id)->acknowledged);
             self::assertSame([], iterator_to_array($conversation->processCompletions()));
@@ -240,8 +304,13 @@ final class SubagentsTest extends TestCase
         self::assertCount(1, $entries);
         $run = $this->executor->execute($entries[0]['key']);
         self::assertSame('Child result', $run->result);
-        $events = iterator_to_array($conversation->processCompletions());
-        $finished = array_values(array_filter($events, static fn(object $event): bool => $event instanceof SubagentCompleted));
+        self::assertCount(1, $this->events);
+        self::assertInstanceOf(SubagentDispatched::class, $this->events[0]);
+        $stream = $conversation->processCompletions();
+        self::assertCount(1, $this->events);
+        iterator_to_array($stream);
+        self::assertCount(2, $this->events);
+        $finished = array_values(array_filter($this->events, static fn(object $event): bool => $event instanceof SubagentCompleted));
         self::assertCount(1, $finished);
         self::assertInstanceOf(SubagentCompleted::class, $finished[0]);
         self::assertFalse($finished[0]->recovered);
@@ -270,7 +339,12 @@ final class SubagentsTest extends TestCase
         $adapter = new class implements BackgroundAdapterInterface {
             public function dispatch(string $runId): void {}
         };
-        $this->subagents = new Subagents($registry, $this->runs, $adapter);
+        $this->subagents = new Subagents($registry, $this->runs, $adapter, onEvent: function (SubagentDispatched|SubagentCompleted $event): void {
+            if ($event instanceof SubagentCompleted) {
+                self::assertTrue($this->runs->get($event->run->id)->acknowledged);
+            }
+            $this->events[] = $event;
+        });
         $task = "Compare A and B. A costs 10 EUR/month; B costs 80 EUR/year.\nReturn annual costs in a table.";
         $parent = new FakeAIProvider(
             new ToolCallMessage(tools: [new ToolCall('spawn_subagent', 'delegate', ['agent' => $name, 'task' => $task])]),
@@ -417,19 +491,41 @@ final class SubagentsTest extends TestCase
         }
     }
 
-    public function testLateCorrectionIsConsumedBeforeTheChildCanComplete(): void
+    public function testParentToolCanCorrectARunningSubagentBeforeItCompletes(): void
     {
         $run = $this->subagents->spawn($this->session, 'researcher', 'Original task');
-        $provider = new class ($this->subagents, $this->session, $run->id) extends FakeAIProvider {
-            public function __construct(private Subagents $subagents, private Session $session, private string $id)
+        $correction = 'Include the new requirement';
+        $parent = $this->conversation(new FakeAIProvider(
+            new ToolCallMessage(tools: [new ToolCall('send_subagent_message', 'correct', [
+                'run_id' => $run->id,
+                'message' => $correction,
+            ])]),
+            new AssistantMessage('Correction sent.'),
+        ));
+        $sendCorrection = function () use ($parent, $run): void {
+            self::assertSame('running', $this->subagents->status($this->session, $run->id)->status);
+            $events = iterator_to_array($parent->sendInput('Update the delegated task.'), false);
+            $results = array_values(array_filter($events, static fn(object $event): bool => $event instanceof ToolResultChunk));
+            self::assertCount(1, $results);
+            $result = $results[0]->tool->getResult();
+            self::assertIsString($result);
+            self::assertJsonStringEqualsJsonString(
+                json_encode(['run_id' => $run->id, 'message_id' => 1, 'status' => 'accepted'], JSON_THROW_ON_ERROR),
+                $result,
+            );
+        };
+        $provider = new class ($sendCorrection) extends FakeAIProvider {
+            /** @param Closure(): void $sendCorrection */
+            public function __construct(private Closure $sendCorrection)
             {
                 parent::__construct(new AssistantMessage('Old'), new AssistantMessage('Corrected'));
             }
+
             public function chat(Message ...$messages): ProviderResponse
             {
                 $response = parent::chat(...$messages);
                 if (count($this->getRecorded()) === 1) {
-                    $this->subagents->sendMessage($this->session, $this->id, 'Include the new requirement');
+                    ($this->sendCorrection)();
                 }
                 return $response;
             }
@@ -438,10 +534,31 @@ final class SubagentsTest extends TestCase
         $executor = new Executor($registry, $this->runs);
         self::assertSame('Corrected', $executor->execute($run->id)->result);
         self::assertCount(2, $provider->getRecorded());
-        self::assertStringContainsString('Include the new requirement', json_encode($provider->getRecorded()[1]->messages, JSON_THROW_ON_ERROR));
-        self::assertSame([], $this->session->getMessages());
+        self::assertStringNotContainsString($correction, json_encode($provider->getRecorded()[0]->messages, JSON_THROW_ON_ERROR));
+        self::assertStringContainsString($correction, json_encode($provider->getRecorded()[1]->messages, JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString('Corrected', json_encode($this->session->getMessages(), JSON_THROW_ON_ERROR));
         self::assertSame('Corrected', $executor->execute($run->id)->result);
         self::assertCount(2, $provider->getRecorded());
+    }
+
+    public function testQueuedSubagentReceivesMessagesAndCompletedSubagentRejectsThem(): void
+    {
+        $run = $this->subagents->spawn($this->session, 'researcher', 'Original task');
+        $message = 'Include the annual total';
+        self::assertSame(
+            ['run_id' => $run->id, 'message_id' => 1, 'status' => 'accepted'],
+            $this->subagents->sendMessage($this->session, $run->id, $message),
+        );
+
+        $provider = new FakeAIProvider(new AssistantMessage('Annual total'));
+        $registry = (new Registry())->register('researcher', 'Research', static fn(): Agent => (new Agent())->setAiProvider($provider));
+        $finished = (new Executor($registry, $this->runs))->execute($run->id);
+        self::assertSame('completed', $finished->status);
+        self::assertCount(1, $provider->getRecorded());
+        self::assertStringContainsString($message, json_encode($provider->getRecorded()[0]->messages, JSON_THROW_ON_ERROR));
+
+        $this->expectException(LogicException::class);
+        $this->subagents->sendMessage($this->session, $run->id, 'Another correction');
     }
 
     public function testASecondExecutorCannotRunTheSameTaskConcurrently(): void

@@ -716,11 +716,13 @@ while gathering results for a single report. This still consumes the completion;
 it does not impose a wait-for-all barrier. Whether the model chooses silence
 depends on its behavior and instructions.
 
-After saving the parent's final assistant message, the stream yields
-`SubagentCompleted` with `run`, `reply` and `recovered`. The reply can have no text;
-hosts should render no response in that case. When `recovered` is true, no answer
-chunks are replayed: reload/upsert the saved reply by its message ID.
-Acknowledgement means the turn was saved, not that a terminal or browser received it.
+Pass an `onEvent` callback to `Subagents` to receive both lifecycle events.
+`SubagentDispatched` carries the `run` after the adapter accepts the delegation.
+`SubagentCompleted` carries `run`, `reply` and `recovered` after the parent reply
+has been saved and the result acknowledged. A reply can have no text. When
+`recovered` is true, reload or upsert the saved reply by its message ID. The
+callback runs synchronously in the process that dispatches or processes the run.
+Acknowledgement records that the turn was saved, independently of host delivery.
 
 Results read through `subagent_status` are recorded on the parent's final saved
 message (`subagent_read_result_ids`). The next completion poll acknowledges those
@@ -833,9 +835,8 @@ Here `AgentChunkAdapter` is `NeuronAI\Agent\Adapters\AgentChunkAdapter`, and
 `MercureChannel` is `NeuronAI\Workflow\Streaming\Channel\MercureChannel`.
 Derive the topic from both user and Session, and authorize subscribers in the host.
 The handler consumes the generator, which also delivers Neuron events to the
-configured channel. Interaction-specific events such as `SubagentCompleted` are
-not automatically published by that channel; a frontend reloads saved history
-for recovery/reconnection, or the host forwards those events itself.
+configured channel. Hosts can use `Subagents`' `onEvent` callback to forward
+subagent lifecycle events. A frontend can reload saved history on reconnection.
 
 Run Messenger consumers and the relay under supervision:
 

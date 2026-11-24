@@ -11,7 +11,16 @@ use NeuronAI\Testing\FakeAIProvider;
 require \dirname(__DIR__, 2) . '/vendor/autoload.php';
 require \dirname(__DIR__, 2) . '/examples/vendor/autoload.php';
 
-$testProvider = new class (new AssistantMessage('FIRST_ANSWER'), new AssistantMessage('SECOND_ANSWER')) extends FakeAIProvider {
+if (!isset($argv[1], $argv[2])) {
+    throw new RuntimeException('Pass the isolated example path and provider release file.');
+}
+
+$testProvider = new class ($argv[2]) extends FakeAIProvider {
+    public function __construct(private string $release)
+    {
+        parent::__construct(new AssistantMessage('FIRST_ANSWER'), new AssistantMessage('SECOND_ANSWER'));
+    }
+
     /** @return Generator<int, StreamChunk, mixed, ProviderResponse> */
     public function stream(Message ...$messages): Generator
     {
@@ -19,14 +28,13 @@ $testProvider = new class (new AssistantMessage('FIRST_ANSWER'), new AssistantMe
             throw new RuntimeException('Install the example dependencies.');
         }
         echo "TURN_STARTED\n";
-        Amp\delay(0.5);
+        while (!\is_file($this->release)) {
+            Amp\delay(0.01);
+        }
         return yield from parent::stream(...$messages);
     }
 };
 
-if (!isset($argv[1])) {
-    throw new RuntimeException('Pass the isolated example path.');
-}
 $example = $argv[1];
 $argv = [$example];
 require $example;

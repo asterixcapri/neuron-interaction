@@ -13,13 +13,14 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SubagentCompleted;
+use NeuronInteraction\Event\SubagentDispatched;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Subagents\Adapter\ConsoleAdapter;
 use NeuronInteraction\Subagents\Subagents;
 use NeuronInteraction\Subagents\SubagentStore;
 use NeuronInteractionDemo\AIProviderFactory;
-use NeuronInteractionDemo\Subagents\Agents;
+use NeuronInteractionDemo\SubagentsRegistry;
 use Symfony\Component\Dotenv\Dotenv;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\Store\SemaphoreStore;
@@ -33,31 +34,36 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 (new Dotenv())->bootEnv(__DIR__ . '/../.env');
 
-// The parent and worker must share storage and the same lock backend.
-$directory = \dirname(__DIR__) . '/.storage/subagents';
-$storage = new FileStorage($directory);
-$messageStore = new FileMessageStore($directory . '/messages');
-$locks = new LockFactory(new SemaphoreStore());
-$sessionStore = new SessionStore($storage, $messageStore, 'local-user');
-
-// Supply the printed Session key to collect results after reopening the terminal.
-$sessionKey = $argv[1] ?? null;
-$session = $sessionKey === null ? $sessionStore->create() : $sessionStore->get($sessionKey);
-if ($session === null) {
-    throw new RuntimeException('Unknown Session. Use a Session key printed by this example.');
-}
+$storage = new FileStorage(\dirname(__DIR__) . '/.storage/subagents');
 
 $agent = new Agent();
 $agent->setAiProvider(AIProviderFactory::create('openai:gpt-5.4-nano'));
 
-// Share child definitions with the worker; every factory creates a fresh Agent.
-$registry = Agents::registry();
-$runs = new SubagentStore($storage, $locks);
+$messageStore = new FileMessageStore(\dirname(__DIR__) . '/.storage/subagents/messages');
+$sessionStore = new SessionStore($storage, $messageStore, 'local-user');
+$session = $sessionStore->create();
+
+$subagentsRegistry = SubagentsRegistry::create();
+$subagentStore = new SubagentStore($storage, new LockFactory(new SemaphoreStore()));
 $adapter = new ConsoleAdapter(
     [\PHP_BINARY, __DIR__ . '/subagent-worker.php'],
-    $directory . '/worker.log',
+    \dirname(__DIR__) . '/.storage/subagents/worker.log',
 );
-$subagents = new Subagents($registry, $runs, $adapter);
+$printed = false;
+$subagents = new Subagents(
+    $subagentsRegistry,
+    $subagentStore,
+    $adapter,
+    onEvent: static function (SubagentDispatched|SubagentCompleted $event) use (&$printed): void {
+        $status = $event instanceof SubagentDispatched ? 'worker launched' : 'completed';
+        echo \PHP_EOL . "[subagent {$event->run->agent} #{$event->run->id}] {$status}" . \PHP_EOL;
+        if ($event instanceof SubagentCompleted && $event->recovered) {
+            echo $event->reply->getContent() ?? '';
+        }
+        $printed = true;
+        \flush();
+    },
+);
 
 $conversation = new Conversation($agent, $session);
 $conversation->setSubagents($subagents);
@@ -65,6 +71,7 @@ $conversation->setCommands(new Commands(new ExitCommand()));
 
 echo 'Session: ' . $conversation->session()->getKey() . \PHP_EOL;
 echo 'Try: Delegate a comparison of A (10 EUR/month) and B (80 EUR/year) to the general agent.' . \PHP_EOL;
+echo 'With JINA_API_KEY, ask general to find the release date of PHP 8.4 and cite the official announcement.' . \PHP_EOL;
 echo 'Wait after the first response: the assistant will report the result automatically.' . \PHP_EOL;
 echo 'Use /exit to leave. Reopen with: composer subagents -- ' . $session->getKey() . \PHP_EOL;
 
@@ -115,9 +122,6 @@ try {
                     $text = $event->content;
                 } elseif ($event instanceof Notification) {
                     $text = $event->text . \PHP_EOL;
-                } elseif ($event instanceof SubagentCompleted && $event->recovered) {
-                    // A recovered turn can also have ended silently.
-                    $text = $event->reply->getContent() ?? '';
                 } else {
                     continue;
                 }

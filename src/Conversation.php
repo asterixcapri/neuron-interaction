@@ -23,7 +23,6 @@ use NeuronInteraction\Command\NotificationLevel;
 use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SessionTitleChanged;
-use NeuronInteraction\Event\SubagentCompleted;
 use NeuronInteraction\Exception\ExecutionBusyException;
 use NeuronInteraction\Execution\ExecutionLock;
 use NeuronInteraction\InputHistory\InputHistory;
@@ -144,8 +143,7 @@ final class Conversation
             $saved = $this->completionReply($session, $run);
             if ($saved !== null) {
                 $session->registerUse();
-                $subagents->store->acknowledge($run->id, $session);
-                yield new SubagentCompleted($run, $saved, recovered: true);
+                $subagents->acknowledgeCompletion($session, $run, $saved, recovered: true);
                 return null;
             }
             $message = new UserMessage(
@@ -166,8 +164,7 @@ final class Conversation
             if ($saved === null) {
                 throw new RuntimeException('The parent did not persist a final assistant message.');
             }
-            $subagents->store->acknowledge($run->id, $session);
-            yield new SubagentCompleted($run, $saved);
+            $subagents->acknowledgeCompletion($session, $run, $saved);
             return $state;
         } finally {
             $lock?->release();
