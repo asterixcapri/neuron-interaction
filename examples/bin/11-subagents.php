@@ -73,7 +73,7 @@ echo 'Session: ' . $conversation->session()->getKey() . \PHP_EOL;
 echo 'Try: Delegate a comparison of A (10 EUR/month) and B (80 EUR/year) to the general agent.' . \PHP_EOL;
 echo 'With JINA_API_KEY, ask general to find the release date of PHP 8.4 and cite the official announcement.' . \PHP_EOL;
 echo 'Wait after the first response: the assistant will report the result automatically.' . \PHP_EOL;
-echo 'Use /exit to leave. Reopen with: composer subagents -- ' . $session->getKey() . \PHP_EOL;
+echo 'Use /exit to leave.' . \PHP_EOL;
 
 // Reading input continues while the provider awaits network I/O. Execution stays
 // serial: new messages queue behind the current turn, ahead of completion polls.
