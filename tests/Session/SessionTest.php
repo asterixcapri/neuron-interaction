@@ -28,6 +28,7 @@ use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use NeuronInteraction\Tests\History\SessionMessages;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -38,7 +39,6 @@ use function array_map;
 use function bin2hex;
 use function is_dir;
 use function is_link;
-use function iterator_to_array;
 use function random_bytes;
 use function rmdir;
 use function scandir;
@@ -245,7 +245,7 @@ final class SessionTest extends TestCase
         self::assertEquals($session->getCreatedAt(), $session->getLastUsedAt());
         $createdAt = $session->getCreatedAt();
         $agent = $session->bindToAgent((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Answer'))));
-        iterator_to_array((new Conversation($agent, $session))->sendInput(new UserMessage('Question')));
+        EventCollector::input((new Conversation($agent, $session)), new UserMessage('Question'));
         self::assertTrue($session->hasContent());
         self::assertGreaterThanOrEqual($createdAt, $session->getLastUsedAt());
         self::assertEquals($createdAt, $session->getCreatedAt());
@@ -263,27 +263,27 @@ final class SessionTest extends TestCase
         $created = $session->getCreatedAt();
         $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Answer'), new AssistantMessage('Again'))), $session);
         $question = new UserMessage('Original question');
-        iterator_to_array($conversation->sendInput($question));
+        EventCollector::input($conversation, $question);
         self::assertTrue($session->hasContent());
         self::assertEquals($created, $session->getCreatedAt());
         self::assertCount(1, $sessions->list());
         self::assertCount(2, $session->getMessages());
         $lastUsed = $session->getLastUsedAt();
         $conversation->setCommands(new Commands(new ClearCommand($sessions)));
-        iterator_to_array($conversation->sendInput('/clear'));
+        EventCollector::input($conversation, '/clear');
         self::assertNotSame($session->getKey(), $conversation->session()->getKey());
         self::assertFalse($conversation->session()->hasContent());
         self::assertCount(2, $session->getMessages());
         self::assertCount(1, $sessions->list());
         self::assertEquals($lastUsed, $session->getLastUsedAt());
         $conversation->useSession($session);
-        iterator_to_array($conversation->sendInput('Continue'));
+        EventCollector::input($conversation, 'Continue');
         self::assertTrue($session->hasContent());
         self::assertCount(1, $sessions->list());
         $sessions->delete($session->getKey());
         self::assertSame([], $messages->loadAll($session->messageNamespace()));
         $this->expectException(RuntimeException::class);
-        iterator_to_array($conversation->sendInput('Deleted Session'));
+        EventCollector::input($conversation, 'Deleted Session');
     }
 
     #[DataProvider('storageKinds')]
@@ -415,7 +415,7 @@ final class SessionTest extends TestCase
         self::assertSame('Saved title', $session->getTitle());
         self::assertSame(['projectId' => 'one'], $session->getMetadata());
         self::assertEquals($lastUse, $session->getLastUsedAt());
-        iterator_to_array((new Conversation($agent, $session))->sendInput($message));
+        EventCollector::input((new Conversation($agent, $session)), $message);
         self::assertTrue($session->hasContent());
         self::assertCount(1, $sessions->list());
         self::assertSame($message->getId(), $session->getMessages()[0]->getId());
@@ -441,7 +441,7 @@ final class SessionTest extends TestCase
         $retained = (new AssistantMessage('Second answer'))->setUsage(new Usage(120, 10));
         $history->addMessage($retained);
         $latest = new UserMessage('Latest question');
-        iterator_to_array((new Conversation($agent, $session))->sendInput($latest));
+        EventCollector::input((new Conversation($agent, $session)), $latest);
         $reopened = (new SessionStore($files ? new FileStorage($this->directory) : $storage, $nativeMessages, 'owner'))->get($session->getKey());
         self::assertNotNull($reopened);
         $messages = $reopened->getMessages();

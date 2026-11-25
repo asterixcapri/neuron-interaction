@@ -17,9 +17,8 @@ use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\TestCase;
-
-use function iterator_to_array;
 
 final class ConversationMessagesTest extends TestCase
 {
@@ -55,7 +54,7 @@ final class ConversationMessagesTest extends TestCase
         $image = new ImageContent('https://example.com/image.png', SourceType::URL);
         $input = new UserMessage([new TextContent('Read @README.md'), $image]);
         $input->addMetadata('origin', 'human');
-        iterator_to_array($conversation->sendInput($input));
+        EventCollector::input($conversation, $input);
 
         $saved = $conversation->getMessages();
         $displayed = $conversation->getDisplayMessages();

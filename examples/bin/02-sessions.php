@@ -73,20 +73,18 @@ foreach ($conversation->getDisplayMessages() as $message) {
 execTurn($conversation, 'What is my destination? Answer with just the city name.');
 
 // Session operations stay visible above; this helper sends and prints one turn.
-// Consuming the stream executes the Agent and saves the exchange automatically.
+// The callback call executes the Agent and saves the exchange automatically.
 function execTurn(Conversation $conversation, string $input): void
 {
     echo 'You: ' . $input . \PHP_EOL;
     echo 'Agent: ';
 
-    $stream = $conversation->sendInput($input);
-
-    foreach ($stream as $event) {
+    $conversation->runInput($input, function (object $event): void {
         if ($event instanceof TextChunk) {
             echo $event->content;
             \flush();
         }
-    }
+    });
 
     echo \PHP_EOL . \PHP_EOL;
 }

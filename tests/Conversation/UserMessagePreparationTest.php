@@ -18,14 +18,13 @@ use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
-use function iterator_to_array;
-
 final class UserMessagePreparationTest extends TestCase
 {
-    public function testEverySubmissionIsPreparedEagerlyOnceInRegistrationOrder(): void
+    public function testEveryInputIsPreparedOnceInRegistrationOrder(): void
     {
         $nativeMessages = new InMemoryMessageStore();
         $first = new PreparationRecorder('A');
@@ -36,16 +35,11 @@ final class UserMessagePreparationTest extends TestCase
         $conversation->setMessageProcessors($processors);
         $original = new UserMessage('First');
         $original->addMetadata('origin', 'human');
-        $firstStream = $conversation->sendInput($original);
-        $secondStream = $conversation->sendInput(new UserMessage('Second'));
-        $promptStream = $conversation->sendInput(new UserMessage('Raw command'));
+        EventCollector::input($conversation, $original);
+        EventCollector::input($conversation, new UserMessage('Second'));
+        EventCollector::input($conversation, new UserMessage('Raw command'));
         self::assertSame($processors, $conversation->messageProcessors());
         self::assertSame('First', $original->getContent());
-        $before = $provider->getRecorded();
-        self::assertSame([], $before);
-        iterator_to_array($firstStream);
-        iterator_to_array($secondStream);
-        iterator_to_array($promptStream);
         self::assertSame('human', $provider->getRecorded()[0]->messages[0]->getMetadata('origin'));
         self::assertSame(['First', 'Second', 'Raw command'], $first->inputs);
         self::assertSame(['A[First]', 'A[Second]', 'A[Raw command]'], $second->inputs);
@@ -78,7 +72,7 @@ final class UserMessagePreparationTest extends TestCase
         foreach (['fail', 'empty'] as $text) {
             $original = new UserMessage($text);
             try {
-                $conversation->sendInput($original);
+                EventCollector::input($conversation, $original);
                 self::fail('Expected rejection');
             } catch (InvalidArgumentException|RuntimeException $exception) {
                 self::assertSame($text === 'fail' ? 'Preparation failed' : 'The prepared user message is empty.', $exception->getMessage());
@@ -105,17 +99,11 @@ final class UserMessagePreparationTest extends TestCase
         };
         $conversation = new Conversation((new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Other'), new AssistantMessage('Prepared'))), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
         $conversation->setMessageProcessors(new MessageProcessors($processor));
-        $otherStream = null;
-        $processor->onPrepare = static function () use ($conversation, $processor, &$otherStream): void {
+        $processor->onPrepare = static function () use ($conversation, $processor): void {
             $processor->onPrepare = null;
-            $otherStream = $conversation->sendInput(new UserMessage('Other'));
-            $otherStream->rewind();
+            EventCollector::input($conversation, new UserMessage('Other'));
         };
-        $preparedStream = $conversation->sendInput(new UserMessage('Preparing'));
-        self::assertNotNull($otherStream);
-        iterator_to_array($otherStream);
-        $processor->onPrepare = null;
-        iterator_to_array($preparedStream);
+        EventCollector::input($conversation, new UserMessage('Preparing'));
         self::assertSame('Preparing', $conversation->agent()->getChatHistory()->getMessages()[2]->getContent());
     }
 
@@ -127,7 +115,7 @@ final class UserMessagePreparationTest extends TestCase
         $image = (new ImageContent('https://example.com/image.png', SourceType::URL))->addMetadata('image', 'original');
         $message = new UserMessage($image);
         $message->addMetadata('origin', 'attachment');
-        iterator_to_array($conversation->sendInput($message));
+        EventCollector::input($conversation, $message);
         self::assertSame($message->jsonSerialize(), $provider->getRecorded()[0]->messages[0]->jsonSerialize());
     }
 }

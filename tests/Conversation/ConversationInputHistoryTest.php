@@ -24,6 +24,7 @@ use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -32,7 +33,6 @@ use function array_map;
 use function bin2hex;
 use function is_dir;
 use function is_link;
-use function iterator_to_array;
 use function random_bytes;
 use function rmdir;
 use function scandir;
@@ -103,18 +103,16 @@ final class ConversationInputHistoryTest extends TestCase
             new ImageContent('https://example.com/photo.png', SourceType::URL, 'image/png'),
         ]);
         $original->addMetadata('source', 'human');
-        $stream = $conversation->sendInput($original);
+        EventCollector::input($conversation, $original);
         $saved = $history->list()[0];
         self::assertSame('Read @README.md', $saved->getContent());
         self::assertSame('human', $saved->getMetadata('source'));
         self::assertInstanceOf(ImageContent::class, $saved->getContentBlocks()[1]);
-        iterator_to_array($stream);
 
-        $stream = $conversation->sendInput("/summarize\t  details");
+        EventCollector::input($conversation, "/summarize\t  details");
         self::assertCount(2, $history->list());
-        iterator_to_array($stream);
-        iterator_to_array($conversation->sendInput(new CommandInput('/unknown', ' raw value ')));
-        iterator_to_array($conversation->sendInput(" \n\t"));
+        EventCollector::input($conversation, new CommandInput('/unknown', ' raw value '));
+        EventCollector::input($conversation, " \n\t");
         self::assertSame(
             ['Read @README.md', "/summarize\t  details", '/unknown  raw value '],
             array_map(static fn(UserMessage $message): ?string => $message->getContent(), $history->list()),
@@ -137,7 +135,7 @@ final class ConversationInputHistoryTest extends TestCase
         $conversation->setMessageProcessors(new MessageProcessors($processor));
 
         try {
-            $conversation->sendInput('Original input');
+            EventCollector::input($conversation, 'Original input');
             self::fail('Expected preparation to fail.');
         } catch (RuntimeException $exception) {
             self::assertSame('Cannot expand', $exception->getMessage());

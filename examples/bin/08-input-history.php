@@ -37,15 +37,14 @@ $conversation->setInputHistory($inputHistory);
 // Conversation records original inputs before processing or executing them.
 foreach (['Explain PHP generators in one short sentence.', '/help'] as $input) {
     echo 'You: ' . $input . \PHP_EOL;
-    $stream = $conversation->sendInput($input);
-    foreach ($stream as $event) {
+    $conversation->runInput($input, function (object $event): void {
         if ($event instanceof TextChunk) {
             echo $event->content;
             \flush();
         } elseif ($event instanceof Notification) {
             echo $event->text . \PHP_EOL;
         }
-    }
+    });
     echo \PHP_EOL;
 }
 

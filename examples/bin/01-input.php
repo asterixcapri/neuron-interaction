@@ -29,13 +29,11 @@ $input = 'Hello! Introduce yourself in one short sentence.';
 echo 'You: ' . $input . \PHP_EOL;
 echo 'Agent: ';
 
-$stream = $conversation->sendInput($input);
-
-foreach ($stream as $event) {
+$conversation->runInput($input, function (object $event): void {
     if ($event instanceof TextChunk) {
         echo $event->content;
         \flush();
     }
-}
+});
 
 echo \PHP_EOL;

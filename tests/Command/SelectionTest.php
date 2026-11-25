@@ -17,10 +17,9 @@ use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Event\SessionChanged;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
-
-use function iterator_to_array;
 
 final class SelectionTest extends TestCase
 {
@@ -33,7 +32,7 @@ final class SelectionTest extends TestCase
         $active = $store->create();
         $conversation = new Conversation(new Agent(), $active);
         $conversation->setCommands(new Commands(new ResumeCommand($store, '/return')));
-        $events = iterator_to_array($conversation->sendInput('/return'));
+        $events = EventCollector::input($conversation, '/return');
 
         self::assertSame($active->messageNamespace(), $conversation->agent()->getThreadId());
         self::assertSame($active->getKey(), $conversation->session()->getKey());
@@ -45,7 +44,7 @@ final class SelectionTest extends TestCase
         self::assertSame('Untitled session', $request->options[0]->label);
         self::assertNotNull($request->options[0]->description);
 
-        $events = iterator_to_array($conversation->sendInput(new CommandInput($request->command, $request->options[0]->value)));
+        $events = EventCollector::input($conversation, new CommandInput($request->command, $request->options[0]->value));
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame($conversation->session(), $events[0]->session);
@@ -61,10 +60,10 @@ final class SelectionTest extends TestCase
         SessionHistory::append($stored, new UserMessage('Stored subject'));
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands(new ResumeCommand($store)));
-        $selection = iterator_to_array($conversation->sendInput('/resume   '));
+        $selection = EventCollector::input($conversation, '/resume   ');
         self::assertCount(1, $selection);
         self::assertInstanceOf(SelectionRequest::class, $selection[0]);
-        $events = iterator_to_array($conversation->sendInput('/resume  ' . $stored->getKey() . ' '));
+        $events = EventCollector::input($conversation, '/resume  ' . $stored->getKey() . ' ');
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame($stored->getKey(), $conversation->session()->getKey());
@@ -80,7 +79,7 @@ final class SelectionTest extends TestCase
         $foreign = (new SessionStore($storage, $nativeMessages, 'other'))->create();
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands(new ResumeCommand($store)));
-        $events = iterator_to_array($conversation->sendInput(new CommandInput('/resume', $stored->getKey())));
+        $events = EventCollector::input($conversation, new CommandInput('/resume', $stored->getKey()));
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame('Direct resume', $conversation->agent()->getChatHistory()->getMessages()[0]->getContent());
@@ -89,7 +88,7 @@ final class SelectionTest extends TestCase
         foreach (['unknown', $foreign->getKey()] as $key) {
             $session = $conversation->session();
             $agent = $conversation->agent();
-            $events = iterator_to_array($conversation->sendInput(new CommandInput('/resume', $key)));
+            $events = EventCollector::input($conversation, new CommandInput('/resume', $key));
             self::assertCount(1, $events);
             self::assertInstanceOf(Notification::class, $events[0]);
             self::assertSame(NotificationLevel::Error, $events[0]->level);
@@ -105,7 +104,7 @@ final class SelectionTest extends TestCase
         $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands(new ResumeCommand($store)));
-        $events = iterator_to_array($conversation->sendInput('/resume'));
+        $events = EventCollector::input($conversation, '/resume');
         self::assertCount(1, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Warning, $events[0]->level);

@@ -22,11 +22,10 @@ use NeuronInteraction\Event\SessionChanged;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-
-use function iterator_to_array;
 
 final class StateCommandTest extends TestCase
 {
@@ -39,7 +38,7 @@ final class StateCommandTest extends TestCase
         SessionHistory::append($original, new UserMessage('Saved history'));
         $conversation = new Conversation(new Agent(), $original);
         $conversation->setCommands(new Commands(new ClearCommand($store, '/fresh'), new ResumeCommand($store)));
-        $events = iterator_to_array($conversation->sendInput('/fresh'));
+        $events = EventCollector::input($conversation, '/fresh');
         self::assertCount(1, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertSame($conversation->session(), $events[0]->session);
@@ -47,7 +46,7 @@ final class StateCommandTest extends TestCase
         self::assertSame($conversation->session()->messageNamespace(), $conversation->agent()->getThreadId());
         self::assertSame([], $conversation->session()->getMessages());
         self::assertSame('Saved history', $store->get($original->getKey())?->getMessages()[0]->getContent());
-        iterator_to_array($conversation->sendInput('/resume ' . $original->getKey()));
+        EventCollector::input($conversation, '/resume ' . $original->getKey());
         self::assertSame($original->getKey(), $conversation->session()->getKey());
         self::assertSame('Previous subject', $conversation->session()->getTitle());
     }
@@ -87,9 +86,9 @@ final class StateCommandTest extends TestCase
         $conversation->setCommands(new Commands($command));
         $events = [];
         try {
-            foreach ($conversation->sendInput('/change') as $event) {
+            $conversation->runInput('/change', static function (object $event) use (&$events): void {
                 $events[] = $event;
-            }
+            });
             self::fail('Expected original command exception');
         } catch (RuntimeException $error) {
             self::assertSame($failure, $error);
@@ -103,10 +102,9 @@ final class StateCommandTest extends TestCase
         self::assertInstanceOf(Notification::class, $events[3]);
         self::assertSame('Selected:' . $selected->messageNamespace(), $events[3]->text);
         self::assertSame('yes', $store->get($selected->getKey())?->getMetadataValue('changed'));
-        $stream = $conversation->sendInput('Next question');
-        iterator_to_array($stream);
-        self::assertInstanceOf(AgentState::class, $stream->getReturn());
-        self::assertSame('New answer', $stream->getReturn()->getMessage()?->getContent());
+        EventCollector::input($conversation, 'Next question', $stream);
+        self::assertInstanceOf(AgentState::class, $stream);
+        self::assertSame('New answer', $stream->getMessage()?->getContent());
         self::assertCount(2, $conversation->session()->getMessages());
     }
 
@@ -120,7 +118,7 @@ final class StateCommandTest extends TestCase
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands($command));
 
-        $events = iterator_to_array($conversation->sendInput('/switch'));
+        $events = EventCollector::input($conversation, '/switch');
 
         self::assertCount(2, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
@@ -140,21 +138,22 @@ final class StateCommandTest extends TestCase
         $oldAgent = (new Agent())->setAiProvider(new FakeAIProvider(new AssistantMessage('Original answer')));
         $conversation = new Conversation($oldAgent, $original);
         $conversation->setCommands(new Commands($this->switchCommand($selected, $newAgent)));
-        $running = $conversation->sendInput('Question before switch');
-        $running->rewind();
-        $events = iterator_to_array($conversation->sendInput('/switch'));
+        $events = [];
+        $running = $conversation->runInput('Question before switch', static function (object $event) use ($conversation, &$events): void {
+            if ($events === []) {
+                $events = EventCollector::input($conversation, '/switch');
+            }
+        });
         self::assertCount(2, $events);
         self::assertInstanceOf(SessionChanged::class, $events[0]);
         self::assertInstanceOf(AgentChanged::class, $events[1]);
-        iterator_to_array($running);
-        self::assertInstanceOf(AgentState::class, $running->getReturn());
-        self::assertSame('Original answer', $running->getReturn()->getMessage()?->getContent());
+        self::assertInstanceOf(AgentState::class, $running);
+        self::assertSame('Original answer', $running->getMessage()?->getContent());
         self::assertCount(2, $store->get($original->getKey())?->getMessages() ?? []);
         self::assertSame([], $conversation->session()->getMessages());
-        $next = $conversation->sendInput('Question after switch');
-        iterator_to_array($next);
-        self::assertInstanceOf(AgentState::class, $next->getReturn());
-        self::assertSame('Selected answer', $next->getReturn()->getMessage()?->getContent());
+        EventCollector::input($conversation, 'Question after switch', $next);
+        self::assertInstanceOf(AgentState::class, $next);
+        self::assertSame('Selected answer', $next->getMessage()?->getContent());
         self::assertSame($selected->getKey(), $conversation->session()->getKey());
         self::assertCount(2, $conversation->session()->getMessages());
     }

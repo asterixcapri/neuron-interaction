@@ -13,6 +13,7 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SessionChanged;
+use NeuronInteraction\Exception\ExecutionAbortedException;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteractionDemo\AIProviderFactory;
@@ -54,26 +55,28 @@ while (true) {
         continue;
     }
 
-    $stream = $conversation->sendInput($input);
-
     echo \PHP_EOL;
 
-    foreach ($stream as $event) {
-        if ($event instanceof TextChunk) {
-            echo $event->content;
-            \flush();
-        } elseif ($event instanceof Notification) {
-            // Show feedback in a toast, status area or terminal message.
-            echo $event->text . \PHP_EOL;
-        } elseif ($event instanceof SessionChanged) {
-            // The Session has already changed: refresh the client's History.
-            echo 'Session changed: ' . $event->session->getKey()
-                . ' — ' . ($event->session->getTitle() ?? 'New session') . \PHP_EOL;
-        } elseif ($event instanceof ExitRequest) {
-            // The client decides whether to close its input loop or screen.
-            echo 'Host exit requested.' . \PHP_EOL;
-            return;
-        }
+    try {
+        $conversation->runInput($input, function (object $event): void {
+            if ($event instanceof TextChunk) {
+                echo $event->content;
+                \flush();
+            } elseif ($event instanceof Notification) {
+                // Show feedback in a toast, status area or terminal message.
+                echo $event->text . \PHP_EOL;
+            } elseif ($event instanceof SessionChanged) {
+                // The Session has already changed: refresh the client's History.
+                echo 'Session changed: ' . $event->session->getKey()
+                    . ' — ' . ($event->session->getTitle() ?? 'New session') . \PHP_EOL;
+            } elseif ($event instanceof ExitRequest) {
+                // The client decides whether to close its input loop or screen.
+                echo 'Host exit requested.' . \PHP_EOL;
+                throw new ExecutionAbortedException();
+            }
+        });
+    } catch (ExecutionAbortedException) {
+        return;
     }
 
     echo \PHP_EOL . \PHP_EOL;

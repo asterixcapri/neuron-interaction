@@ -20,28 +20,25 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
-use function iterator_to_array;
-
 final class CommandInputTest extends TestCase
 {
-    public function testStringsDispatchLazilyAndPreserveOpaqueArguments(): void
+    public function testStringsDispatchAndPreserveOpaqueArguments(): void
     {
         $command = $this->command();
         $conversation = $this->conversation(new Commands($command));
-        $stream = $conversation->sendInput('/echo  /help ');
         self::assertSame([], $command->values);
-        $events = iterator_to_array($stream);
+        $events = EventCollector::input($conversation, '/echo  /help ');
         self::assertSame([' /help '], $command->values);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(' /help ', $events[0]->text);
         self::assertSame(NotificationLevel::Info, $events[0]->level);
         self::assertInstanceOf(Notification::class, $events[1]);
         self::assertSame(NotificationLevel::Warning, $events[1]->level);
-        self::assertNull($stream->getReturn());
-        iterator_to_array($conversation->sendInput(new CommandInput('/echo', '/help')));
+        EventCollector::input($conversation, new CommandInput('/echo', '/help'));
         self::assertSame([' /help ', '/help'], $command->values);
     }
 
@@ -50,19 +47,19 @@ final class CommandInputTest extends TestCase
         $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider(new AssistantMessage('Literal slash'));
         $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'owner'))->create());
-        $blank = $conversation->sendInput('   ');
-        self::assertSame([], iterator_to_array($blank));
-        self::assertNull($blank->getReturn());
+        self::assertNull($conversation->runInput('   ', static function (object $event): void {
+            self::fail('Blank input must not emit events.');
+        }));
         $before = $provider->getRecorded();
         self::assertSame([], $before);
-        iterator_to_array($conversation->sendInput(new UserMessage('/echo')));
+        EventCollector::input($conversation, new UserMessage('/echo'));
         $recorded = $provider->getRecorded();
         self::assertSame('/echo', $recorded[0]->messages[0]->getContent());
     }
 
     public function testUnknownCommandIsAnErrorWithoutAgentExecution(): void
     {
-        $events = iterator_to_array($this->conversation()->sendInput('/missing'));
+        $events = EventCollector::input($this->conversation(), '/missing');
         self::assertCount(1, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Error, $events[0]->level);
@@ -91,18 +88,20 @@ final class CommandInputTest extends TestCase
             }
         };
         $conversation = $this->conversation(new Commands($command));
-        $stream = $conversation->sendInput('/fail fail');
-        $stream->rewind();
-        self::assertInstanceOf(Notification::class, $stream->current());
-        self::assertSame('fail', $stream->current()->text);
-        self::assertTrue($conversation->configurationStore()->get('changed', false));
+        $events = [];
         try {
-            $stream->next();
+            $conversation->runInput('/fail fail', static function (object $event) use (&$events, $conversation): void {
+                $events[] = $event;
+                self::assertInstanceOf(Notification::class, $event);
+                self::assertSame('fail', $event->text);
+                self::assertTrue($conversation->configurationStore()->get('changed', false));
+            });
             self::fail('Expected original failure');
         } catch (RuntimeException $exception) {
             self::assertSame($failure, $exception);
         }
-        self::assertCount(1, iterator_to_array($conversation->sendInput('/fail success')));
+        self::assertCount(1, $events);
+        self::assertCount(1, EventCollector::input($conversation, '/fail success'));
     }
 
     public function testConfigurationDefaultsAreIsolatedAndSuppliedStoreIsReused(): void
@@ -148,26 +147,24 @@ final class CommandInputTest extends TestCase
         self::assertSame("value\nnext", $input->value);
     }
 
-    public function testRegistryCanBeReplacedAndExtendedBeforeStreamConsumption(): void
+    public function testRegistryCanBeReplacedAndExtendedBetweenInvocations(): void
     {
         $original = $this->command('/old');
         $replacement = $this->command();
         $conversation = $this->conversation(new Commands($original));
-        $stream = $conversation->sendInput('/echo first');
         $commands = new Commands($replacement);
         $conversation->setCommands($commands);
-        iterator_to_array($stream);
+        EventCollector::input($conversation, '/echo first');
 
         self::assertSame([], $original->values);
         self::assertSame(['first'], $replacement->values);
-        $events = iterator_to_array($conversation->sendInput('/old'));
+        $events = EventCollector::input($conversation, '/old');
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Error, $events[0]->level);
 
         $latest = $this->command();
-        $stream = $conversation->sendInput('/echo second');
         $commands->addCommand($latest);
-        iterator_to_array($stream);
+        EventCollector::input($conversation, '/echo second');
 
         self::assertSame(['first'], $replacement->values);
         self::assertSame(['second'], $latest->values);

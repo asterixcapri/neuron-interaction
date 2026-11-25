@@ -22,6 +22,7 @@ use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Subagents\Adapter\{ConsoleAdapter, ExecuteSubagent, ExecuteSubagentHandler, MessengerAdapter, MessengerCompletionRelay, ProcessCompletions, ProcessCompletionsHandler};
 use NeuronInteraction\Subagents\{BackgroundAdapterInterface, Executor, Registry, SubagentStore, Subagents};
+use NeuronInteraction\Tests\EventCollector;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -44,7 +45,6 @@ use function bin2hex;
 use function dirname;
 use function extension_loaded;
 use function file_get_contents;
-use function iterator_to_array;
 use function microtime;
 use function putenv;
 use function random_bytes;
@@ -106,7 +106,7 @@ final class IntegrationTest extends TestCase
         $provider = new FakeAIProvider(new AssistantMessage($answer));
         $conversation = (new Conversation((new Agent())->setAiProvider($provider), $session))->setSubagents($module);
         try {
-            iterator_to_array($conversation->processCompletions());
+            EventCollector::completions($conversation);
             self::fail('Expected acknowledgement failure');
         } catch (RuntimeException $error) {
             self::assertSame('Crash before acknowledgement', $error->getMessage());
@@ -125,9 +125,8 @@ final class IntegrationTest extends TestCase
                 self::assertTrue($newRuns->get($event->run->id)->acknowledged);
                 $events[] = $event;
             }));
-        $stream = $retry->processCompletions();
         self::assertFalse($newRuns->get($run->id)->acknowledged);
-        self::assertSame([], iterator_to_array($stream));
+        self::assertSame([], EventCollector::completions($retry));
         self::assertCount(1, $events);
         self::assertInstanceOf(SubagentCompleted::class, $events[0]);
         self::assertTrue($events[0]->recovered);
@@ -152,7 +151,7 @@ final class IntegrationTest extends TestCase
         }
         $provider = new FakeAIProvider(new ToolCallMessage(tools: $calls), new AssistantMessage('Combined report.'));
         $conversation = (new Conversation((new Agent())->setAiProvider($provider), $session))->setSubagents($module);
-        iterator_to_array($conversation->sendInput('Read the results and summarize.'));
+        EventCollector::input($conversation, 'Read the results and summarize.');
         self::assertCount(2, $runs->pending($session));
 
         // Reopen after the answer write, before any completion poll acknowledges it.
@@ -164,12 +163,12 @@ final class IntegrationTest extends TestCase
         $retry = (new Conversation((new Agent())->setAiProvider($noResponses), $restored))
             ->setSubagents(new Subagents($this->registry(), $newRuns, $this->noDispatch()));
         try {
-            iterator_to_array($retry->processCompletions());
+            EventCollector::completions($retry);
             self::fail('Expected acknowledgement failure');
         } catch (RuntimeException $error) {
             self::assertSame('Crash before acknowledgement', $error->getMessage());
         }
-        self::assertSame([], iterator_to_array($retry->processCompletions()));
+        self::assertSame([], EventCollector::completions($retry));
         self::assertSame([], $noResponses->getRecorded());
         self::assertSame([], $newRuns->pending($restored));
     }
@@ -193,7 +192,7 @@ final class IntegrationTest extends TestCase
             $provider = new FakeAIProvider(new AssistantMessage('Automatic terminal response'));
             $conversation = (new Conversation((new Agent())->setAiProvider($provider), $session))
                 ->setSubagents(new Subagents($this->registry(), $runs, $adapter));
-            iterator_to_array($conversation->processCompletions());
+            EventCollector::completions($conversation);
             self::assertTrue($runs->get($run->id)->acknowledged);
             self::assertSame('Automatic terminal response', $session->getMessages()[1]->getContent());
         } finally {

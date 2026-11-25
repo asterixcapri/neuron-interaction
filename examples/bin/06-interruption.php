@@ -42,9 +42,7 @@ $textChunks = 0;
 echo 'You: ' . $input . \PHP_EOL;
 echo 'Stop after ' . $stopAfter . ' text chunks.' . \PHP_EOL . 'Agent: ';
 
-$stream = $conversation->sendInput($input);
-
-foreach ($stream as $event) {
+$conversation->runInput($input, function (object $event) use ($conversation, &$textChunks, $stopAfter): void {
     if ($event instanceof TextChunk) {
         echo $event->content;
         \flush();
@@ -53,6 +51,6 @@ foreach ($stream as $event) {
             $conversation->requestInterruption();
         }
     }
-}
+});
 
 echo \PHP_EOL . 'Response stopped: ' . ($conversation->responseWasStopped() ? 'yes' : 'no') . \PHP_EOL;

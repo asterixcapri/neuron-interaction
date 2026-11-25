@@ -18,9 +18,9 @@ use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SelectionRequest;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\TestCase;
 
-use function iterator_to_array;
 use function json_decode;
 use function json_encode;
 
@@ -40,7 +40,7 @@ final class SelectionRequestTest extends TestCase
         $first->setConfigurationStore($configuration);
         $first->setCommands(new Commands(new HttpSelectionCommand()));
         $first->session()->setTitle('Original Session');
-        $events = iterator_to_array($first->sendInput('/choose'));
+        $events = EventCollector::input($first, '/choose');
         self::assertCount(1, $events);
         self::assertInstanceOf(SelectionRequest::class, $events[0]);
         $request = $events[0];
@@ -68,12 +68,10 @@ final class SelectionRequestTest extends TestCase
         $second->setConfigurationStore(new ConfigurationStore($preferences, 'owner'));
         $second->setCommands(new Commands(new HttpSelectionCommand()));
         foreach ([' raw value ', '/help/not-an-option'] as $value) {
-            $stream = $second->sendInput(new CommandInput($identifier, $value));
-            $events = iterator_to_array($stream);
+            $events = EventCollector::input($second, new CommandInput($identifier, $value));
             self::assertCount(1, $events);
             self::assertInstanceOf(Notification::class, $events[0]);
             self::assertSame($value, $events[0]->text);
-            self::assertNull($stream->getReturn());
             self::assertSame($value, $second->configurationStore()->get('chosen'));
             self::assertSame($value, $secondStore->get($sessionKey)?->getMetadataValue('chosen'));
             self::assertSame($second->session()->messageNamespace(), $second->agent()->getThreadId());
@@ -113,18 +111,18 @@ final class SelectionRequestTest extends TestCase
         };
         $conversation = new Conversation(new Agent(), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create());
         $conversation->setCommands(new Commands($command));
-        $events = iterator_to_array($conversation->sendInput('/steps'));
+        $events = EventCollector::input($conversation, '/steps');
         self::assertCount(3, $events);
         self::assertSame($first, $events[0]);
         self::assertInstanceOf(Notification::class, $events[1]);
         self::assertSame('Between selections', $events[1]->text);
         self::assertSame($second, $events[2]);
-        self::assertSame([$second], iterator_to_array($conversation->sendInput(new CommandInput('/steps', 'second'))));
-        $events = iterator_to_array($conversation->sendInput(new CommandInput('/steps', 'finish')));
+        self::assertSame([$second], EventCollector::input($conversation, new CommandInput('/steps', 'second')));
+        $events = EventCollector::input($conversation, new CommandInput('/steps', 'finish'));
         self::assertCount(1, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame('finish', $events[0]->text);
-        self::assertSame([$second], iterator_to_array($conversation->sendInput(new CommandInput('/steps', 'second'))));
+        self::assertSame([$second], EventCollector::input($conversation, new CommandInput('/steps', 'second')));
     }
 
     public function testEmptyOptionsAreRejected(): void

@@ -19,6 +19,7 @@ use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use NeuronInteraction\Tests\History\SessionHistory;
 use NeuronInteraction\Tests\History\SessionMessages;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -27,7 +28,6 @@ use PHPUnit\Framework\TestCase;
 use function bin2hex;
 use function is_dir;
 use function is_link;
-use function iterator_to_array;
 use function random_bytes;
 use function rmdir;
 use function scandir;
@@ -72,18 +72,18 @@ final class SharedStorageInteractionTest extends TestCase
         $conversation->setConfigurationStore($preferences);
         $conversation->setInputHistory($inputs);
         $conversation->setCommands(new Commands(new ClearCommand($sessions), new ResumeCommand($sessions)));
-        iterator_to_array($conversation->sendInput('Original question'));
+        EventCollector::input($conversation, 'Original question');
         $session->setTitle('Saved title');
         $session->setMetadata('branch', 'main');
         $session->removeMetadata('project');
         self::assertCount(2, $session->getMessages());
 
-        iterator_to_array($conversation->sendInput('/clear'));
+        EventCollector::input($conversation, '/clear');
         self::assertNotSame($key, $conversation->session()->getKey());
         self::assertCount(1, $sessions->list());
-        iterator_to_array($conversation->sendInput('/resume ' . $key));
+        EventCollector::input($conversation, '/resume ' . $key);
         self::assertSame($key, $conversation->session()->getKey());
-        iterator_to_array($conversation->sendInput('Continue'));
+        EventCollector::input($conversation, 'Continue');
 
         $reopened = $files ? new FileStorage($this->directory) : $storage;
         $freshSessions = new SessionStore($reopened, $nativeMessages, 'alice');

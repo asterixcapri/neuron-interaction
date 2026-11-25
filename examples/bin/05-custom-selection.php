@@ -17,6 +17,7 @@ use NeuronInteraction\Event\AgentChanged;
 use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SelectionRequest;
+use NeuronInteraction\Exception\ExecutionAbortedException;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteractionDemo\AIProviderFactory;
@@ -101,43 +102,47 @@ while (true) {
         }
     }
 
-    $stream = $conversation->sendInput($input);
+    $submittedInput = $input;
     $input = null;
 
     echo \PHP_EOL;
 
-    foreach ($stream as $event) {
-        if ($event instanceof TextChunk) {
-            echo $event->content;
-        } elseif ($event instanceof Notification) {
-            echo $event->text . \PHP_EOL;
-        } elseif ($event instanceof AgentChanged) {
-            echo 'Agent changed: ' . $event->agent::class . \PHP_EOL;
-        } elseif ($event instanceof SelectionRequest) {
-            echo $event->prompt . \PHP_EOL;
-            foreach ($event->options as $index => $option) {
-                echo ($index + 1) . '. ' . $option->label . \PHP_EOL;
-            }
+    try {
+        $conversation->runInput($submittedInput, function (object $event) use (&$input): void {
+            if ($event instanceof TextChunk) {
+                echo $event->content;
+            } elseif ($event instanceof Notification) {
+                echo $event->text . \PHP_EOL;
+            } elseif ($event instanceof AgentChanged) {
+                echo 'Agent changed: ' . $event->agent::class . \PHP_EOL;
+            } elseif ($event instanceof SelectionRequest) {
+                echo $event->prompt . \PHP_EOL;
+                foreach ($event->options as $index => $option) {
+                    echo ($index + 1) . '. ' . $option->label . \PHP_EOL;
+                }
 
-            echo 'Choose an option number (Enter to cancel): ';
-            $choice = \intval(\fgets(\STDIN));
-            if ($choice === 0) {
-                echo 'Selection cancelled.' . \PHP_EOL;
-                continue;
-            }
+                echo 'Choose an option number (Enter to cancel): ';
+                $choice = \intval(\fgets(\STDIN));
+                if ($choice === 0) {
+                    echo 'Selection cancelled.' . \PHP_EOL;
+                    return;
+                }
 
-            $option = $event->options[$choice - 1] ?? null;
-            if ($option === null) {
-                echo 'Invalid option number.' . \PHP_EOL;
-                continue;
-            }
+                $option = $event->options[$choice - 1] ?? null;
+                if ($option === null) {
+                    echo 'Invalid option number.' . \PHP_EOL;
+                    return;
+                }
 
-            // Send the choice on the next iteration, after consuming this stream.
-            $input = new CommandInput($event->command, $option->value);
-        } elseif ($event instanceof ExitRequest) {
-            echo 'Host exit requested.' . \PHP_EOL;
-            return;
-        }
+                // Send the choice on the next iteration, after this call returns.
+                $input = new CommandInput($event->command, $option->value);
+            } elseif ($event instanceof ExitRequest) {
+                echo 'Host exit requested.' . \PHP_EOL;
+                throw new ExecutionAbortedException();
+            }
+        });
+    } catch (ExecutionAbortedException) {
+        return;
     }
 
     echo \PHP_EOL . \PHP_EOL;

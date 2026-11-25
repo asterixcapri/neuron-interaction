@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronInteraction\Tests\Conversation;
 
+use Closure;
 use Generator;
 use NeuronAI\Agent\Adapters\Events\StepStartedStreamEvent;
 use NeuronAI\Agent\Agent;
@@ -20,20 +21,30 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Providers\ProviderResponse;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Tools\ToolCall;
+use NeuronInteraction\Command\CommandContext;
+use NeuronInteraction\Command\CommandInterface;
+use NeuronInteraction\Command\Commands;
 use NeuronInteraction\Conversation;
+use NeuronInteraction\Event\Notification;
+use NeuronInteraction\Exception\ExecutionAbortedException;
+use NeuronInteraction\Exception\ExecutionBusyException;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\InMemoryStore;
 
 use function array_map;
-use function iterator_to_array;
+use function array_values;
+use function ini_set;
 
 final class ConversationTest extends TestCase
 {
-    public function testNativeObjectsKeysAndAgentStatePassThroughUnchanged(): void
+    public function testNativeObjectsSequenceAndAgentStatePassThroughUnchanged(): void
     {
         $nativeMessages = new InMemoryMessageStore();
         $tool = new ToolCall('lookup', 'call', ['q' => 'example']);
@@ -53,72 +64,190 @@ final class ConversationTest extends TestCase
             }
         };
         $conversation = new Conversation($agent, (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
-        $stream = $conversation->sendInput(new UserMessage('Hello'));
-        self::assertSame($chunks, iterator_to_array($stream));
-        self::assertSame($state, $stream->getReturn());
+        $events = EventCollector::input($conversation, new UserMessage('Hello'), $result);
+        self::assertSame(array_values($chunks), $events);
+        self::assertSame($state, $result);
     }
 
-    public function testSubmissionPreparesButOnlyConsumptionExecutesAndUnstartedStreamDoesNotReserve(): void
+    public function testRunInputCompletesExecutionBeforeReturning(): void
     {
-        $nativeMessages = new InMemoryMessageStore();
         $provider = new FakeAIProvider(new AssistantMessage('One'), new AssistantMessage('Two'));
-        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
-        $stream = $conversation->sendInput(new UserMessage('First'));
-        $before = $provider->getRecorded();
-        self::assertSame([], $before);
-        $historyBefore = $conversation->agent()->getChatHistory()->getMessages();
-        self::assertSame([], $historyBefore);
-        unset($stream);
-        iterator_to_array($conversation->sendInput(new UserMessage('Second')));
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'local'))->create());
+        EventCollector::input($conversation, 'First');
         self::assertCount(1, $provider->getRecorded());
-        self::assertSame('Second', $conversation->agent()->getChatHistory()->getMessages()[0]->getContent());
+        self::assertCount(2, $conversation->getMessages());
+        EventCollector::input($conversation, 'Second');
+        self::assertCount(2, $provider->getRecorded());
+        self::assertSame('Second', $conversation->getMessages()[2]->getContent());
     }
 
-    public function testRuntimeLeavesOverlappingStreamAdmissionToTheAgentOrHost(): void
+    public function testRunInputStreamsAndSavesBeforeReleasingTheSessionLock(): void
     {
-        $nativeMessages = new InMemoryMessageStore();
-        $agent = new class extends Agent {
+        $session = (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'local'))->create();
+        $locks = new LockFactory(new InMemoryStore());
+        $contender = new Conversation($this->agent('Next answer'), $session, lockFactory: $locks);
+        $steps = [];
+        $conversation = new Conversation(
+            $this->agent('Answer'),
+            $session,
+            lockFactory: $locks,
+            transactional: static function (Closure $run) use ($session, $contender, &$steps) {
+                $steps[] = 'begin';
+                $state = $run();
+                self::assertTrue($session->hasContent());
+                try {
+                    EventCollector::input($contender, 'Next question');
+                    self::fail('The session must remain locked until commit.');
+                } catch (ExecutionBusyException) {
+                    $steps[] = 'commit';
+                }
+                return $state;
+            },
+        );
+
+        $text = '';
+        $conversation->runInput(new UserMessage('Question'), static function (object $event) use (&$steps, &$text): void {
+            self::assertSame(['begin'], $steps);
+            if ($event instanceof TextChunk) {
+                $text .= $event->content;
+            }
+        });
+
+        self::assertSame('Answer', $text);
+        self::assertSame(['begin', 'commit'], $steps);
+        EventCollector::input($contender, 'Next question');
+        self::assertCount(4, $session->getMessages());
+    }
+
+    public function testCommandLockEndsBeforeEventsAndPromptOwnsItsTransactionAndLock(): void
+    {
+        $session = (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'local'))->create();
+        $locks = new LockFactory(new InMemoryStore());
+        $contender = new Conversation($this->agent('Between'), $session, lockFactory: $locks);
+        $command = new class ($contender) implements CommandInterface {
+            public function __construct(private Conversation $contender) {}
+            public function name(): string
+            {
+                return '/prompt';
+            }
+            public function describe(): string
+            {
+                return 'Prompt after notification';
+            }
+            public function run(CommandContext $context, string $value): void
+            {
+                try {
+                    EventCollector::input($this->contender, 'Too early');
+                    ConversationTest::fail('The command handler must hold the session lock.');
+                } catch (ExecutionBusyException) {
+                }
+                $context->notify('Before prompt');
+                $context->promptAgent(new UserMessage('Question'));
+            }
+        };
+        $steps = [];
+        $conversation = new Conversation($this->agent('Answer'), $session, lockFactory: $locks, transactional: static function (Closure $run) use (&$steps) {
+            $steps[] = 'begin';
+            $state = $run();
+            $steps[] = 'commit';
+            return $state;
+        });
+        $conversation->setCommands(new Commands($command));
+        $state = $conversation->runInput('/prompt', static function (object $event) use ($contender, &$steps): void {
+            if ($event instanceof Notification) {
+                self::assertSame([], $steps);
+                EventCollector::input($contender, 'Between command and prompt');
+                $steps[] = 'notice';
+                return;
+            }
+            self::assertSame(['notice', 'begin'], $steps);
+            try {
+                EventCollector::input($contender, 'During prompt');
+                self::fail('The prompt must hold its own session lock.');
+            } catch (ExecutionBusyException) {
+            }
+        });
+        self::assertInstanceOf(AgentState::class, $state);
+        self::assertSame('Answer', $state->getMessage()?->getContent());
+        self::assertSame(['notice', 'begin', 'commit'], $steps);
+        self::assertCount(4, $session->getMessages());
+    }
+
+    public function testReentrantInputIsRejectedUntilTheCallbackReturns(): void
+    {
+        $conversation = new Conversation($this->agent('First', 'Second'), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'local'))->create(), lockFactory: new LockFactory(new InMemoryStore()));
+        $attempted = false;
+        $conversation->runInput('First', static function (object $event) use ($conversation, &$attempted): void {
+            if ($attempted) {
+                return;
+            }
+            $attempted = true;
+            try {
+                EventCollector::input($conversation, 'Overlapping');
+                self::fail('Expected the active turn to reject reentrant input.');
+            } catch (ExecutionBusyException) {
+            }
+        });
+        self::assertTrue($attempted);
+        EventCollector::input($conversation, 'Second');
+        self::assertCount(4, $conversation->getMessages());
+    }
+
+    public function testCallbackAbortClosesTheNativeStreamBeforeRollbackAndLockRelease(): void
+    {
+        $steps = [];
+        $session = (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'local'))->create();
+        $locks = new LockFactory(new InMemoryStore());
+        $contender = new Conversation($this->agent('Next'), $session, lockFactory: $locks);
+        $agent = new class (static function () use (&$steps): void {
+            $steps[] = 'closed';
+        }, $contender) extends Agent {
+            /** @param Closure(): void $onClose */
+            public function __construct(private Closure $onClose, private Conversation $contender) {}
             /**
              * @param Message|Message[] $messages
              * @return Generator<int, object, mixed, AgentState>
              */
             public function stream(Message|array $messages = []): Generator
             {
-                yield new TextChunk('response', $messages instanceof Message ? $messages->getContent() ?? '' : '');
-                return new AgentState();
+                try {
+                    yield new TextChunk('partial', 'Partial');
+                    ConversationTest::fail('The abandoned stream must never resume.');
+                } finally {
+                    ($this->onClose)();
+                    try {
+                        EventCollector::input($this->contender, 'Too early');
+                        ConversationTest::fail('The lock must still be held while closing the stream.');
+                    } catch (ExecutionBusyException) {
+                    }
+                }
             }
         };
-        $conversation = new Conversation($agent, (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
-        $first = $conversation->sendInput(new UserMessage('First'));
-        $second = $conversation->sendInput(new UserMessage('Second'));
-        $first->rewind();
-        $second->rewind();
-        $third = $conversation->sendInput(new UserMessage('Third'));
-        $third->rewind();
-
-        foreach ([$first, $second, $third] as $index => $stream) {
-            $chunk = $stream->current();
-            self::assertInstanceOf(TextChunk::class, $chunk);
-            self::assertSame(['First', 'Second', 'Third'][$index], $chunk->content);
-            iterator_to_array($stream);
-            self::assertInstanceOf(AgentState::class, $stream->getReturn());
+        $conversation = new Conversation($agent, $session, lockFactory: $locks, transactional: static function (Closure $run) use (&$steps) {
+            try {
+                return $run();
+            } catch (RuntimeException $error) {
+                $steps[] = 'rollback';
+                self::assertSame(['callback', 'closed', 'rollback'], $steps);
+                throw $error;
+            }
+        });
+        $traceArgs = ini_set('zend.exception_ignore_args', '0');
+        try {
+            $conversation->runInput('Question', static function (object $event) use (&$steps): void {
+                $steps[] = 'callback';
+                throw new ExecutionAbortedException('Caller aborted');
+            });
+            self::fail('Expected the callback failure.');
+        } catch (ExecutionAbortedException $error) {
+            self::assertSame('Caller aborted', $error->getMessage());
+            self::assertSame(['callback', 'closed', 'rollback'], $steps);
+            EventCollector::input($contender, 'Next');
+        } finally {
+            if ($traceArgs !== false) {
+                ini_set('zend.exception_ignore_args', $traceArgs);
+            }
         }
-    }
-
-    public function testDestroyingAPartiallyConsumedStreamReleasesNativeExecution(): void
-    {
-        $nativeMessages = new InMemoryMessageStore();
-        $conversation = new Conversation($this->agent('Partial', 'Next'), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
-        $stream = $conversation->sendInput(new UserMessage('First'));
-        foreach ($stream as $chunk) {
-            self::assertInstanceOf(TextChunk::class, $chunk);
-            break;
-        }
-        unset($stream);
-        $next = $conversation->sendInput(new UserMessage('Next'));
-        iterator_to_array($next);
-        self::assertInstanceOf(AgentState::class, $next->getReturn());
-        self::assertSame('Next', $next->getReturn()->getMessage()?->getContent());
     }
 
     public function testFailurePropagatesAfterPartialTextAndReleasesWithoutRetry(): void
@@ -143,11 +272,11 @@ final class ConversationTest extends TestCase
         $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
         $text = '';
         try {
-            foreach ($conversation->sendInput(new UserMessage('Fail')) as $chunk) {
+            $conversation->runInput(new UserMessage('Fail'), static function (object $chunk) use (&$text): void {
                 if ($chunk instanceof TextChunk) {
                     $text .= $chunk->content;
                 }
-            }
+            });
             self::fail('Expected failure');
         } catch (RuntimeException $error) {
             self::assertSame($failure, $error);
@@ -155,75 +284,76 @@ final class ConversationTest extends TestCase
         self::assertSame('Partial answer', $text);
         self::assertFalse($conversation->session()->hasContent());
         self::assertEquals($conversation->session()->getCreatedAt(), $conversation->session()->getLastUsedAt());
-        $next = $conversation->sendInput(new UserMessage('Continue'));
-        iterator_to_array($next);
-        self::assertInstanceOf(AgentState::class, $next->getReturn());
-        self::assertSame('Recovered', $next->getReturn()->getMessage()?->getContent());
+        EventCollector::input($conversation, new UserMessage('Continue'), $next);
+        self::assertInstanceOf(AgentState::class, $next);
+        self::assertSame('Recovered', $next->getMessage()?->getContent());
         self::assertCount(2, $provider->getRecorded());
     }
 
-    public function testExecutionUsesCurrentAgentAndSessionThenRetainsThemAcrossReplacement(): void
+    public function testExecutionRetainsItsAgentAndSessionAcrossCallbackReplacement(): void
     {
-        $nativeMessages = new InMemoryMessageStore();
-        $store = new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner');
+        $store = new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'owner');
         $original = $store->create();
         $selected = $store->create();
-        $conversation = new Conversation($this->agent('Original response'), $original);
-        $stream = $conversation->sendInput(new UserMessage('Question'));
-        $conversation->useSession($selected);
-        $conversation->useAgent($this->agent('Selected response'));
-        $stream->rewind();
-        $conversation->useSession($original);
-        $conversation->useAgent($this->agent('Replacement'));
-        iterator_to_array($stream);
-        self::assertInstanceOf(AgentState::class, $stream->getReturn());
-        self::assertSame('Selected response', $stream->getReturn()->getMessage()?->getContent());
+        $conversation = new Conversation($this->agent('Selected response'), $selected);
+        $replaced = false;
+        $state = $conversation->runInput('Question', function (object $event) use ($conversation, $original, &$replaced): void {
+            if (!$replaced) {
+                $replaced = true;
+                $conversation->useSession($original);
+                $conversation->useAgent($this->agent('Replacement'));
+            }
+        });
+        self::assertInstanceOf(AgentState::class, $state);
+        self::assertSame('Selected response', $state->getMessage()?->getContent());
         self::assertSame([], $conversation->agent()->getChatHistory()->getMessages());
-        $saved = $store->get($selected->getKey());
-        self::assertNotNull($saved);
-        self::assertCount(2, $saved->getMessages());
-        self::assertSame($original->getKey(), $conversation->session()->getKey());
+        self::assertCount(2, $selected->getMessages());
+        self::assertSame($original, $conversation->session());
         $conversation->useSession($selected);
         self::assertCount(2, $conversation->agent()->getChatHistory()->getMessages());
     }
 
     public function testConsumedResponseStopResetsAtNextExecution(): void
     {
-        $nativeMessages = new InMemoryMessageStore();
         $signal = new StopSignal(new InMemoryStorage(), 'stop');
-        $conversation = new Conversation($this->agent('Partial', 'Next'), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
+        $conversation = new Conversation($this->agent('Partial', 'Next'), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'local'))->create());
         $conversation->setStopSignal($signal);
-        $stream = $conversation->sendInput(new UserMessage('Stop'));
-        $stream->rewind();
-        self::assertTrue($conversation->requestInterruption());
-        self::assertFalse($conversation->requestInterruption());
-        self::assertFalse($conversation->responseWasStopped());
-        self::assertTrue(($signal->stopCallback(pollInterval: 0))());
-        self::assertTrue($conversation->responseWasStopped());
-        iterator_to_array($stream);
+        $requested = false;
+        $conversation->runInput('Stop', static function (object $event) use ($conversation, $signal, &$requested): void {
+            if ($requested) {
+                return;
+            }
+            $requested = true;
+            self::assertTrue($conversation->requestInterruption());
+            self::assertFalse($conversation->requestInterruption());
+            self::assertFalse($conversation->responseWasStopped());
+            self::assertTrue(($signal->stopCallback(pollInterval: 0))());
+            self::assertTrue($conversation->responseWasStopped());
+        });
         self::assertTrue($conversation->responseStopRequested());
-        $next = $conversation->sendInput(new UserMessage('Next'));
-        $next->rewind();
-        self::assertFalse($conversation->responseStopRequested());
-        self::assertFalse($conversation->responseWasStopped());
-        iterator_to_array($next);
+        $conversation->runInput('Next', static function (object $event) use ($conversation): void {
+            self::assertFalse($conversation->responseStopRequested());
+            self::assertFalse($conversation->responseWasStopped());
+        });
     }
 
     public function testPendingAndStaleStopRequestsAreNotReportedAsConsumed(): void
     {
-        $nativeMessages = new InMemoryMessageStore();
         $signal = new StopSignal(new InMemoryStorage(), 'pending');
         $signal->request();
-        $conversation = new Conversation($this->agent('Completed', 'Next'), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create());
+        $conversation = new Conversation($this->agent('Completed', 'Next'), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'local'))->create());
         $conversation->setStopSignal($signal);
-        $stream = $conversation->sendInput(new UserMessage('Question'));
-        $stream->rewind();
-        self::assertFalse($signal->isRequested());
-        self::assertTrue($conversation->requestInterruption());
-        iterator_to_array($stream);
+        $requested = false;
+        $conversation->runInput('Question', static function (object $event) use ($conversation, $signal, &$requested): void {
+            if (!$requested) {
+                self::assertFalse($signal->isRequested());
+                self::assertTrue($conversation->requestInterruption());
+                $requested = true;
+            }
+        });
         self::assertTrue($conversation->responseStopRequested());
         self::assertFalse($conversation->responseWasStopped());
-        iterator_to_array($conversation->sendInput(new UserMessage('Next')));
+        EventCollector::input($conversation, 'Next');
         self::assertFalse($signal->isRequested());
         self::assertFalse($conversation->responseStopRequested());
     }
@@ -239,12 +369,10 @@ final class ConversationTest extends TestCase
         self::assertTrue($conversation->responseStopRequested());
         self::assertFalse($conversation->requestInterruption());
 
-        $stream = $conversation->sendInput(new UserMessage('Question'));
-        self::assertTrue($signal->isRequested());
-        $stream->rewind();
-        self::assertFalse($signal->isRequested());
-        self::assertFalse($conversation->responseStopRequested());
-        iterator_to_array($stream);
+        $conversation->runInput('Question', static function (object $event) use ($conversation, $signal): void {
+            self::assertFalse($signal->isRequested());
+            self::assertFalse($conversation->responseStopRequested());
+        });
         self::assertFalse((new Conversation($this->agent('No stop'), (new SessionStore(new InMemoryStorage(), $nativeMessages, 'local'))->create()))->requestInterruption());
     }
 
@@ -270,7 +398,7 @@ final class ConversationTest extends TestCase
         $conversation->useSession($selected);
 
         self::assertSame($selected, $conversation->session());
-        iterator_to_array($conversation->sendInput('Question'));
+        EventCollector::input($conversation, 'Question');
         self::assertSame('Answer', $selected->getMessages()[1]->getContent());
         self::assertSame([], $initial->getMessages());
     }
@@ -302,7 +430,7 @@ final class ConversationTest extends TestCase
         $session = (new SessionStore(new InMemoryStorage(), $messages, 'owner'))->create();
         $conversation = new Conversation($this->agent('Answer'), $session);
         try {
-            iterator_to_array($conversation->sendInput('Question'));
+            EventCollector::input($conversation, 'Question');
             self::fail('Expected the persistence failure.');
         } catch (RuntimeException $error) {
             self::assertSame('Answer persistence failed', $error->getMessage());

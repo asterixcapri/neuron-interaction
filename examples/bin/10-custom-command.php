@@ -14,6 +14,7 @@ use NeuronInteraction\Configuration\ConfigurationStore;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
+use NeuronInteraction\Exception\ExecutionAbortedException;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteractionDemo\AIProviderFactory;
@@ -78,18 +79,21 @@ while (true) {
         continue;
     }
 
-    $stream = $conversation->sendInput($input);
     echo \PHP_EOL;
 
-    foreach ($stream as $event) {
-        if ($event instanceof TextChunk) {
-            echo $event->content;
-            \flush();
-        } elseif ($event instanceof Notification) {
-            echo $event->text . \PHP_EOL;
-        } elseif ($event instanceof ExitRequest) {
-            return;
-        }
+    try {
+        $conversation->runInput($input, function (object $event): void {
+            if ($event instanceof TextChunk) {
+                echo $event->content;
+                \flush();
+            } elseif ($event instanceof Notification) {
+                echo $event->text . \PHP_EOL;
+            } elseif ($event instanceof ExitRequest) {
+                throw new ExecutionAbortedException();
+            }
+        });
+    } catch (ExecutionAbortedException) {
+        return;
     }
 
     echo \PHP_EOL . \PHP_EOL;

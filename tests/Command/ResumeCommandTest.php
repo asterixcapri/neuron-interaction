@@ -19,13 +19,13 @@ use NeuronInteraction\Session\Session;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use NeuronInteraction\Tests\History\SessionHistory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 use function bin2hex;
 use function is_dir;
-use function iterator_to_array;
 use function random_bytes;
 use function rmdir;
 use function scandir;
@@ -92,14 +92,14 @@ final class ResumeCommandTest extends TestCase
         ]);
         $conversation = new Conversation(new Agent(), $store->create());
         $conversation->setCommands(new Commands(new ResumeCommand($store)));
-        $events = iterator_to_array($conversation->sendInput('/resume'));
+        $events = EventCollector::input($conversation, '/resume');
 
         self::assertCount(1, $events);
         self::assertInstanceOf(SelectionRequest::class, $events[0]);
         self::assertCount(1, $events[0]->options);
         $option = $events[0]->options[0];
         self::assertSame($session->getKey(), $option->value);
-        iterator_to_array($conversation->sendInput(new CommandInput('/resume', $option->value)));
+        EventCollector::input($conversation, new CommandInput('/resume', $option->value));
         self::assertSame($session->getKey(), $conversation->session()->getKey());
         self::assertSame($content, $conversation->session()->getMessages()[0]->getContent());
 

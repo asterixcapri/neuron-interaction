@@ -7,6 +7,7 @@ namespace NeuronInteraction\Tests\Command;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\History\InMemoryMessageStore;
 use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronInteraction\Command\CommandContext;
 use NeuronInteraction\Command\CommandInterface;
@@ -16,12 +17,12 @@ use NeuronInteraction\Command\HelpCommand;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
+use NeuronInteraction\Exception\ExecutionAbortedException;
 use NeuronInteraction\Interruption\StopSignal;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\TestCase;
-
-use function iterator_to_array;
 
 final class HelpAndExitTest extends TestCase
 {
@@ -33,14 +34,12 @@ final class HelpAndExitTest extends TestCase
             (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
         );
         $conversation->setCommands(new Commands(new HelpCommand('/guide'), new ExitCommand('/quit')));
-        $stream = $conversation->sendInput('/guide');
-        $events = iterator_to_array($stream);
+        $events = EventCollector::input($conversation, '/guide');
         self::assertCount(2, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertInstanceOf(Notification::class, $events[1]);
         self::assertSame('/guide — Lists what can be typed here.', $events[0]->text);
         self::assertSame('/quit — Stops the interaction.', $events[1]->text);
-        self::assertNull($stream->getReturn());
     }
 
     public function testExitCanBeIgnoredWithoutEndingConversationOrStoppingResponse(): void
@@ -55,15 +54,51 @@ final class HelpAndExitTest extends TestCase
         $conversation->setStopSignal($stop);
         $conversation->setCommands(new Commands(new ExitCommand(), new HelpCommand()));
         $session = $conversation->session();
-        $events = iterator_to_array($conversation->sendInput('/exit'));
+        $events = EventCollector::input($conversation, '/exit');
         self::assertCount(1, $events);
         self::assertInstanceOf(ExitRequest::class, $events[0]);
         self::assertFalse($stop->isRequested());
         self::assertFalse($conversation->responseStopRequested());
         self::assertSame($session, $conversation->session());
-        self::assertCount(2, iterator_to_array($conversation->sendInput('/help')));
-        iterator_to_array($conversation->sendInput('Continue after exit'));
+        self::assertCount(2, EventCollector::input($conversation, '/help'));
+        EventCollector::input($conversation, 'Continue after exit');
         self::assertCount(1, $provider->getRecorded());
+    }
+
+    public function testCallerCanAbortAtExitBeforeLaterEventsOrPrompts(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('Must not run'));
+        $command = new class implements CommandInterface {
+            public function name(): string
+            {
+                return '/leave';
+            }
+            public function describe(): string
+            {
+                return 'Exit before a prompt';
+            }
+            public function run(CommandContext $context, string $value): void
+            {
+                $context->requestExit();
+                $context->notify('Must not appear');
+                $context->promptAgent(new UserMessage('Must not run'));
+            }
+        };
+        $conversation = new Conversation((new Agent())->setAiProvider($provider), (new SessionStore(new InMemoryStorage(), new InMemoryMessageStore(), 'owner'))->create());
+        $conversation->setCommands(new Commands($command));
+        $events = [];
+        try {
+            $conversation->runInput('/leave', static function (object $event) use (&$events): void {
+                $events[] = $event;
+                throw new ExecutionAbortedException('Exit accepted');
+            });
+            self::fail('Expected caller abort.');
+        } catch (ExecutionAbortedException $error) {
+            self::assertSame('Exit accepted', $error->getMessage());
+        }
+        self::assertCount(1, $events);
+        self::assertInstanceOf(ExitRequest::class, $events[0]);
+        self::assertSame([], $provider->getRecorded());
     }
 
     public function testExitPreservesTheOrderAndDoesNotCancelLaterRequests(): void
@@ -92,7 +127,7 @@ final class HelpAndExitTest extends TestCase
             (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
         );
         $conversation->setCommands(new Commands($command));
-        $events = iterator_to_array($conversation->sendInput('/ordered'));
+        $events = EventCollector::input($conversation, '/ordered');
         self::assertCount(3, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame('Before', $events[0]->text);

@@ -14,6 +14,7 @@ use NeuronInteraction\Event\ExitRequest;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SubagentCompleted;
 use NeuronInteraction\Event\SubagentDispatched;
+use NeuronInteraction\Exception\ExecutionAbortedException;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\FileStorage;
 use NeuronInteraction\Subagents\Adapter\ConsoleAdapter;
@@ -109,13 +110,9 @@ try {
         }
         $printed = false;
         try {
-            $stream = $input === null
-                ? $conversation->processCompletions()
-                : $conversation->sendInput($input);
-
-            foreach ($stream as $event) {
+            $onEvent = function (object $event) use (&$printed): void {
                 if ($event instanceof ExitRequest) {
-                    break 2;
+                    throw new ExecutionAbortedException();
                 }
 
                 if ($event instanceof TextChunk) {
@@ -123,11 +120,11 @@ try {
                 } elseif ($event instanceof Notification) {
                     $text = $event->text . \PHP_EOL;
                 } else {
-                    continue;
+                    return;
                 }
 
                 if ($text === '') {
-                    continue;
+                    return;
                 }
                 if (!$printed) {
                     echo \PHP_EOL;
@@ -135,11 +132,19 @@ try {
                 }
                 echo $text;
                 \flush();
+            };
+
+            if ($input === null) {
+                $conversation->runCompletions($onEvent);
+            } else {
+                $conversation->runInput($input, $onEvent);
             }
 
             if ($printed) {
                 echo \PHP_EOL . \PHP_EOL;
             }
+        } catch (ExecutionAbortedException) {
+            break;
         } catch (Throwable $error) {
             \fwrite(\STDERR, \PHP_EOL . $error->getMessage() . \PHP_EOL);
             $printed = true;
@@ -147,9 +152,6 @@ try {
                 // Keep accepting input while waiting before retrying a failed completion.
                 $nextCompletionCheck = \microtime(true) + 10;
             }
-        } finally {
-            // Release a partially consumed Conversation stream before the next turn.
-            unset($stream);
         }
 
         if ($printed) {

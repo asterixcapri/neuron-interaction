@@ -25,11 +25,11 @@ use NeuronInteraction\Message\MessageProcessorInterface;
 use NeuronInteraction\Message\MessageProcessors;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 use function count;
-use function iterator_to_array;
 
 final class CommandPromptTest extends TestCase
 {
@@ -55,9 +55,7 @@ final class CommandPromptTest extends TestCase
                 return $states[$index];
             },
         );
-        $stream = $conversation->sendInput('/prompt');
-        self::assertSame([], $calls);
-        $events = iterator_to_array($stream, false);
+        $events = EventCollector::input($conversation, '/prompt', $state);
         self::assertCount(5, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame('before', $events[0]->text);
@@ -68,7 +66,7 @@ final class CommandPromptTest extends TestCase
         self::assertInstanceOf(Notification::class, $events[4]);
         self::assertSame('after', $events[4]->text);
         self::assertSame(['one', 'two'], $calls);
-        self::assertSame($states[1], $stream->getReturn());
+        self::assertSame($states[1], $state);
     }
 
     public function testPromptsPrepareAtTheirPositionOnceAndPreserveMetadataAndAttachments(): void
@@ -104,15 +102,11 @@ final class CommandPromptTest extends TestCase
             },
             $processor,
         );
-        $stream = $conversation->sendInput('/prompt');
-        $stream->rewind();
-        self::assertSame(0, $processor->calls);
-        $stream->next();
-        self::assertSame(42, $stream->key());
+        $conversation->runInput('/prompt', static function (object $event) use ($processor): void {
+            self::assertSame($event instanceof Notification ? 0 : 1, $processor->calls);
+        });
         self::assertSame(1, $processor->calls);
         self::assertNull($message->getMetadata('processed'));
-        $stream->next();
-        self::assertFalse($stream->valid());
     }
 
     public function testRegisteredPromptRunsBeforeOriginalCommandFailure(): void
@@ -129,14 +123,15 @@ final class CommandPromptTest extends TestCase
                 return new AgentState();
             },
         );
-        $stream = $conversation->sendInput('/prompt');
-        $stream->rewind();
-        self::assertSame($event, $stream->current());
+        $events = [];
         try {
-            $stream->next();
+            $conversation->runInput('/prompt', static function (object $received) use (&$events): void {
+                $events[] = $received;
+            });
             self::fail('Expected Command failure');
         } catch (RuntimeException $exception) {
             self::assertSame($failure, $exception);
+            self::assertSame([$event], $events);
         }
     }
 
@@ -158,7 +153,7 @@ final class CommandPromptTest extends TestCase
             },
         );
         try {
-            iterator_to_array($conversation->sendInput('/prompt'));
+            EventCollector::input($conversation, '/prompt');
             self::fail('Expected Agent failure');
         } catch (RuntimeException $exception) {
             self::assertSame($requestFailure, $exception);
@@ -185,7 +180,7 @@ final class CommandPromptTest extends TestCase
             },
             stopSignal: new StopSignal(new InMemoryStorage(), 'prompts'),
         );
-        self::assertSame([$approval, $approval], iterator_to_array($conversation->sendInput('/prompt'), false));
+        self::assertSame([$approval, $approval], EventCollector::input($conversation, '/prompt'));
         self::assertSame(2, $calls);
     }
 

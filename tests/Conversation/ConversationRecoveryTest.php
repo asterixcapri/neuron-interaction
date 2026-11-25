@@ -17,11 +17,10 @@ use NeuronAI\Tools\ToolCall;
 use NeuronInteraction\Conversation;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-
-use function iterator_to_array;
 
 final class ConversationRecoveryTest extends TestCase
 {
@@ -50,7 +49,7 @@ final class ConversationRecoveryTest extends TestCase
 
         for ($attempt = 0; $attempt < 2; ++$attempt) {
             try {
-                iterator_to_array($conversation->sendInput('Continue'));
+                EventCollector::input($conversation, 'Continue');
                 self::fail('Expected the timeout.');
             } catch (RuntimeException $error) {
                 self::assertSame($failure, $error);
@@ -106,7 +105,7 @@ final class ConversationRecoveryTest extends TestCase
         $history->addMessage(new ToolResultMessage([$call]));
 
         try {
-            iterator_to_array($conversation->sendInput('Look it up'));
+            EventCollector::input($conversation, 'Look it up');
             self::fail('Expected the timeout.');
         } catch (RuntimeException $error) {
             self::assertSame($failure, $error);
@@ -119,13 +118,13 @@ final class ConversationRecoveryTest extends TestCase
         self::assertInstanceOf(AssistantMessage::class, $saved[3]);
         self::assertSame('The previous response was interrupted by an error.', $saved[3]->getContent());
 
-        iterator_to_array($conversation->sendInput('Continue'));
+        EventCollector::input($conversation, 'Continue');
         self::assertSame('Recovered', $session->getMessages()[5]->getContent());
 
         $reloaded = $store->get($session->getKey());
         self::assertNotNull($reloaded);
         $conversation = new Conversation((new Agent())->setAiProvider($provider), $reloaded);
-        iterator_to_array($conversation->sendInput('Another question'));
+        EventCollector::input($conversation, 'Another question');
         self::assertCount(8, $reloaded->getMessages());
         self::assertSame('After reload', $reloaded->getMessages()[7]->getContent());
     }

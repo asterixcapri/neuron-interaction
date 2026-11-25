@@ -6,15 +6,14 @@ input history, response stopping and background subagents to PHP applications bu
 
 You configure a Neuron Agent with its provider, instructions and tools. Interaction
 binds that Agent to a saved session and provides one method for submitting messages
-and commands. Your application receives a stream of Neuron objects and interaction
-events, and decides how to display them in a terminal or web interface.
+and commands. Your application receives Neuron objects and interaction events through a callback, and decides how to display them in a terminal or web interface.
 
 ## Contents
 
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [The main objects](#the-main-objects)
-- [Submitting input and consuming the stream](#submitting-input-and-consuming-the-stream)
+- [Submitting input and handling events](#submitting-input-and-handling-events)
 - [Sessions and saved messages](#sessions-and-saved-messages)
 - [Commands and events](#commands)
 - [User preferences](#user-preferences)
@@ -75,15 +74,12 @@ $sessionStore = new SessionStore($storage, $messageStore, 'local-user');
 $session = $sessionStore->create();
 $conversation = new Conversation($agent, $session);
 
-$stream = $conversation->sendInput('What is a PHP generator?');
-foreach ($stream as $event) {
+$state = $conversation->runInput('What is a PHP generator?', static function (object $event): void {
     if ($event instanceof TextChunk) {
         echo $event->content;
         flush();
     }
-}
-
-$state = $stream->getReturn(); // Neuron AgentState.
+});
 $sessionKey = $conversation->session()->getKey(); // Save this to resume later.
 ```
 
@@ -102,7 +98,7 @@ The following examples build on the objects above unless stated otherwise.
 | `StorageInterface` | Persists ordered JSON-array entries by namespace and key, in files or memory. |
 | `SessionStore` | Creates, lists, retrieves and deletes sessions for one user. |
 | `Session` | Identifies a saved conversation and exposes its messages, title and metadata. |
-| `Conversation` | Binds the Agent to a Session, dispatches input and returns a stream. |
+| `Conversation` | Binds the Agent to a Session, executes input and delivers events to a callback. |
 | `CommandInterface` | Implements an application action invoked by a slash command. |
 | `EventInterface` | Identifies Interaction's events for the application to handle. |
 
@@ -120,44 +116,78 @@ between concurrent requests. Configured Symfony locks serialize Conversation
 turns; the host still owns scheduling. Interaction supplies the execution and persistence
 APIs; it does not provide an HTTP endpoint or a UI.
 
-## Submitting input and consuming the stream
+## Submitting input and handling events
 
-`sendInput()` accepts a string, a Neuron `UserMessage`, or a `CommandInput`:
+`runInput(string|UserMessage|CommandInput $input, Closure $onEvent): ?AgentState`
+accepts a string, a Neuron `UserMessage`, or a `CommandInput`. The callback has
+the signature `Closure(object): void` and handles each event synchronously:
 
 ```php
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronInteraction\Command\CommandInput;
 
-$stream = $conversation->sendInput('Hello');
-$stream = $conversation->sendInput('/resume saved-session-key');
-$stream = $conversation->sendInput(new CommandInput('/resume', $sessionKey));
-$stream = $conversation->sendInput(new UserMessage('/this is literal message text'));
+$onEvent = static function (object $event): void {
+    if ($event instanceof TextChunk) {
+        echo $event->content;
+    }
+};
+
+$state = $conversation->runInput('Hello', $onEvent);
+$state = $conversation->runInput('/resume saved-session-key', $onEvent);
+$state = $conversation->runInput(new CommandInput('/resume', $sessionKey), $onEvent);
+$state = $conversation->runInput(new UserMessage('/this is literal message text'), $onEvent);
 ```
 
-Each line above illustrates a separate submission: consume its returned generator
-to execute it. A string matching slash-command syntax dispatches a command;
-an explicit `UserMessage` always goes to the Agent. Command identifiers start
-with `/` followed by letters, digits, underscores or hyphens, and lookup is case
-sensitive. Arguments remain strings for the command to validate. Blank string
-input produces an empty stream.
+Each line above executes a separate submission before returning. A string matching
+slash-command syntax dispatches a command; an explicit `UserMessage` always goes
+to the Agent. Command identifiers start with `/` followed by letters, digits,
+underscores or hyphens, and lookup is case sensitive. Arguments remain strings
+for the command to validate. Blank string input emits no events and returns `null`.
 
-Ordinary messages pass through configured processors synchronously in
-`sendInput()`. Agent execution and command dispatch begin when you iterate the
-returned generator. Neuron's native objects, including text, tools and reasoning,
-pass through without conversion. After fully consuming the stream, `getReturn()`
-returns the last `AgentState`, or `null` if no Agent prompt executed.
+Preparation, command dispatch, model execution and event delivery all occur within
+the call. Neuron's native objects, including text, tools and reasoning, pass to
+`$onEvent` without conversion. The method returns the last `AgentState`, or `null`
+if no Agent prompt executed. `runCompletions(Closure $onEvent): ?AgentState` uses
+the same callback contract to process at most one pending subagent completion.
 
-Preparation, provider and storage exceptions propagate to your application.
-When Agent execution fails, Conversation checks the committed history. If its
-last message is a user input or tool result, it appends an assistant note marking
-the interrupted response so the next input can start a new turn. Empty histories,
-completed responses and tool calls without results remain unchanged. Recovery
-runs only on execution errors; it never retries tools. If recovery also fails,
-the stream emits an error Notification before propagating the original exception.
-Handle preparation errors around `sendInput()` and execution errors around
-iteration. Breaking the loop pauses the generator; it does not request a stop.
-Release an abandoned generator and its other references, for example with
-`unset($stream)`.
+Preparation, callback, provider and storage exceptions propagate to your
+application; catch them around the method call. When Agent execution fails,
+Conversation checks the committed history. If its last message is a user input or
+tool result, it appends an assistant note marking the interrupted response so the
+next input can start a new turn. Empty histories, completed responses and tool
+calls without results remain unchanged. Recovery runs only on execution errors;
+it never retries tools. If recovery also fails, the callback receives an error
+Notification before the original exception propagates.
+
+To abort execution and skip remaining events, throw
+`NeuronInteraction\Exception\ExecutionAbortedException` from the callback and catch
+it outside `runInput()` or `runCompletions()`. To stop a model response while
+preserving its partial output, request interruption and let the call finish.
+
+Both methods execute synchronously. An asynchronous provider can still yield to
+its event loop while waiting for I/O, so a host's existing input reader can keep
+queueing messages. The callback itself is invoked synchronously for each event.
+
+### Optional turn transaction
+
+The `transactional:` constructor argument accepts a host-supplied closure that
+runs a turn closure synchronously and returns its result. For example, with a
+Doctrine DBAL connection:
+
+```php
+$conversation = new Conversation(
+    $agent,
+    $session,
+    transactional: static fn (Closure $run) => $connection->transactional($run),
+);
+```
+
+The wrapper applies to each Agent turn, including prompts registered by commands,
+and to completion processing. Commands that only change state or emit requests
+are not wrapped. Agent-turn and completion events are delivered inside the wrapper
+before it returns, so their callback failures propagate through it too. The host defines commit and rollback
+behavior and must use stores backed by that transaction's connection. File and
+in-memory stores do not gain database rollback behavior from this hook.
 
 ## Sessions and saved messages
 
@@ -237,7 +267,7 @@ $conversation->setSessionTitleGenerator(new SessionTitleGenerator($provider));
 ```
 
 Without this setter, Conversation does not generate titles. When configured, it
-attempts generation when a message stream starts being consumed, before executing
+attempts generation during an Agent turn, before executing
 the Agent response. The input contains saved user messages plus the prepared
 current message; assistant messages are excluded. Commands that do not send a
 message do not trigger generation, and existing titles are preserved.
@@ -340,11 +370,11 @@ final class ExplainCommand implements CommandInterface
 }
 
 $conversation->commands()->addCommand(new ExplainCommand());
-$stream = $conversation->sendInput('/explain PHP generators');
+$state = $conversation->runInput('/explain PHP generators', $onEvent);
 ```
 
-The application consumes this stream to receive the first notification, the
-Agent's response events, then the final notification. Commands return `void`;
+The callback receives the first notification, the Agent's response events,
+then the final notification. Commands return `void`;
 they register prompts with `promptAgent()` rather than calling `Agent::stream()`.
 Multiple prompts execute sequentially and use the configured message processors.
 
@@ -367,7 +397,8 @@ call the context's `useAgent()` with that Agent.
 State changes happen during `run()`; registered requests are processed after it
 returns, in registration order. If a command throws, requests already registered
 are processed before that exception propagates. A failure while processing a
-request stops the remaining requests. There is no rollback or automatic retry.
+request stops the remaining requests. Command state changes are not automatically
+rolled back or retried; the optional transaction wrapper covers Agent turns.
 
 ### Handling events and selections
 
@@ -382,14 +413,14 @@ All five interaction events live in `NeuronInteraction\Event` and implement
 | `AgentChanged` | `agent` | Refresh the selected Agent or model in the UI. |
 | `ExitRequest` | None | Decide how to end the interaction. |
 
-For example, an application can handle text and notifications in the same loop:
+For example, an application can handle text and notifications in the same callback:
 
 ```php
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Event\SelectionRequest;
 
-foreach ($conversation->sendInput('/resume') as $event) {
+$conversation->runInput('/resume', static function (object $event): void {
     if ($event instanceof TextChunk) {
         echo $event->content;
     } elseif ($event instanceof Notification) {
@@ -398,7 +429,7 @@ foreach ($conversation->sendInput('/resume') as $event) {
         // Render $event->prompt and the labels in $event->options.
         // Retain $event->command and each option's value for the next submission.
     }
-}
+});
 ```
 
 A custom command can offer choices with:
@@ -422,12 +453,12 @@ This fragment belongs inside a command's `run()` method. Options have `value`,
 `SelectionOption` is a support type in `NeuronInteraction\Command`.
 
 When the user chooses, submit a new input using the request's command and option
-value, and consume the new stream:
+value, using the same event callback:
 
 ```php
 use NeuronInteraction\Command\CommandInput;
 
-$stream = $conversation->sendInput(new CommandInput('/language', 'Italian'));
+$conversation->runInput(new CommandInput('/language', 'Italian'), $onEvent);
 ```
 
 Register a `/language` command that handles that value; an empty value can display
@@ -437,8 +468,9 @@ Selections contain no callback or pending server state. This works across HTTP
 requests: reconstruct the Conversation with the correct session and stores,
 then submit the `CommandInput`. Cancelling a selection submits nothing.
 
-`ExitRequest` is advisory. It does not stop an Agent response or terminate the
-PHP process. The application decides how to handle it.
+`ExitRequest` asks the application to close. A terminal host that accepts
+the request can throw `ExecutionAbortedException` from the callback and catch
+it outside the call to exit its input loop and skip remaining command requests.
 
 ### Command admission
 
@@ -515,7 +547,7 @@ $submitted = $inputs->list(); // UserMessage objects, oldest first.
 $recentInputs = $inputs->list(20); // Latest 20 inputs, still oldest first.
 ```
 
-With this configured, `sendInput()` records original messages and commands
+With this configured, `runInput()` records original messages and commands
 before processing or execution, even if those later fail. Prompts generated by
 commands are excluded. Attachments and metadata are preserved; blank inputs are
 ignored; reasoning-only inputs are skipped and meaningful non-text inputs retained.
@@ -556,8 +588,8 @@ message. Reference recognition and loading belong to the concrete processor.
 
 A `MessageProcessors` collection applies preparation in registration order
 and display in reverse order. `addProcessor()` extends the collection;
-`all()` returns its processors. Ordinary messages are prepared in `sendInput()`;
-command-generated prompts are prepared when reached in the stream. Prepared
+`all()` returns its processors. Ordinary messages are prepared in `runInput()`;
+command-generated prompts are prepared when their registered turn executes. Prepared
 messages require text or a non-text attachment.
 
 Show newly submitted input directly in the UI. When reopening saved history,
@@ -592,14 +624,12 @@ $agent->setAiProvider(new OpenAIResponses(
 $conversation = new Conversation($agent, $session);
 $conversation->setStopSignal($signal);
 
-$stream = $conversation->sendInput('Explain PHP generators in detail.');
-foreach ($stream as $event) {
+$state = $conversation->runInput('Explain PHP generators in detail.', static function (object $event): void {
     if ($event instanceof TextChunk) {
         echo $event->content;
         flush();
     }
-}
-$state = $stream->getReturn();
+});
 ```
 
 Conversation clears stale stop requests when an Agent prompt starts. While it
@@ -615,7 +645,7 @@ $signal = new StopSignal(new FileStorage(__DIR__ . '/interaction-state'), $respo
 $signal->request();
 ```
 
-The provider callback reads and consumes the signal. Keep consuming the stream
+The provider callback reads and consumes the signal. Let `runInput()` finish
 so Neuron can finalize and persist the partial response. Stopping before any text
 raises Neuron's `ProviderException`. If using `Agent::stream()` directly, clear
 the signal yourself before starting.
@@ -679,14 +709,10 @@ $subagents = new Subagents($registry, $runs, new ConsoleAdapter(
 
 $conversation = (new Conversation($agent, $session))->setSubagents($subagents);
 
-foreach ($conversation->sendInput('Delegate a comparison of A (10 EUR/month) and B (80 EUR/year) to the general agent.') as $event) {
-    // Render the native stream as usual.
-}
+$conversation->runInput('Delegate a comparison of A (10 EUR/month) and B (80 EUR/year) to the general agent.', $onEvent);
 
 // Later, the host invokes this even without a new user message.
-foreach ($conversation->processCompletions() as $event) {
-    // Render the same stream, including the parent's new answer.
-}
+$state = $conversation->runCompletions($onEvent);
 ```
 
 `setSubagents()` installs the module's lock factory for all turns on this
@@ -701,8 +727,7 @@ the user and the application's instructions or skills. No operational
 `setInstructions()` block is required in the
 [complete terminal example](examples/bin/11-subagents.php).
 
-`processCompletions()` is lazy: consuming its generator executes at most one
-completion. An empty or busy inbox returns no events and does not invoke the
+`runCompletions()` executes at most one completion before returning. An empty or busy inbox returns no events and does not invoke the
 model. A busy Session leaves its result pending for another poll. The return
 value is the last `AgentState`, or `null` for no work or a recovered answer.
 Application completion messages carry `subagent_event_id` metadata. They bypass
@@ -751,7 +776,7 @@ composer subagents -- SESSION_KEY
 ```
 
 The terminal remains alive, queues input independently of turn execution and calls
-`processCompletions()` periodically. It starts child processes automatically;
+`runCompletions()` periodically. It starts child processes automatically;
 Messenger and Mercure are not required. After closing the terminal, completed
 results stay pending until the original Session is reopened. Console failures
 are logged and can be inspected with `subagent_status`; automatic child retry is
@@ -834,7 +859,7 @@ $agent->setStreamAdapter(static fn () => new AgentChunkAdapter())
 Here `AgentChunkAdapter` is `NeuronAI\Agent\Adapters\AgentChunkAdapter`, and
 `MercureChannel` is `NeuronAI\Workflow\Streaming\Channel\MercureChannel`.
 Derive the topic from both user and Session, and authorize subscribers in the host.
-The handler consumes the generator, which also delivers Neuron events to the
+The handler calls `runCompletions()`, which also delivers Neuron events to the
 configured channel. Hosts can use `Subagents`' `onEvent` callback to forward
 subagent lifecycle events. A frontend can reload saved history on reconnection.
 
@@ -870,8 +895,8 @@ replace shared storage: multi-host deployments need shared run and message store
 
 A Session lock spans model execution, saved response and completion acknowledgement.
 Human turns use the same lock and throw `ExecutionBusyException` when occupied. Locks are
-acquired on stream consumption and released in `finally`; finish consuming or
-release abandoned generators. Commands run their synchronous state changes under
+acquired during the method call and released in `finally`, including when an
+event callback throws. Commands run their synchronous state changes under
 the selected Session's lock. Direct Session/history operations outside Conversation
 remain the host's responsibility to coordinate with the same resource:
 `neuron-interaction.session.` plus `Session::messageNamespace()`.

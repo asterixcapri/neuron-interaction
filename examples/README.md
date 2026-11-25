@@ -34,8 +34,8 @@ are independent modules and do not require an Agent or credentials.
 
 The script configures an Agent with an AI provider, explicitly creates a Session
 in memory, passes it to Conversation and submits a normal greeting through
-`Conversation::sendInput()`. Consuming the returned stream executes the Agent;
-the script prints each `TextChunk` as it arrives. This example requires
+`Conversation::runInput()`. The call executes the Agent synchronously and
+its event callback prints each `TextChunk` as it arrives. This example requires
 `OPENAI_API_KEY` and keeps no state between runs.
 
 ## 02 — Multiple Sessions
@@ -58,8 +58,8 @@ Try a normal message, `/help`, `/clear`
 and `/exit`. The script passes each Command to the `Commands` constructor and supplies the registry
 through `Conversation::setCommands()`.
 
-The main loop simulates a consumer: it reads input, calls `sendInput()`
-and displays events as the stream yields them. A backend can forward those
+The main loop simulates a consumer: it reads input, calls `runInput()`
+and displays events in its callback. A backend can forward those
 events to its client, for example via SSE. The example handles TextChunks,
 Notifications, SessionChanged, AgentChanged and ExitRequest.
 `/exit` or end of input closes the client loop. The registered Commands do not
@@ -83,7 +83,7 @@ The list shows each Session's title, last use and key. A saved Session without
 a title is labelled “Untitled session”; choose its number to restore the chat.
 
 The consumer displays each SelectionRequest, reads an option number and sends a
-CommandInput on the next loop iteration, after consuming the previous stream.
+CommandInput on the next loop iteration, after the previous `runInput()` call returns.
 Enter cancels the choice. SessionChanged shows where a client refreshes its
 conversation using `getDisplayMessages()`. To provide input from a pipe, run `php bin/04-selection.php` directly.
 
@@ -99,7 +99,7 @@ send a normal message.
 The script requests a long answer and picks a random threshold of 40–50 text
 chunks. It simulates pressing Stop when that many chunks have arrived.
 Conversation and Neuron's StoppableHttpClient share a StopSignal. The script
-keeps consuming the stream and prints whether the response stopped.
+lets `runInput()` finish to save the partial response and prints whether the response stopped.
 
 An application connects `requestInterruption()` to its stop button or input
 handler. This interrupts the HTTP response, not the execution of local tools.
@@ -173,16 +173,18 @@ user submission. Requires a POSIX host and `ext-sysvsem`; no Messenger worker or
 Mercure hub is needed.
 
 Like the other examples, `bin/11-subagents.php` shows the complete setup and
-uses `Conversation` directly: `sendInput()` handles messages and commands, while
-`processCompletions()` runs periodically even when the user is silent. It also
-handles both streams in one `foreach`, with the same `TextChunk`, `Notification`
-and `ExitRequest` branches as the other examples. A single `onEvent` callback
+uses `Conversation` directly: `runInput()` handles messages and commands, while
+`runCompletions()` runs periodically even when the user is silent. Both calls
+use the same event callback, with the `TextChunk`, `Notification` and
+`ExitRequest` branches used by the other examples. A separate Subagents `onEvent` callback
 prints the run ID at dispatch and completion and displays recovered replies.
-AMP reads input lines independently of turn execution: after Enter, the prompt
-returns immediately and new messages queue behind the active turn. One execution
+AMP reads input lines independently of turn execution. New messages queue
+behind the active turn. Conversation callbacks execute
+synchronously, while the provider yields to AMP during network I/O. One execution
 loop drains user input before polling completions every second. The loop also
-shows `/exit`, Session reopening and error handling. EOF drains queued input;
-`/exit` stops the reader even when stdin remains open. This is a basic streaming
+shows `/exit`, Session reopening and error handling. EOF drains queued input.
+When the callback receives `ExitRequest`, it throws `ExecutionAbortedException`.
+The loop catches it and stops the reader even when stdin remains open. This is a basic streaming
 terminal, without an input editor that redraws partially typed lines.
 
 The terminal prints its Session key. Reopen it with

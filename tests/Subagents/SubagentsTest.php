@@ -34,6 +34,7 @@ use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Session\SessionTitleGenerator;
 use NeuronInteraction\Storage\InMemoryStorage;
 use NeuronInteraction\Subagents\{BackgroundAdapterInterface, Executor, Registry, SubagentStore, Subagents};
+use NeuronInteraction\Tests\EventCollector;
 use NeuronInteraction\Tests\Tools\CallbackTool;
 use OutOfBoundsException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -46,7 +47,6 @@ use function array_filter;
 use function array_slice;
 use function array_values;
 use function count;
-use function iterator_to_array;
 use function json_encode;
 use function substr_count;
 
@@ -157,9 +157,9 @@ final class SubagentsTest extends TestCase
         $conversation = (new Conversation($agent, $this->session))->setSubagents($this->subagents);
         $run = $this->subagents->spawn($this->session, 'researcher', 'Task');
         $this->executor->execute($run->id);
-        iterator_to_array($conversation->sendInput('Hello.'));
-        iterator_to_array($conversation->processCompletions());
-        iterator_to_array($conversation->sendInput('Continue.'));
+        EventCollector::input($conversation, 'Hello.');
+        EventCollector::completions($conversation);
+        EventCollector::input($conversation, 'Continue.');
 
         self::assertCount(3, $provider->getRecorded());
         foreach ($provider->getRecorded() as $request) {
@@ -206,8 +206,12 @@ final class SubagentsTest extends TestCase
             new AssistantMessage('Unwanted duplicate report.'),
         );
         $conversation = $this->conversation($provider);
-        iterator_to_array($automatic ? $conversation->processCompletions() : $conversation->sendInput('Give me one report.'));
-        self::assertSame([], iterator_to_array($conversation->processCompletions()));
+        if ($automatic) {
+            EventCollector::completions($conversation);
+        } else {
+            EventCollector::input($conversation, 'Give me one report.');
+        }
+        self::assertSame([], EventCollector::completions($conversation));
         self::assertCount(2, $provider->getRecorded());
         foreach ($runs as $run) {
             self::assertTrue($this->runs->get($run->id)->acknowledged);
@@ -223,11 +227,11 @@ final class SubagentsTest extends TestCase
             new AssistantMessage('Now the result is ready.'),
         );
         $conversation = $this->conversation($provider);
-        iterator_to_array($conversation->sendInput('Check progress.'));
+        EventCollector::input($conversation, 'Check progress.');
         $this->executor->execute($run->id);
         // Application reads are observational; only a saved parent turn consumes a result.
         $this->subagents->status($this->session, $run->id);
-        $events = iterator_to_array($conversation->processCompletions());
+        $events = EventCollector::completions($conversation);
         self::assertNotEmpty($events);
         self::assertCount(3, $provider->getRecorded());
         self::assertTrue($this->runs->get($run->id)->acknowledged);
@@ -241,13 +245,13 @@ final class SubagentsTest extends TestCase
         // The first result is persisted by the second inference; the third fails.
         $provider = new FakeAIProvider($read, new ToolCallMessage(tools: [new ToolCall('subagent_status', 'read-again', ['run_id' => $run->id])]));
         try {
-            iterator_to_array($this->conversation($provider)->sendInput('Read the result.'));
+            EventCollector::input($this->conversation($provider), 'Read the result.');
             self::fail('Expected provider exhaustion');
         } catch (ProviderException) {
             self::assertFalse($this->runs->get($run->id)->acknowledged);
         }
         $recovery = new FakeAIProvider(new AssistantMessage('Recovered result.'));
-        iterator_to_array($this->conversation($recovery)->processCompletions());
+        EventCollector::completions($this->conversation($recovery));
         self::assertCount(1, $recovery->getRecorded());
         self::assertTrue($this->runs->get($run->id)->acknowledged);
     }
@@ -263,7 +267,7 @@ final class SubagentsTest extends TestCase
             new AssistantMessage('One report covering all five results.'),
         );
         $conversation = $this->conversation($provider);
-        iterator_to_array($conversation->sendInput('Run five tasks and give me a single final report.'));
+        EventCollector::input($conversation, 'Run five tasks and give me a single final report.');
         $runs = [];
         for ($index = 0; $index < 5; ++$index) {
             $runs[] = $this->subagents->spawn($this->session, 'researcher', 'Task ' . $index);
@@ -272,7 +276,7 @@ final class SubagentsTest extends TestCase
             $this->executor->execute($run->id);
             $text = '';
             $eventOffset = count($this->events);
-            foreach ($conversation->processCompletions() as $event) {
+            foreach (EventCollector::completions($conversation) as $event) {
                 if ($event instanceof TextChunk) {
                     $text .= $event->content;
                 }
@@ -283,7 +287,7 @@ final class SubagentsTest extends TestCase
             self::assertInstanceOf(SubagentCompleted::class, $completed[0]);
             self::assertSame($index === 4 ? $text : null, $completed[0]->reply->getContent());
             self::assertTrue($this->runs->get($run->id)->acknowledged);
-            self::assertSame([], iterator_to_array($conversation->processCompletions()));
+            self::assertSame([], EventCollector::completions($conversation));
             self::assertCount($index + 2, $provider->getRecorded());
         }
         self::assertCount(12, $this->session->getMessages());
@@ -299,16 +303,14 @@ final class SubagentsTest extends TestCase
         $conversation = $this->conversation($provider);
         $history = new InputHistory($this->storage, 'alice');
         $conversation->setInputHistory($history);
-        iterator_to_array($conversation->sendInput('Please delegate a comparison.'));
+        EventCollector::input($conversation, 'Please delegate a comparison.');
         $entries = $this->storage->list('subagent-runs');
         self::assertCount(1, $entries);
         $run = $this->executor->execute($entries[0]['key']);
         self::assertSame('Child result', $run->result);
         self::assertCount(1, $this->events);
         self::assertInstanceOf(SubagentDispatched::class, $this->events[0]);
-        $stream = $conversation->processCompletions();
-        self::assertCount(1, $this->events);
-        iterator_to_array($stream);
+        EventCollector::completions($conversation);
         self::assertCount(2, $this->events);
         $finished = array_values(array_filter($this->events, static fn(object $event): bool => $event instanceof SubagentCompleted));
         self::assertCount(1, $finished);
@@ -316,7 +318,7 @@ final class SubagentsTest extends TestCase
         self::assertFalse($finished[0]->recovered);
         self::assertSame('Here is the comparison.', $finished[0]->reply->getContent());
         self::assertTrue($this->runs->get($run->id)->acknowledged);
-        self::assertSame([], iterator_to_array($conversation->processCompletions()));
+        self::assertSame([], EventCollector::completions($conversation));
         self::assertCount(1, $history->list());
         self::assertCount(3, $provider->getRecorded());
         self::assertStringContainsString('Child result', json_encode($provider->getRecorded()[2]->messages, JSON_THROW_ON_ERROR));
@@ -350,7 +352,7 @@ final class SubagentsTest extends TestCase
             new ToolCallMessage(tools: [new ToolCall('spawn_subagent', 'delegate', ['agent' => $name, 'task' => $task])]),
             new AssistantMessage('Delegated.'),
         );
-        iterator_to_array($this->conversation($parent)->sendInput('Private parent history.'));
+        EventCollector::input($this->conversation($parent), 'Private parent history.');
         $names = [];
         foreach ($parent->getRecorded()[0]->tools as $tool) {
             if ($tool instanceof ToolInterface && $tool->getName() === 'spawn_subagent') {
@@ -395,10 +397,10 @@ final class SubagentsTest extends TestCase
         $other = $this->sessions->create();
         $provider = new FakeAIProvider(new AssistantMessage('Original session result'));
         $conversation = $this->conversation($provider, $other);
-        self::assertSame([], iterator_to_array($conversation->processCompletions()));
+        self::assertSame([], EventCollector::completions($conversation));
         self::assertSame([], $provider->getRecorded());
         $conversation->useSession($this->session);
-        iterator_to_array($conversation->processCompletions());
+        EventCollector::completions($conversation);
         self::assertSame([], $other->getMessages());
         self::assertCount(2, $this->session->getMessages());
     }
@@ -412,10 +414,10 @@ final class SubagentsTest extends TestCase
             new AssistantMessage('Started second'),
         );
         $conversation = $this->conversation($provider);
-        iterator_to_array($conversation->sendInput('First'));
+        EventCollector::input($conversation, 'First');
         $second = $this->sessions->create();
         $conversation->useSession($second);
-        iterator_to_array($conversation->sendInput('Second'));
+        EventCollector::input($conversation, 'Second');
         $runs = $this->storage->list('subagent-runs');
         self::assertCount(2, $runs);
         self::assertSame($this->session->getKey(), $this->runs->get($runs[0]['key'])->sessionKey);
@@ -438,42 +440,59 @@ final class SubagentsTest extends TestCase
             }
         };
         $conversation->setMessageProcessors(new MessageProcessors($processor));
-        iterator_to_array($conversation->processCompletions());
+        $text = '';
+        $conversation->runCompletions(static function (object $event) use (&$text): void {
+            if ($event instanceof TextChunk) {
+                $text .= $event->content;
+            }
+        });
+        self::assertSame('Done', $text);
         self::assertCount(2, $conversation->getDisplayMessages());
         self::assertTrue($this->runs->get($run->id)->acknowledged);
     }
 
-    public function testHumanAndAutomaticTurnsShareTheLockUntilStreamIsReleased(): void
+    public function testHumanAndAutomaticTurnsShareTheLockUntilTheCallbackReturns(): void
     {
         $run = $this->subagents->spawn($this->session, 'researcher', 'Task');
         $this->executor->execute($run->id);
         $human = $this->conversation(new FakeAIProvider(new AssistantMessage('Human response')));
         $automaticProvider = new FakeAIProvider(new AssistantMessage('Automatic response'));
         $automatic = $this->conversation($automaticProvider);
-        $stream = $human->sendInput('Hello');
-        $stream->rewind();
-        self::assertSame([], iterator_to_array($automatic->processCompletions()));
-        self::assertSame([], $automaticProvider->getRecorded());
-        try {
-            iterator_to_array($automatic->sendInput('Another input'));
-            self::fail('Expected contention');
-        } catch (ExecutionBusyException) {
-            self::assertFalse($this->runs->get($run->id)->acknowledged);
-        }
-        iterator_to_array($stream);
-        iterator_to_array($automatic->processCompletions());
+        $checked = false;
+        $human->runInput('Hello', function (object $event) use ($automatic, $automaticProvider, $run, &$checked): void {
+            if ($checked) {
+                return;
+            }
+            $checked = true;
+            self::assertSame([], EventCollector::completions($automatic));
+            self::assertSame([], $automaticProvider->getRecorded());
+            try {
+                EventCollector::input($automatic, 'Another input');
+                self::fail('Expected contention');
+            } catch (ExecutionBusyException) {
+                self::assertFalse($this->runs->get($run->id)->acknowledged);
+            }
+        });
+        self::assertTrue($checked);
+        EventCollector::completions($automatic);
         self::assertTrue($this->runs->get($run->id)->acknowledged);
         self::assertCount(1, $automaticProvider->getRecorded());
     }
 
-    public function testAbandoningAStreamReleasesTheSessionLock(): void
+    public function testThrowingFromTheCallbackReleasesTheSessionLock(): void
     {
         $one = $this->conversation(new FakeAIProvider(new AssistantMessage('Partial answer')));
-        $stream = $one->sendInput('Question');
-        $stream->rewind();
-        unset($stream);
+        $cancelled = new RuntimeException('Cancel delivery');
+        try {
+            $one->runInput('Question', static function (object $event) use ($cancelled): void {
+                throw $cancelled;
+            });
+            self::fail('Expected cancellation');
+        } catch (RuntimeException $error) {
+            self::assertSame($cancelled, $error);
+        }
         $two = $this->conversation(new FakeAIProvider(new AssistantMessage('Next answer')));
-        iterator_to_array($two->sendInput('Next'));
+        EventCollector::input($two, 'Next');
         self::assertTrue($this->session->hasContent());
     }
 
@@ -504,7 +523,7 @@ final class SubagentsTest extends TestCase
         ));
         $sendCorrection = function () use ($parent, $run): void {
             self::assertSame('running', $this->subagents->status($this->session, $run->id)->status);
-            $events = iterator_to_array($parent->sendInput('Update the delegated task.'), false);
+            $events = EventCollector::input($parent, 'Update the delegated task.');
             $results = array_values(array_filter($events, static fn(object $event): bool => $event instanceof ToolResultChunk));
             self::assertCount(1, $results);
             $result = $results[0]->tool->getResult();
@@ -593,14 +612,14 @@ final class SubagentsTest extends TestCase
         };
         $conversation = (new Conversation((new Agent())->setAiProvider($provider)->addTool($tool), $this->session))->setSubagents($this->subagents);
         try {
-            iterator_to_array($conversation->processCompletions());
+            EventCollector::completions($conversation);
             self::fail('Expected provider failure');
         } catch (RuntimeException $error) {
             self::assertSame('Provider failed', $error->getMessage());
         }
         self::assertFalse($this->runs->get($run->id)->acknowledged);
         $retryProvider = new FakeAIProvider(new AssistantMessage('Recovered outcome'));
-        iterator_to_array($this->conversation($retryProvider)->processCompletions());
+        EventCollector::completions($this->conversation($retryProvider));
         self::assertCount(1, $retryProvider->getRecorded());
         self::assertTrue($this->runs->get($run->id)->acknowledged);
     }
@@ -611,10 +630,10 @@ final class SubagentsTest extends TestCase
         $titles = new FakeAIProvider(new AssistantMessage('{"title":"User topic"}'));
         $conversation = $this->conversation(new FakeAIProvider(new AssistantMessage('Outcome'), new AssistantMessage('Human answer')));
         $conversation->setSessionTitleGenerator(new SessionTitleGenerator($titles));
-        iterator_to_array($conversation->processCompletions());
+        EventCollector::completions($conversation);
         $beforeHumanInput = $titles->getRecorded();
         self::assertSame([], $beforeHumanInput);
-        iterator_to_array($conversation->sendInput('USER_TOPIC'));
+        EventCollector::input($conversation, 'USER_TOPIC');
         self::assertCount(1, $titles->getRecorded());
         $prompt = json_encode($titles->getRecorded()[0]->messages, JSON_THROW_ON_ERROR);
         self::assertStringContainsString('USER_TOPIC', $prompt);
@@ -625,11 +644,16 @@ final class SubagentsTest extends TestCase
     {
         $signal = new StopSignal($this->storage, 'human-execution');
         $conversation = $this->conversation(new FakeAIProvider(new AssistantMessage('Long response')))->setStopSignal($signal);
-        $stream = $conversation->sendInput('Question');
-        $stream->rewind();
-        self::assertTrue($conversation->requestInterruption());
-        self::assertTrue($signal->isRequested());
-        unset($stream);
+        $requested = false;
+        $conversation->runInput('Question', static function (object $event) use ($conversation, $signal, &$requested): void {
+            if ($requested) {
+                return;
+            }
+            $requested = true;
+            self::assertTrue($conversation->requestInterruption());
+            self::assertTrue($signal->isRequested());
+        });
+        self::assertTrue($requested);
     }
 
 }

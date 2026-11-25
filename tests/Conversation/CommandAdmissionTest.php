@@ -18,14 +18,13 @@ use NeuronInteraction\Conversation;
 use NeuronInteraction\Event\Notification;
 use NeuronInteraction\Session\SessionStore;
 use NeuronInteraction\Storage\InMemoryStorage;
+use NeuronInteraction\Tests\EventCollector;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
-use function iterator_to_array;
-
 final class CommandAdmissionTest extends TestCase
 {
-    public function testAdmissionIsLazyAndReevaluatedForEveryInvocation(): void
+    public function testAdmissionIsReevaluatedForEveryInvocation(): void
     {
         $nativeMessages = new InMemoryMessageStore();
         $command = new AdmissionProbeCommand();
@@ -41,10 +40,9 @@ final class CommandAdmissionTest extends TestCase
             },
         );
         $conversation->setCommands(new Commands($command));
-        $stream = $conversation->sendInput('/probe rejected');
         self::assertSame([], $admission->commands());
         self::assertSame([], $command->values);
-        $events = iterator_to_array($stream);
+        $events = EventCollector::input($conversation, '/probe rejected');
         self::assertSame([$command], $admission->commands());
         self::assertSame([], $command->values);
         self::assertNull($conversation->configurationStore()->get('effect'));
@@ -53,14 +51,13 @@ final class CommandAdmissionTest extends TestCase
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Warning, $events[0]->level);
         self::assertNotSame('', $events[0]->text);
-        self::assertNull($stream->getReturn());
         $allowed = true;
-        iterator_to_array($conversation->sendInput(new CommandInput('/probe', 'selected')));
+        EventCollector::input($conversation, new CommandInput('/probe', 'selected'));
         self::assertSame([$command, $command], $admission->commands());
         self::assertSame(['selected'], $command->values);
         self::assertSame('selected', $conversation->configurationStore()->get('effect'));
         $allowed = false;
-        iterator_to_array($conversation->sendInput(new CommandInput('/probe', 'second choice')));
+        EventCollector::input($conversation, new CommandInput('/probe', 'second choice'));
         self::assertSame(['selected'], $command->values);
         self::assertCount(3, $admission->commands());
     }
@@ -74,7 +71,7 @@ final class CommandAdmissionTest extends TestCase
             (new SessionStore(new InMemoryStorage(), $nativeMessages, 'owner'))->create(),
         );
         $conversation->setCommands(new Commands($command));
-        iterator_to_array($conversation->sendInput('/probe ordinary'));
+        EventCollector::input($conversation, '/probe ordinary');
         self::assertSame(['ordinary'], $command->values);
     }
 
@@ -87,7 +84,7 @@ final class CommandAdmissionTest extends TestCase
             admitCommand: static fn(CommandInterface $command): bool => false,
         );
         $conversation->setCommands(new Commands(new HelpCommand()));
-        $events = iterator_to_array($conversation->sendInput('/help'));
+        $events = EventCollector::input($conversation, '/help');
         self::assertCount(1, $events);
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Warning, $events[0]->level);
@@ -107,7 +104,7 @@ final class CommandAdmissionTest extends TestCase
         );
         $conversation->setCommands(new Commands($command));
         try {
-            iterator_to_array($conversation->sendInput('/probe'));
+            EventCollector::input($conversation, '/probe');
             self::fail('Expected the admission exception');
         } catch (RuntimeException $exception) {
             self::assertSame($failure, $exception);
@@ -126,7 +123,7 @@ final class CommandAdmissionTest extends TestCase
                 self::fail('An unknown Command has nothing to admit');
             },
         );
-        $events = iterator_to_array($conversation->sendInput('/missing'));
+        $events = EventCollector::input($conversation, '/missing');
         self::assertInstanceOf(Notification::class, $events[0]);
         self::assertSame(NotificationLevel::Error, $events[0]->level);
     }

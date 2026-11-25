@@ -22,8 +22,6 @@ final readonly class ProcessCompletionsHandler
             || $conversation->session()->getKey() !== $message->sessionKey) {
             throw new LogicException('The factory returned a different session.');
         }
-        foreach ($conversation->processCompletions() as $event) {
-            // Consuming the stream drives execution and the configured Neuron channel.
-        }
+        $conversation->runCompletions(static function (object $event): void {});
     }
 }
